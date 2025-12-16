@@ -3,6 +3,7 @@
 
     <!-- ============================================= -->
     <!-- VISTAS DE ÓRDENES POS CON NCF                -->
+    <!-- Odoo 19 Compatible                           -->
     <!-- ============================================= -->
 
     <!-- Vista de lista: agregar columna NCF -->
@@ -11,9 +12,8 @@
         <field name="model">pos.order</field>
         <field name="inherit_id" ref="point_of_sale.view_pos_order_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='partner_id']" position="after">
+            <xpath expr="//field[@name='name']" position="after">
                 <field name="l10n_do_ncf_number" string="NCF" optional="show"/>
-                <field name="l10n_do_partner_vat" string="RNC" optional="hide"/>
             </xpath>
         </field>
     </record>
@@ -24,47 +24,16 @@
         <field name="model">pos.order</field>
         <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='partner_id']" position="after">
-                <field name="l10n_do_ncf_number" string="NCF" readonly="1"
-                       invisible="not l10n_do_ncf_number"/>
-            </xpath>
-            <xpath expr="//group" position="after">
-                <group string="Información Fiscal" invisible="not l10n_do_ncf_number">
+            <xpath expr="//sheet" position="inside">
+                <group string="Información Fiscal (NCF)" invisible="not l10n_do_ncf_number">
                     <group>
                         <field name="l10n_do_ncf_number" readonly="1"/>
                         <field name="l10n_do_ncf_type" readonly="1"/>
                     </group>
                     <group>
                         <field name="l10n_do_partner_vat" string="RNC/Cédula" readonly="1"/>
-                        <field name="l10n_do_ncf_seq_id" readonly="1" groups="base.group_no_one"/>
                     </group>
                 </group>
-            </xpath>
-        </field>
-    </record>
-
-    <!-- Filtros de búsqueda -->
-    <record id="view_pos_order_search_ncf" model="ir.ui.view">
-        <field name="name">pos.order.search.ncf</field>
-        <field name="model">pos.order</field>
-        <field name="inherit_id" ref="point_of_sale.view_pos_order_search"/>
-        <field name="arch" type="xml">
-            <xpath expr="//field[@name='partner_id']" position="after">
-                <field name="l10n_do_ncf_number" string="NCF"/>
-                <field name="l10n_do_partner_vat" string="RNC/Cédula"/>
-            </xpath>
-            <xpath expr="//filter[1]" position="before">
-                <separator/>
-                <filter name="has_ncf" string="Con NCF" 
-                        domain="[('l10n_do_ncf_number', '!=', False)]"/>
-                <filter name="no_ncf" string="Sin NCF" 
-                        domain="[('l10n_do_ncf_number', '=', False)]"/>
-                <separator/>
-                <filter name="ncf_b01" string="Crédito Fiscal (B01)" 
-                        domain="[('l10n_do_ncf_type', '=', 'B01')]"/>
-                <filter name="ncf_b02" string="Consumidor Final (B02)" 
-                        domain="[('l10n_do_ncf_type', '=', 'B02')]"/>
-                <separator/>
             </xpath>
         </field>
     </record>
