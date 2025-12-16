@@ -21,11 +21,12 @@
                             type="object"
                             class="btn-secondary"
                             invisible="status != 'active'"/>
+                    <!-- RENOVAR: Solo visible 5 días antes de vencer o si ya expiró -->
                     <button name="action_buy_license"
                             string="Renovar Licencia"
                             type="object"
                             class="btn-warning"
-                            invisible="status == 'active' and days_remaining &gt; 30"/>
+                            invisible="not (status in ('expired', 'invalid', 'blocked') or (status == 'active' and days_remaining &lt;= 5))"/>
                     <field name="status" widget="statusbar" statusbar_visible="pending,active,expired"/>
                 </header>
                 <sheet>
@@ -44,9 +45,9 @@
                         <p class="text-muted small mb-0">¿Ya tienes licencia? Ingrésala abajo y haz clic en Validar Licencia</p>
                     </div>
 
-                    <!-- LICENCIA ACTIVA -->
+                    <!-- LICENCIA ACTIVA (más de 5 días) -->
                     <div class="alert alert-success p-4" role="status"
-                         invisible="status != 'active' or days_remaining &lt;= 30">
+                         invisible="status != 'active' or days_remaining &lt;= 5">
                         <div class="d-flex align-items-center">
                             <div style="font-size: 64px; margin-right: 25px;">✅</div>
                             <div class="flex-grow-1">
@@ -61,17 +62,17 @@
                         </div>
                     </div>
 
-                    <!-- LICENCIA POR VENCER -->
+                    <!-- LICENCIA POR VENCER (5 días o menos) -->
                     <div class="alert alert-warning p-4" role="status"
-                         invisible="status != 'active' or days_remaining &gt; 30">
+                         invisible="status != 'active' or days_remaining &gt; 5">
                         <div class="d-flex align-items-center">
                             <div style="font-size: 64px; margin-right: 25px;">⚠️</div>
                             <div class="flex-grow-1">
                                 <h3 class="mb-2"><strong>Licencia Por Vencer</strong></h3>
-                                <p class="mb-2">Su licencia vence pronto. Renueve para evitar interrupciones.</p>
+                                <p class="mb-2">Su licencia vence en <strong><field name="days_remaining" readonly="1" class="d-inline"/> días</strong>. Renueve para evitar interrupciones.</p>
                                 <p class="mb-3">
                                     <span class="badge bg-warning text-dark" style="font-size: 16px; padding: 8px 16px;">
-                                        <field name="days_remaining" readonly="1" class="d-inline"/> días restantes
+                                        ¡Renueve ahora!
                                     </span>
                                 </p>
                                 <a href="https://node-a1.newplain.com/buy/" target="_blank"
