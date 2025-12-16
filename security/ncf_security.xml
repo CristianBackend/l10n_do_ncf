@@ -2,26 +2,16 @@
 <odoo>
     <data noupdate="0">
 
-        <!-- ============================================= -->
-        <!-- GRUPO: Usuario NCF                           -->
-        <!-- Puede ver y usar NCF en facturas             -->
-        <!-- NOTA: En Odoo 19, category_id fue removido   -->
-        <!-- ============================================= -->
         <record id="group_ncf_user" model="res.groups">
             <field name="name">NCF - Usuario</field>
             <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
-            <field name="comment">Puede ver secuencias NCF, usar NCF en facturas y generar reportes DGII básicos.</field>
+            <field name="comment">Puede ver secuencias NCF...</field>
         </record>
 
-        <!-- ============================================= -->
-        <!-- GRUPO: Administrador NCF                     -->
-        <!-- Puede configurar todo el módulo NCF          -->
-        <!-- ============================================= -->
         <record id="group_ncf_manager" model="res.groups">
             <field name="name">NCF - Administrador</field>
             <field name="implied_ids" eval="[(4, ref('group_ncf_user'))]"/>
-            <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
-            <field name="comment">Puede crear y configurar secuencias NCF, tipos de NCF, licencias y todas las configuraciones del módulo.</field>
+            <field name="comment">Puede configurar todo...</field>
         </record>
 
     </data>
