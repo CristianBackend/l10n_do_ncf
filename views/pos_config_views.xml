@@ -3,7 +3,8 @@
 
     <!-- ============================================= -->
     <!-- CONFIGURACIÓN NCF EN PUNTO DE VENTA          -->
-    <!-- Agrega pestaña NCF en la configuración POS   -->
+    <!-- Agrega campos NCF en la configuración POS    -->
+    <!-- Odoo 19 Compatible                           -->
     <!-- ============================================= -->
 
     <record id="view_pos_config_form_ncf" model="ir.ui.view">
@@ -11,48 +12,41 @@
         <field name="model">pos.config</field>
         <field name="inherit_id" ref="point_of_sale.pos_config_view_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//page[@name='accounting']" position="after">
-                <page string="NCF - Comprobantes Fiscales" name="ncf_config">
+            <!-- Agregar campos NCF al final del formulario -->
+            <xpath expr="//sheet" position="inside">
+                <group string="NCF - Comprobantes Fiscales" name="ncf_config">
                     <group>
-                        <group string="Configuración General">
-                            <field name="l10n_do_ncf_enabled"/>
-                        </group>
+                        <field name="l10n_do_ncf_enabled"/>
                     </group>
-                    
-                    <group string="Secuencias NCF" invisible="not l10n_do_ncf_enabled">
-                        <group>
-                            <field name="l10n_do_ncf_sequence_id" 
-                                   placeholder="Seleccionar secuencia B02..."
-                                   options="{'no_create': True}"/>
-                            <field name="l10n_do_ncf_fiscal_sequence_id" 
-                                   placeholder="Seleccionar secuencia B01..."
-                                   options="{'no_create': True}"/>
-                        </group>
-                        <group>
-                            <field name="l10n_do_ncf_special_sequence_id" 
-                                   placeholder="Seleccionar secuencia B14..."
-                                   options="{'no_create': True}"/>
-                            <field name="l10n_do_ncf_gov_sequence_id" 
-                                   placeholder="Seleccionar secuencia B15..."
-                                   options="{'no_create': True}"/>
-                        </group>
+                </group>
+                
+                <group string="Secuencias NCF" invisible="not l10n_do_ncf_enabled">
+                    <group>
+                        <field name="l10n_do_ncf_sequence_id" 
+                               placeholder="Seleccionar secuencia B02..."
+                               options="{'no_create': True}"/>
+                        <field name="l10n_do_ncf_fiscal_sequence_id" 
+                               placeholder="Seleccionar secuencia B01..."
+                               options="{'no_create': True}"/>
                     </group>
+                    <group>
+                        <field name="l10n_do_ncf_special_sequence_id" 
+                               placeholder="Seleccionar secuencia B14..."
+                               options="{'no_create': True}"/>
+                        <field name="l10n_do_ncf_gov_sequence_id" 
+                               placeholder="Seleccionar secuencia B15..."
+                               options="{'no_create': True}"/>
+                    </group>
+                </group>
 
-                    <div class="alert alert-info" role="alert" invisible="not l10n_do_ncf_enabled">
-                        <strong>📋 Información:</strong>
-                        <ul class="mb-0 mt-2">
-                            <li>El NCF se genera <strong>automáticamente</strong> al confirmar el pago</li>
-                            <li>El tipo de NCF se selecciona según el tipo de contribuyente del cliente</li>
-                            <li>Sin cliente = <strong>Consumidor Final (B02)</strong></li>
-                            <li>Contribuyente con RNC = <strong>Crédito Fiscal (B01)</strong></li>
-                        </ul>
-                    </div>
-
-                    <div class="alert alert-warning" role="alert" invisible="l10n_do_ncf_enabled">
-                        <strong>⚠️ NCF Deshabilitado</strong>
-                        <p class="mb-0">Las ventas de este punto de venta no generarán comprobantes fiscales.</p>
-                    </div>
-                </page>
+                <div class="alert alert-info" role="status" invisible="not l10n_do_ncf_enabled">
+                    <strong>Información:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>El NCF se genera automáticamente al confirmar el pago</li>
+                        <li>Sin cliente = Consumidor Final (B02)</li>
+                        <li>Contribuyente con RNC = Crédito Fiscal (B01)</li>
+                    </ul>
+                </div>
             </xpath>
         </field>
     </record>
