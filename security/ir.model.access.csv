@@ -1,18 +1,17 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_ncf_type_public,l10n_do_ncf.type public,model_l10n_do_ncf_type,account.group_account_invoice,1,0,0,0
-access_ncf_type_manager,l10n_do_ncf.type manager,model_l10n_do_ncf_type,account.group_account_manager,1,1,1,1
-access_ncf_sequence_public,l10n_do_ncf.sequence public,model_l10n_do_ncf_sequence,account.group_account_invoice,1,0,0,0
-access_ncf_sequence_manager,l10n_do_ncf.sequence manager,model_l10n_do_ncf_sequence,account.group_account_manager,1,1,1,1
-access_ncf_license_public,l10n_do_ncf.license.config public,model_l10n_do_ncf_license_config,account.group_account_invoice,1,0,0,0
-access_ncf_license_manager,l10n_do_ncf.license.config manager,model_l10n_do_ncf_license_config,account.group_account_manager,1,1,1,1
-access_dgii_report_wizard_public,l10n_do_ncf.dgii.report.wizard public,model_l10n_do_ncf_dgii_report_wizard,account.group_account_invoice,1,1,1,1
-access_ncf_alert_public,l10n_do_ncf.alert.config public,model_l10n_do_ncf_alert_config,account.group_account_invoice,1,0,0,0
-access_ncf_alert_manager,l10n_do_ncf.alert.config manager,model_l10n_do_ncf_alert_config,account.group_account_manager,1,1,1,1
-access_retention_type_public,l10n_do_ncf.retention.type public,model_l10n_do_ncf_retention_type,account.group_account_invoice,1,0,0,0
-access_retention_type_manager,l10n_do_ncf.retention.type manager,model_l10n_do_ncf_retention_type,account.group_account_manager,1,1,1,1
-access_move_retention_public,l10n_do_ncf.move.retention public,model_l10n_do_ncf_move_retention,account.group_account_invoice,1,1,1,1
-access_retention_wizard_public,l10n_do_ncf.retention.wizard public,model_l10n_do_ncf_retention_wizard,account.group_account_invoice,1,1,1,1
-access_setup_wizard_public,l10n_do_ncf.setup.wizard public,model_l10n_do_ncf_setup_wizard,account.group_account_invoice,1,1,1,1
-access_setup_wizard_manager,l10n_do_ncf.setup.wizard manager,model_l10n_do_ncf_setup_wizard,account.group_account_manager,1,1,1,1
-access_dgii_reminder_public,l10n_do_ncf.dgii.reminder public,model_l10n_do_ncf_dgii_reminder,account.group_account_invoice,1,0,0,0
-access_dgii_reminder_manager,l10n_do_ncf.dgii.reminder manager,model_l10n_do_ncf_dgii_reminder,account.group_account_manager,1,1,1,1
+access_ncf_type_user,l10n_do_ncf.type.user,model_l10n_do_ncf_type,group_ncf_user,1,0,0,0
+access_ncf_type_manager,l10n_do_ncf.type.manager,model_l10n_do_ncf_type,group_ncf_manager,1,1,1,1
+access_ncf_sequence_user,l10n_do_ncf.sequence.user,model_l10n_do_ncf_sequence,group_ncf_user,1,0,0,0
+access_ncf_sequence_manager,l10n_do_ncf.sequence.manager,model_l10n_do_ncf_sequence,group_ncf_manager,1,1,1,1
+access_ncf_license_user,l10n_do_ncf.license.config.user,model_l10n_do_ncf_license_config,group_ncf_user,1,0,0,0
+access_ncf_license_manager,l10n_do_ncf.license.config.manager,model_l10n_do_ncf_license_config,group_ncf_manager,1,1,1,1
+access_ncf_alert_user,l10n_do_ncf.alert.config.user,model_l10n_do_ncf_alert_config,group_ncf_user,1,0,0,0
+access_ncf_alert_manager,l10n_do_ncf.alert.config.manager,model_l10n_do_ncf_alert_config,group_ncf_manager,1,1,1,1
+access_retention_type_user,l10n_do_ncf.retention.type.user,model_l10n_do_ncf_retention_type,group_ncf_user,1,0,0,0
+access_retention_type_manager,l10n_do_ncf.retention.type.manager,model_l10n_do_ncf_retention_type,group_ncf_manager,1,1,1,1
+access_move_retention_user,l10n_do_ncf.move.retention.user,model_l10n_do_ncf_move_retention,group_ncf_user,1,1,1,1
+access_dgii_report_wizard_user,l10n_do_ncf.dgii.report.wizard.user,model_l10n_do_ncf_dgii_report_wizard,group_ncf_user,1,1,1,1
+access_retention_wizard_user,l10n_do_ncf.retention.wizard.user,model_l10n_do_ncf_retention_wizard,group_ncf_user,1,1,1,1
+access_setup_wizard_manager,l10n_do_ncf.setup.wizard.manager,model_l10n_do_ncf_setup_wizard,group_ncf_manager,1,1,1,1
+access_dgii_reminder_user,l10n_do_ncf.dgii.reminder.user,model_l10n_do_ncf_dgii_reminder,group_ncf_user,1,0,0,0
+access_dgii_reminder_manager,l10n_do_ncf.dgii.reminder.manager,model_l10n_do_ncf_dgii_reminder,group_ncf_manager,1,1,1,1

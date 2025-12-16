@@ -1,15 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="0">
-        <!-- Grupo: Usuario NCF -->
-        <record id="group_ncf_user" model="res.groups">
-            <field name="name">NCF - Usuario</field>
+
+        <!-- ============================================= -->
+        <!-- CATEGORÍA NCF                                -->
+        <!-- Aparecerá como sección en usuarios           -->
+        <!-- ============================================= -->
+        <record id="module_category_l10n_do_ncf" model="ir.module.category">
+            <field name="name">NCF - Comprobantes Fiscales</field>
+            <field name="description">Gestión de Comprobantes Fiscales para República Dominicana (DGII)</field>
+            <field name="sequence">50</field>
         </record>
 
-        <!-- Grupo: Administrador NCF -->
-        <record id="group_ncf_manager" model="res.groups">
-            <field name="name">NCF - Administrador</field>
-            <field name="implied_ids" eval="[(4, ref('group_ncf_user'))]"/>
+        <!-- ============================================= -->
+        <!-- GRUPO: Usuario NCF                           -->
+        <!-- Puede ver y usar NCF en facturas             -->
+        <!-- ============================================= -->
+        <record id="group_ncf_user" model="res.groups">
+            <field name="name">Usuario</field>
+            <field name="category_id" ref="module_category_l10n_do_ncf"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">Puede ver secuencias NCF, usar NCF en facturas y generar reportes DGII básicos.</field>
         </record>
+
+        <!-- ============================================= -->
+        <!-- GRUPO: Administrador NCF                     -->
+        <!-- Puede configurar todo el módulo NCF          -->
+        <!-- ============================================= -->
+        <record id="group_ncf_manager" model="res.groups">
+            <field name="name">Administrador</field>
+            <field name="category_id" ref="module_category_l10n_do_ncf"/>
+            <field name="implied_ids" eval="[(4, ref('group_ncf_user'))]"/>
+            <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+            <field name="comment">Puede crear y configurar secuencias NCF, tipos de NCF, licencias y todas las configuraciones del módulo.</field>
+        </record>
+
     </data>
 </odoo>
