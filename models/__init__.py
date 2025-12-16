@@ -9,3 +9,4 @@ from . import ncf_dashboard
 from . import ncf_alert
 from . import retention
 from . import dgii_reminder
+from . import pos_order
