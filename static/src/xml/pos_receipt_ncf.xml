@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Extender el recibo del POS para mostrar NCF -->
+    <t t-name="point_of_sale.OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
+        
+        <!-- Agregar NCF después de la información del cliente -->
+        <xpath expr="//div[hasclass('pos-receipt-contact')]" position="after">
+            <t t-if="order.l10n_do_ncf_number">
+                <div class="pos-receipt-ncf" style="text-align: center; margin: 10px 0; padding: 10px; border: 2px dashed #000;">
+                    <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">
+                        *** COMPROBANTE FISCAL ***
+                    </div>
+                    <t t-if="order.partner">
+                        <div style="margin-bottom: 4px;">
+                            <span style="font-weight: bold;">RNC/Cédula: </span>
+                            <span t-esc="order.partner.vat or 'N/A'"/>
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <span style="font-weight: bold;">Cliente: </span>
+                            <span t-esc="order.partner.name"/>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div style="margin-bottom: 4px;">
+                            <span>CONSUMIDOR FINAL</span>
+                        </div>
+                    </t>
+                    <div style="font-size: 16px; font-weight: bold; margin-top: 8px; letter-spacing: 1px;">
+                        <span>NCF: </span>
+                        <span t-esc="order.l10n_do_ncf_number"/>
+                    </div>
+                    <t t-if="order.l10n_do_ncf_type">
+                        <div style="font-size: 11px; margin-top: 4px; color: #666;">
+                            <span>Tipo: </span>
+                            <t t-if="order.l10n_do_ncf_type === 'B01'">Crédito Fiscal</t>
+                            <t t-elif="order.l10n_do_ncf_type === 'B02'">Consumidor Final</t>
+                            <t t-elif="order.l10n_do_ncf_type === 'B14'">Régimen Especial</t>
+                            <t t-elif="order.l10n_do_ncf_type === 'B15'">Gubernamental</t>
+                            <t t-else=""><t t-esc="order.l10n_do_ncf_type"/></t>
+                        </div>
+                    </t>
+                </div>
+            </t>
+        </xpath>
+
+        <!-- También agregar al final del recibo -->
+        <xpath expr="//div[hasclass('pos-receipt-order-data')]" position="after">
+            <t t-if="order.l10n_do_ncf_number">
+                <div style="text-align: center; margin-top: 10px; font-size: 11px;">
+                    <div>Válido para fines fiscales</div>
+                    <div style="font-weight: bold;">
+                        NCF: <t t-esc="order.l10n_do_ncf_number"/>
+                    </div>
+                </div>
+            </t>
+        </xpath>
+
+    </t>
+
+</templates>

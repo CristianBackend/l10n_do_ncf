@@ -3,10 +3,9 @@
 # Archivo: models/pos_order.py
 # Descripción: Extensión de Punto de Venta con NCF
 # Compatibilidad: Odoo 19
-# NOTA: Este archivo solo se carga si point_of_sale está instalado
 
 from odoo import models, fields, api, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 import logging
 import re
 
@@ -59,6 +58,7 @@ class PosConfig(models.Model):
         self.ensure_one()
         
         if not partner or not partner.l10n_do_dgii_tax_payer_type:
+            # Sin cliente o sin tipo = Consumidor Final (B02)
             return self.l10n_do_ncf_sequence_id
         
         taxpayer_type = partner.l10n_do_dgii_tax_payer_type
@@ -70,7 +70,22 @@ class PosConfig(models.Model):
         elif taxpayer_type == 'governmental':
             return self.l10n_do_ncf_gov_sequence_id or self.l10n_do_ncf_sequence_id
         else:
+            # final_consumer, non_taxpayer, etc = B02
             return self.l10n_do_ncf_sequence_id
+
+    def _get_ncf_type_name(self, partner):
+        """Obtener nombre del tipo de NCF para mensajes de error"""
+        if not partner or not partner.l10n_do_dgii_tax_payer_type:
+            return 'Consumidor Final (B02)'
+        
+        mapping = {
+            'taxpayer': 'Crédito Fiscal (B01)',
+            'final_consumer': 'Consumidor Final (B02)',
+            'non_taxpayer': 'Consumidor Final (B02)',
+            'special_regime': 'Régimen Especial (B14)',
+            'governmental': 'Gubernamental (B15)',
+        }
+        return mapping.get(partner.l10n_do_dgii_tax_payer_type, 'Consumidor Final (B02)')
 
 
 class PosSession(models.Model):
@@ -85,6 +100,12 @@ class PosSession(models.Model):
             'l10n_do_rnc_validated',
             'l10n_do_dgii_status',
         ])
+        return result
+
+    @api.model
+    def _pos_ui_models_to_load(self):
+        """Agregar modelos NCF a cargar en el POS"""
+        result = super()._pos_ui_models_to_load()
         return result
 
 
@@ -150,6 +171,46 @@ class PosOrder(models.Model):
         
         return mapping.get(self.partner_id.l10n_do_dgii_tax_payer_type, 'B02')
 
+    def _validate_ncf_sequence_available(self):
+        """Validar que existe secuencia NCF antes de procesar el pago"""
+        self.ensure_one()
+        
+        if not self.config_id.l10n_do_ncf_enabled:
+            return True
+        
+        sequence = self.config_id._get_ncf_sequence_for_partner(self.partner_id)
+        ncf_type_name = self.config_id._get_ncf_type_name(self.partner_id)
+        
+        if not sequence:
+            raise ValidationError(_(
+                'No se puede procesar la venta.\n\n'
+                'No hay secuencia NCF configurada para: %s\n\n'
+                'Configure la secuencia en:\n'
+                'Punto de Venta → Configuración → %s → Pestaña NCF'
+            ) % (ncf_type_name, self.config_id.name))
+        
+        # Verificar que la secuencia tiene NCF disponibles
+        if sequence.available_qty <= 0:
+            raise ValidationError(_(
+                'No se puede procesar la venta.\n\n'
+                'La secuencia NCF "%s" no tiene comprobantes disponibles.\n'
+                'Disponibles: %s\n\n'
+                'Solicite una nueva secuencia a la DGII.'
+            ) % (sequence.display_name, sequence.available_qty))
+        
+        # Verificar vencimiento
+        if sequence.expiration_date and sequence.aplica_vencimiento:
+            from datetime import date
+            if sequence.expiration_date < date.today():
+                raise ValidationError(_(
+                    'No se puede procesar la venta.\n\n'
+                    'La secuencia NCF "%s" está vencida.\n'
+                    'Fecha de vencimiento: %s\n\n'
+                    'Solicite una nueva secuencia a la DGII.'
+                ) % (sequence.display_name, sequence.expiration_date))
+        
+        return True
+
     def _generate_ncf(self):
         """Generar NCF para la orden POS"""
         self.ensure_one()
@@ -160,12 +221,11 @@ class PosOrder(models.Model):
         if self.l10n_do_ncf_number:
             return self.l10n_do_ncf_number
         
+        # Validar secuencia disponible
+        self._validate_ncf_sequence_available()
+        
         ncf_type = self._get_ncf_type_from_partner()
         sequence = self.config_id._get_ncf_sequence_for_partner(self.partner_id)
-        
-        if not sequence:
-            _logger.warning('POS NCF: No hay secuencia NCF configurada para %s', self.config_id.name)
-            return False
         
         try:
             ncf = sequence.get_next_ncf()
@@ -185,8 +245,15 @@ class PosOrder(models.Model):
 
     def action_pos_order_paid(self):
         """Override: Generar NCF al marcar como pagado"""
+        # Validar ANTES de procesar el pago
+        for order in self:
+            if order.config_id.l10n_do_ncf_enabled:
+                order._validate_ncf_sequence_available()
+        
+        # Procesar pago
         res = super().action_pos_order_paid()
         
+        # Generar NCF después del pago exitoso
         for order in self:
             if order.config_id.l10n_do_ncf_enabled and not order.l10n_do_ncf_number:
                 order._generate_ncf()

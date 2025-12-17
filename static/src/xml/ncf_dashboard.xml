@@ -14,7 +14,7 @@
                 </div>
 
                 <!-- Alertas -->
-                <t t-if="state.alerts.length > 0">
+                <t t-if="state.alerts and state.alerts.length > 0">
                     <div class="row mb-4">
                         <div class="col-12">
                             <t t-foreach="state.alerts" t-as="alert" t-key="alert_index">
@@ -26,16 +26,21 @@
                     </div>
                 </t>
 
-                <!-- Estadisticas principales -->
+                <!-- Estadísticas principales -->
                 <div class="row mb-4 g-3">
-                    <!-- Facturas del Mes -->
+                    <!-- Facturas del Mes (Total) -->
                     <div class="col-lg-3 col-md-6">
                         <div class="card ncf-card h-100">
                             <div class="card-body ncf-stat-card">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <p class="ncf-stat-label text-muted mb-1">Facturas del Mes</p>
-                                        <h2 class="ncf-stat-value mb-0" t-esc="state.invoices_month"/>
+                                        <p class="ncf-stat-label text-muted mb-1">FACTURAS DEL MES</p>
+                                        <h2 class="ncf-stat-value mb-0" t-esc="state.invoices_month || 0"/>
+                                        <t t-if="state.pos_orders_month > 0">
+                                            <small class="text-muted">
+                                                (<t t-esc="state.invoices_only || 0"/> fact. + <t t-esc="state.pos_orders_month"/> POS)
+                                            </small>
+                                        </t>
                                     </div>
                                     <div class="ncf-icon-circle ncf-icon-primary">
                                         <span>📄</span>
@@ -51,8 +56,8 @@
                             <div class="card-body ncf-stat-card">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <p class="ncf-stat-label text-muted mb-1">Compras del Mes</p>
-                                        <h2 class="ncf-stat-value mb-0" t-esc="state.purchases_month"/>
+                                        <p class="ncf-stat-label text-muted mb-1">COMPRAS DEL MES</p>
+                                        <h2 class="ncf-stat-value mb-0" t-esc="state.purchases_month || 0"/>
                                     </div>
                                     <div class="ncf-icon-circle ncf-icon-success">
                                         <span>🛒</span>
@@ -68,8 +73,8 @@
                             <div class="card-body ncf-stat-card">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <p class="ncf-stat-label text-muted mb-1">Anulados</p>
-                                        <h2 class="ncf-stat-value mb-0" t-esc="state.cancelled_month"/>
+                                        <p class="ncf-stat-label text-muted mb-1">ANULADOS</p>
+                                        <h2 class="ncf-stat-value mb-0" t-esc="state.cancelled_month || 0"/>
                                     </div>
                                     <div class="ncf-icon-circle ncf-icon-warning">
                                         <span>🚫</span>
@@ -85,8 +90,8 @@
                             <div class="card-body ncf-stat-card">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <p class="ncf-stat-label text-muted mb-1">Licencia</p>
-                                        <t t-if="state.license.is_valid">
+                                        <p class="ncf-stat-label text-muted mb-1">LICENCIA</p>
+                                        <t t-if="state.license and state.license.is_valid">
                                             <h5 class="mb-0 fw-bold text-success">Activa</h5>
                                             <small class="text-muted">
                                                 <t t-esc="state.license.days_remaining"/> días restantes
@@ -94,9 +99,10 @@
                                         </t>
                                         <t t-else="">
                                             <h5 class="mb-0 fw-bold text-danger">Inactiva</h5>
+                                            <small class="text-muted">Configurar licencia</small>
                                         </t>
                                     </div>
-                                    <t t-if="state.license.is_valid">
+                                    <t t-if="state.license and state.license.is_valid">
                                         <div class="ncf-icon-circle ncf-icon-success">
                                             <span>✅</span>
                                         </div>
@@ -125,16 +131,16 @@
                                 </div>
                             </div>
                             <div class="card-body p-0">
-                                <t t-if="state.sequences.length > 0">
+                                <t t-if="state.sequences and state.sequences.length > 0">
                                     <div class="table-responsive">
                                         <table class="table ncf-table mb-0">
                                             <thead>
                                                 <tr>
-                                                    <th class="ps-4">Tipo</th>
-                                                    <th>Serie</th>
-                                                    <th>Disponibles</th>
-                                                    <th style="width: 200px;">Uso</th>
-                                                    <th class="pe-4">Vencimiento</th>
+                                                    <th class="ps-4">TIPO</th>
+                                                    <th>SERIE</th>
+                                                    <th>DISPONIBLES</th>
+                                                    <th style="width: 200px;">USO</th>
+                                                    <th class="pe-4">VENCIMIENTO</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -178,7 +184,114 @@
                     </div>
                 </div>
 
-                <!-- Accesos rapidos -->
+                <!-- Fila con NCF por Tipo y Últimos NCF -->
+                <div class="row mb-4 g-3">
+                    
+                    <!-- NCF por Tipo (Este mes) -->
+                    <div class="col-lg-4">
+                        <div class="card ncf-card h-100">
+                            <div class="card-header py-3 border-bottom">
+                                <h5 class="mb-0 fw-bold">NCF por Tipo (Este Mes)</h5>
+                            </div>
+                            <div class="card-body">
+                                <t t-if="state.ncf_by_type and state.ncf_by_type.length > 0">
+                                    <t t-foreach="state.ncf_by_type" t-as="ncf_type" t-key="ncf_type.prefix">
+                                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                                            <div>
+                                                <span class="badge bg-primary me-2" t-esc="ncf_type.prefix"/>
+                                                <span t-esc="ncf_type.name"/>
+                                            </div>
+                                            <div>
+                                                <span class="badge bg-secondary" t-esc="ncf_type.count"/>
+                                                <t t-if="ncf_type.pos_count and ncf_type.pos_count > 0">
+                                                    <small class="text-muted ms-1">
+                                                        (<t t-esc="ncf_type.invoice_count"/> + <t t-esc="ncf_type.pos_count"/> POS)
+                                                    </small>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </t>
+                                <t t-else="">
+                                    <div class="text-center py-4 text-muted">
+                                        <p class="mb-0">Sin NCF generados este mes</p>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Últimos NCF Generados -->
+                    <div class="col-lg-8">
+                        <div class="card ncf-card h-100">
+                            <div class="card-header py-3 border-bottom">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0 fw-bold">Últimos NCF Generados</h5>
+                                    <span class="badge bg-info">
+                                        Total histórico: <t t-esc="state.total_ncf_generated || 0"/>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <t t-if="state.recent_ncf and state.recent_ncf.length > 0">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm ncf-table mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th class="ps-3">NCF</th>
+                                                    <th>CLIENTE</th>
+                                                    <th>RNC</th>
+                                                    <th class="text-end">MONTO</th>
+                                                    <th>FECHA</th>
+                                                    <th class="pe-3">ORIGEN</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <t t-foreach="state.recent_ncf" t-as="ncf" t-key="ncf_index">
+                                                    <tr class="ncf-row-clickable" t-on-click="() => this.openDocument(ncf)">
+                                                        <td class="ps-3">
+                                                            <code class="text-primary" t-esc="ncf.ncf"/>
+                                                        </td>
+                                                        <td>
+                                                            <span t-esc="ncf.partner" t-att-title="ncf.partner"/>
+                                                        </td>
+                                                        <td>
+                                                            <small class="text-muted" t-esc="ncf.partner_vat || '-'"/>
+                                                        </td>
+                                                        <td class="text-end fw-bold">
+                                                            <t t-esc="ncf.currency || '$'"/><t t-esc="ncf.amount ? ncf.amount.toFixed(2) : '0.00'"/>
+                                                        </td>
+                                                        <td>
+                                                            <small t-esc="ncf.date"/>
+                                                        </td>
+                                                        <td class="pe-3">
+                                                            <t t-if="ncf.type === 'pos'">
+                                                                <span class="badge bg-success">POS</span>
+                                                            </t>
+                                                            <t t-elif="ncf.move_type === 'out_refund'">
+                                                                <span class="badge bg-warning">NC</span>
+                                                            </t>
+                                                            <t t-else="">
+                                                                <span class="badge bg-primary">Factura</span>
+                                                            </t>
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </t>
+                                <t t-else="">
+                                    <div class="text-center py-4 text-muted">
+                                        <p class="mb-0">No hay NCF generados aún</p>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Accesos rápidos -->
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="card ncf-card">
