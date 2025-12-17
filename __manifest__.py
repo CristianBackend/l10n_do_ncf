@@ -1,13 +1,44 @@
 {
     'name': 'Republica Dominicana - Comprobantes Fiscales (NCF)',
-    'version': '19.0.1.2.0',
+    'version': '19.0.1.3.0',
     'summary': 'Gestion de NCF para Republica Dominicana segun normativa DGII',
-    'description': 'Modulo de Comprobantes Fiscales para Republica Dominicana con soporte para Punto de Venta',
+    'description': """
+Modulo de Comprobantes Fiscales para Republica Dominicana
+=========================================================
+
+Funcionalidades:
+- Generacion automatica de NCF
+- Validacion de RNC contra DGII
+- Reportes DGII (606, 607, 608, 609)
+- Retenciones ISR e ITBIS
+- Integracion con Punto de Venta
+- Integracion con Ventas
+- Integracion con CRM
+
+Compatible con Odoo 19.
+    """,
     'author': 'NewPlain',
     'website': 'https://www.newplain.com/',
     'category': 'Accounting/Localizations',
     'license': 'LGPL-3',
-    'depends': ['base', 'account', 'l10n_do', 'contacts', 'web', 'mail', 'point_of_sale'],
+    'depends': [
+        # Base
+        'base',
+        'web',
+        'mail',
+        'contacts',
+        # Contabilidad
+        'account',
+        'l10n_do',
+        # Ventas
+        'sale',
+        'sale_management',
+        # CRM
+        'crm',
+        'sale_crm',
+        # Punto de Venta
+        'point_of_sale',
+    ],
     'data': [
         'security/ncf_security.xml',
         'security/ir.model.access.csv',
