@@ -339,8 +339,7 @@ class AccountMove(models.Model):
             if move._is_demo_or_test_mode():
                 continue
 
-            if (move.move_type in ('out_invoice', 'out_refund') and
-                move.company_id.country_id.code == 'DO'):
+            if (move.move_type in ('out_invoice', 'out_refund') 
 
                 if move.move_type == 'out_refund' and not move.l10n_do_ncf_origin:
                     raise UserError(_(

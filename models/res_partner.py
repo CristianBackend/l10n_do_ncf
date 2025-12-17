@@ -50,7 +50,6 @@ class ResPartner(models.Model):
 
     def _get_dgii_api_url(self):
         """Obtener URL de la API DGII desde configuración o usar default"""
-        # Intentar obtener de parámetros del sistema
         api_url = self.env['ir.config_parameter'].sudo().get_param(
             'l10n_do_ncf.dgii_api_url',
             default=''
@@ -58,7 +57,6 @@ class ResPartner(models.Model):
         if api_url:
             return api_url
         
-        # Intentar API local primero (para servidores propios)
         try:
             test_response = requests.get('http://localhost:5000/api/v1/rnc/101000783', timeout=2)
             if test_response.status_code == 200:
@@ -66,14 +64,12 @@ class ResPartner(models.Model):
         except:
             pass
         
-        # Usar API pública como fallback
         return 'https://api.indexa.do/api/rnc'
 
     def _consultar_dgii(self, rnc):
         """Consultar RNC en DGII - intenta múltiples APIs"""
         rnc_clean = re.sub(r'[^0-9]', '', rnc)
         
-        # Lista de APIs a intentar en orden
         apis = [
             {
                 'url': f'http://localhost:5000/api/v1/rnc/{rnc_clean}',
@@ -148,14 +144,38 @@ class ResPartner(models.Model):
                 res['country_id'] = do_country.id
         return res
 
+    def _limpiar_datos_dgii(self):
+        """Limpiar todos los datos de DGII del partner"""
+        self.name = False
+        self.l10n_do_dgii_status = False
+        self.l10n_do_dgii_activity = False
+        self.l10n_do_rnc_validated = False
+        self.l10n_do_rnc_validation_date = False
+        self.l10n_do_dgii_tax_payer_type = 'final_consumer'
+
     @api.onchange('vat')
     def _onchange_vat_dgii(self):
         """Auto-consultar DGII cuando se ingresa RNC/Cedula"""
-        if self.vat:
-            rnc = re.sub(r'[^0-9]', '', self.vat)
-            if len(rnc) == 9 or len(rnc) == 11:
-                self._consultar_rnc_dgii(rnc)
-                self._auto_set_taxpayer_type(rnc)
+        # Si se borró el VAT, limpiar datos
+        if not self.vat:
+            self._limpiar_datos_dgii()
+            return
+        
+        rnc = re.sub(r'[^0-9]', '', self.vat)
+        
+        # Validar longitud
+        if len(rnc) != 9 and len(rnc) != 11:
+            return
+        
+        # SIEMPRE limpiar datos anteriores antes de consultar nuevo RNC
+        self.l10n_do_dgii_status = False
+        self.l10n_do_dgii_activity = False
+        self.l10n_do_rnc_validated = False
+        self.l10n_do_rnc_validation_date = False
+        
+        # Consultar nuevo RNC
+        self._consultar_rnc_dgii(rnc)
+        self._auto_set_taxpayer_type(rnc)
 
     def _auto_set_taxpayer_type(self, rnc):
         """Asignar tipo de contribuyente automaticamente segun el RNC"""
@@ -176,13 +196,17 @@ class ResPartner(models.Model):
             data = self._consultar_dgii(rnc)
             if data.get('found'):
                 nombre_dgii = data.get('name', '')
-                if nombre_dgii and not self.name:
+                # SIEMPRE actualizar el nombre si se encontró en DGII
+                if nombre_dgii:
                     self.name = nombre_dgii
                 self.l10n_do_dgii_status = data.get('status', '')
                 self.l10n_do_dgii_activity = data.get('activity', '')
                 self.l10n_do_rnc_validated = True
                 self.l10n_do_rnc_validation_date = datetime.now()
                 return True
+            else:
+                # RNC no encontrado - mantener campos limpios
+                self.l10n_do_rnc_validated = False
         except Exception as e:
             _logger.warning(f"NCF: Error en _consultar_rnc_dgii: {str(e)}")
         return False
@@ -219,7 +243,6 @@ class ResPartner(models.Model):
                 if nombre_dgii:
                     vals['name'] = nombre_dgii
 
-                # Auto-asignar tipo
                 if len(rnc) == 9 and rnc.startswith('4'):
                     vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
                 elif data.get('status') == 'ACTIVO':
@@ -242,6 +265,12 @@ class ResPartner(models.Model):
                     }
                 }
             else:
+                # Limpiar validación si no se encuentra
+                self.write({
+                    'l10n_do_rnc_validated': False,
+                    'l10n_do_dgii_status': '',
+                    'l10n_do_dgii_activity': '',
+                })
                 return {
                     'type': 'ir.actions.client',
                     'tag': 'display_notification',
@@ -270,7 +299,6 @@ class ResPartner(models.Model):
         """Crear cliente rapido desde RNC - usado en facturacion rapida"""
         rnc_clean = re.sub(r'[^0-9]', '', rnc)
 
-        # Buscar si ya existe
         existing = self.search(['|', ('vat', '=', rnc_clean), ('vat', '=', rnc)], limit=1)
         if existing:
             return existing

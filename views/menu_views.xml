@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    
+    <!-- ============================================= -->
+    <!-- MENÚ PRINCIPAL NCF EN FACTURACIÓN            -->
+    <!-- Compatible con Odoo 19 y módulo Ventas       -->
+    <!-- ============================================= -->
+
+    <!-- Menú raíz NCF dentro de Configuración de Facturación -->
     <menuitem id="menu_ncf_root"
               name="NCF"
               parent="account.menu_finance_configuration"
               sequence="50"
               groups="l10n_do_ncf.group_ncf_user"/>
 
+    <!-- Configuración Inicial -->
     <menuitem id="menu_ncf_setup_wizard"
               name="Configuracion Inicial"
               parent="menu_ncf_root"
@@ -13,6 +21,7 @@
               sequence="1"
               groups="l10n_do_ncf.group_ncf_manager"/>
 
+    <!-- Tipos de NCF -->
     <menuitem id="menu_ncf_type"
               name="Tipos de NCF"
               parent="menu_ncf_root"
@@ -20,6 +29,7 @@
               sequence="10"
               groups="l10n_do_ncf.group_ncf_manager"/>
 
+    <!-- Secuencias NCF -->
     <menuitem id="menu_ncf_sequence"
               name="Secuencias NCF"
               parent="menu_ncf_root"
@@ -27,6 +37,7 @@
               sequence="20"
               groups="l10n_do_ncf.group_ncf_manager"/>
 
+    <!-- Licencia NCF -->
     <menuitem id="menu_ncf_license"
               name="Licencia NCF"
               parent="menu_ncf_root"
@@ -34,6 +45,7 @@
               sequence="30"
               groups="l10n_do_ncf.group_ncf_manager"/>
 
+    <!-- Retenciones -->
     <menuitem id="menu_retention_root"
               name="Retenciones"
               parent="menu_ncf_root"
@@ -46,6 +58,7 @@
               action="l10n_do_ncf.action_retention_type"
               sequence="10"/>
 
+    <!-- Alertas NCF -->
     <menuitem id="menu_ncf_alerts"
               name="Alertas NCF"
               parent="menu_ncf_root"
@@ -53,6 +66,10 @@
               sequence="40"
               groups="l10n_do_ncf.group_ncf_manager"/>
 
+    <!-- ============================================= -->
+    <!-- MENÚ DE REPORTES DGII                        -->
+    <!-- ============================================= -->
+    
     <menuitem id="menu_dgii_reports"
               name="Reportes DGII"
               parent="account.menu_finance_reports"
@@ -66,9 +83,35 @@
               sequence="10"
               groups="l10n_do_ncf.group_ncf_user"/>
 
+    <!-- ============================================= -->
+    <!-- DASHBOARD NCF - ACCESO PRINCIPAL             -->
+    <!-- ============================================= -->
+    
+    <!-- Dashboard en menú principal de Facturación -->
     <menuitem id="menu_ncf_dashboard"
               name="Dashboard NCF"
               parent="account.menu_finance"
               action="l10n_do_ncf.action_ncf_dashboard"
               sequence="1"/>
+
+    <!-- ============================================= -->
+    <!-- ACCESOS RÁPIDOS EN CLIENTES/FACTURACIÓN      -->
+    <!-- ============================================= -->
+
+    <!-- Menú de Facturas con NCF (acceso rápido) -->
+    <menuitem id="menu_ncf_invoices"
+              name="Facturas con NCF"
+              parent="account.menu_finance_receivables"
+              action="l10n_do_ncf.action_ncf_invoices"
+              sequence="5"
+              groups="l10n_do_ncf.group_ncf_user"/>
+
+    <!-- Menú de Compras con NCF (acceso rápido) -->
+    <menuitem id="menu_ncf_bills"
+              name="Compras con NCF"
+              parent="account.menu_finance_payables"
+              action="l10n_do_ncf.action_ncf_bills"
+              sequence="5"
+              groups="l10n_do_ncf.group_ncf_user"/>
+
 </odoo>
