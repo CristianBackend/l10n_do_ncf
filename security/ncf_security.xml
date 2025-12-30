@@ -1,41 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="0">
-
         <!-- ============================================= -->
         <!-- GRUPO: Usuario NCF                           -->
-        <!-- Puede ver y usar NCF en facturas             -->
         <!-- ============================================= -->
         <record id="group_ncf_user" model="res.groups">
             <field name="name">NCF - Usuario</field>
-            <field name="comment">Puede ver secuencias NCF, usar NCF en facturas y generar reportes DGII básicos.</field>
+            <field name="comment">Puede ver secuencias NCF, usar NCF en facturas y generar reportes DGII basicos.</field>
         </record>
 
         <!-- ============================================= -->
         <!-- GRUPO: Administrador NCF                     -->
-        <!-- Puede configurar todo el módulo NCF          -->
         <!-- ============================================= -->
         <record id="group_ncf_manager" model="res.groups">
             <field name="name">NCF - Administrador</field>
             <field name="implied_ids" eval="[(4, ref('group_ncf_user'))]"/>
-            <field name="comment">Puede crear y configurar secuencias NCF, tipos de NCF, licencias y todas las configuraciones del módulo.</field>
+            <field name="comment">Puede crear y configurar secuencias NCF, tipos de NCF, licencias y todas las configuraciones del modulo.</field>
         </record>
 
         <!-- ============================================= -->
-        <!-- ASIGNACIÓN AUTOMÁTICA DE GRUPOS              -->
-        <!-- Todos los usuarios internos → NCF Usuario    -->
-        <!-- Usuarios con acceso contable → NCF Admin     -->
+        <!-- ASIGNACION AUTOMATICA DE GRUPOS              -->
         <!-- ============================================= -->
-        
-        <!-- Todos los usuarios internos obtienen NCF Usuario automáticamente -->
         <record id="base.group_user" model="res.groups">
             <field name="implied_ids" eval="[(4, ref('group_ncf_user'))]"/>
         </record>
 
-        <!-- Usuarios con permisos de facturación obtienen NCF Admin automáticamente -->
         <record id="account.group_account_manager" model="res.groups">
             <field name="implied_ids" eval="[(4, ref('group_ncf_manager'))]"/>
         </record>
+    </data>
 
+    <!-- ============================================= -->
+    <!-- RECORD RULES - MULTI-COMPA�IA                -->
+    <!-- ============================================= -->
+    <data noupdate="1">
+        <!-- Secuencias NCF: Solo ver las de mi compa�ia -->
+        <record id="ncf_sequence_company_rule" model="ir.rule">
+            <field name="name">NCF Sequence: Multi-Company</field>
+            <field name="model_id" ref="model_l10n_do_ncf_sequence"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- Tipos NCF: Compartidos entre compa�ias (sin filtro) -->
+        
+        <!-- Licencia NCF: Solo ver la de mi compa�ia -->
+        <record id="ncf_license_company_rule" model="ir.rule">
+            <field name="name">NCF License: Multi-Company</field>
+            <field name="model_id" ref="model_l10n_do_ncf_license_config"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
     </data>
 </odoo>
