@@ -3,22 +3,24 @@
 
     <template id="report_invoice_document_ncf" inherit_id="account.report_invoice_document">
 
-        <!-- Agregar NCF y cambiar Tax ID por RNC en la seccion del cliente -->
-        <xpath expr="//div[@id='informations']" position="before">
+        <!-- Agregar NCF despues del VAT del cliente -->
+        <xpath expr="//span[@t-field='o.partner_id.vat']/.." position="after">
             <t t-if="o.l10n_do_ncf_number and o.move_type in ('out_invoice', 'out_refund')">
-                <div style="margin-bottom: 10px;">
-                    <strong>NCF: </strong><span t-field="o.l10n_do_ncf_number" style="font-weight: bold;"/>
-                    <t t-if="o.l10n_do_ncf_seq_id.expiration_date">
-                        <span style="margin-left: 20px;">
-                            <strong>Valido hasta: </strong><span t-field="o.l10n_do_ncf_seq_id.expiration_date"/>
-                        </span>
-                    </t>
-                    <t t-if="o.l10n_do_ncf_origin">
-                        <br/>
-                        <strong>NCF Afectado: </strong><span t-field="o.l10n_do_ncf_origin"/>
-                    </t>
+                <div>
+                    <strong>NCF: </strong><span t-field="o.l10n_do_ncf_number"/>
+                </div>
+                <div t-if="o.l10n_do_ncf_seq_id.expiration_date">
+                    <strong>Valido hasta: </strong><span t-field="o.l10n_do_ncf_seq_id.expiration_date"/>
+                </div>
+                <div t-if="o.l10n_do_ncf_origin">
+                    <strong>NCF Afectado: </strong><span t-field="o.l10n_do_ncf_origin"/>
                 </div>
             </t>
+        </xpath>
+
+        <!-- Cambiar Tax ID por RNC/Cedula -->
+        <xpath expr="//span[@t-field='o.partner_id.vat']/../span[1]" position="replace">
+            <span>RNC/Cedula: </span>
         </xpath>
 
     </template>
