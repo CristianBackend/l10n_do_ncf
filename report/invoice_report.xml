@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="report_invoice_document_ncf" inherit_id="account.report_invoice_document">
+
+        <!-- Agregar NCF despues del titulo de la factura -->
+        <xpath expr="//h2" position="after">
+            <t t-if="o.l10n_do_ncf_number and o.move_type in ('out_invoice', 'out_refund')">
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <table class="table table-sm" style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                            <tr>
+                                <td style="width: 20%;"><strong>NCF:</strong></td>
+                                <td style="width: 30%; font-size: 1.1em; font-weight: bold;">
+                                    <span t-field="o.l10n_do_ncf_number"/>
+                                </td>
+                                <td style="width: 20%;"><strong>Valido hasta:</strong></td>
+                                <td style="width: 30%;">
+                                    <span t-if="o.l10n_do_ncf_seq_id.expiration_date" t-field="o.l10n_do_ncf_seq_id.expiration_date"/>
+                                    <span t-else="">N/A</span>
+                                </td>
+                            </tr>
+                            <tr t-if="o.l10n_do_ncf_origin">
+                                <td><strong>NCF Afectado:</strong></td>
+                                <td colspan="3"><span t-field="o.l10n_do_ncf_origin"/></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </t>
+        </xpath>
+
+        <!-- Cambiar etiqueta VAT por RNC/Cedula -->
+        <xpath expr="//span[@t-if='o.partner_id.vat']" position="replace">
+            <span t-if="o.partner_id.vat">
+                <strong>RNC/Cedula: </strong><span t-field="o.partner_id.vat"/>
+            </span>
+        </xpath>
+
+    </template>
+
+</odoo>

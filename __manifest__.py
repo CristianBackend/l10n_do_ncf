@@ -62,6 +62,8 @@ Compatible con Odoo 19.
         'views/retention_views.xml',
         'views/pos_config_views.xml',
         'views/pos_order_views.xml',
+        # Reportes
+        'report/invoice_report.xml',
         # Wizards
         'wizards/dgii_report_wizard_views.xml',
         'wizards/setup_wizard_views.xml',
