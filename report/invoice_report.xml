@@ -3,13 +3,13 @@
 
     <template id="report_invoice_document_ncf" inherit_id="account.report_invoice_document">
 
-        <!-- Agregar NCF al inicio del documento -->
-        <xpath expr="//div[@class='page']" position="inside">
+        <!-- Agregar NCF despues de la informacion del documento -->
+        <xpath expr="//div[@id='informations']" position="after">
             <t t-if="o.l10n_do_ncf_number and o.move_type in ('out_invoice', 'out_refund')">
-                <div class="row" style="margin-top: -20px; margin-bottom: 20px;">
+                <div class="row mt-3 mb-3">
                     <div class="col-12">
-                        <table class="table table-sm table-bordered" style="background-color: #f8f9fa;">
-                            <tr>
+                        <table class="table table-sm table-bordered">
+                            <tr style="background-color: #f8f9fa;">
                                 <td style="width: 15%;"><strong>NCF:</strong></td>
                                 <td style="width: 35%; font-size: 1.2em; font-weight: bold;">
                                     <span t-field="o.l10n_do_ncf_number"/>
@@ -20,7 +20,7 @@
                                     <span t-else="">N/A</span>
                                 </td>
                             </tr>
-                            <tr t-if="o.l10n_do_ncf_origin">
+                            <tr t-if="o.l10n_do_ncf_origin" style="background-color: #f8f9fa;">
                                 <td><strong>NCF Afectado:</strong></td>
                                 <td colspan="3"><span t-field="o.l10n_do_ncf_origin"/></td>
                             </tr>
