@@ -2,7 +2,7 @@
 # Módulo: l10n_do_ncf
 # Archivo: models/registro_unico.py
 # Descripción: B12 - Registro Único de Ingresos
-# Versión: 19.0.2.3.0
+# Versión: 19.0.3.0.0 - Corregido para Odoo 19
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
@@ -18,12 +18,6 @@ class L10nDoRegistroUnico(models.Model):
     
     Consolida ventas diarias de bajo monto (retail, colmados, etc.)
     en un solo comprobante fiscal por día.
-    
-    Reglas DGII:
-    - Un B12 por día por establecimiento
-    - Consolida ventas menores sin NCF individual
-    - Se reporta en 607 como una sola línea
-    - Aplica para ventas < monto mínimo sin RNC
     """
     _name = 'l10n_do_ncf.registro.unico'
     _description = 'B12 - Registro Único de Ingresos'
@@ -42,8 +36,6 @@ class L10nDoRegistroUnico(models.Model):
         string='Compañía',
         required=True,
         default=lambda self: self.env.company,
-        readonly=True,
-        states={'draft': [('readonly', False)]}
     )
 
     date = fields.Date(
@@ -51,8 +43,6 @@ class L10nDoRegistroUnico(models.Model):
         required=True,
         default=fields.Date.today,
         tracking=True,
-        readonly=True,
-        states={'draft': [('readonly', False)]}
     )
 
     # NCF B12
@@ -154,12 +144,20 @@ class L10nDoRegistroUnico(models.Model):
 
     notes = fields.Text(string='Notas')
 
-    # SQL Constraint
-    _sql_constraints = [
-        ('unique_date_company', 
-         'UNIQUE(date, company_id)', 
-         'Solo puede existir un Registro Único (B12) por día por compañía.')
-    ]
+    # Constraint usando el método Odoo 19
+    @api.constrains('date', 'company_id')
+    def _check_unique_date_company(self):
+        for record in self:
+            existing = self.search([
+                ('id', '!=', record.id),
+                ('date', '=', record.date),
+                ('company_id', '=', record.company_id.id),
+                ('state', '!=', 'cancelled'),
+            ])
+            if existing:
+                raise ValidationError(_(
+                    'Ya existe un Registro Único (B12) para la fecha %s en esta compañía.'
+                ) % record.date)
 
     @api.depends('line_ids', 'line_ids.amount_total', 'line_ids.amount_tax',
                  'line_ids.payment_method')
@@ -276,10 +274,7 @@ class L10nDoRegistroUnico(models.Model):
 
     @api.model
     def get_or_create_for_date(self, date_val, company_id=None):
-        """
-        Obtener o crear registro único para una fecha.
-        Útil para integración con POS.
-        """
+        """Obtener o crear registro único para una fecha."""
         company_id = company_id or self.env.company.id
         
         registro = self.search([
@@ -298,28 +293,23 @@ class L10nDoRegistroUnico(models.Model):
 
     @api.model
     def consolidate_pos_orders(self, date_from=None, date_to=None):
-        """
-        Consolidar órdenes POS en registros únicos.
-        Cron job o acción manual.
-        """
+        """Consolidar órdenes POS en registros únicos."""
         date_from = date_from or date.today()
         date_to = date_to or date.today()
 
         PosOrder = self.env['pos.order']
         
-        # Buscar órdenes sin B12 asignado
         orders = PosOrder.search([
             ('date_order', '>=', date_from),
             ('date_order', '<=', date_to),
             ('state', 'in', ['paid', 'done', 'invoiced']),
             ('l10n_do_registro_unico_id', '=', False),
-            ('l10n_do_use_b12', '=', True),  # Flag en POS
+            ('l10n_do_use_b12', '=', True),
         ])
 
         if not orders:
             return {'created': 0, 'orders_processed': 0}
 
-        # Agrupar por fecha y compañía
         grouped = {}
         for order in orders:
             key = (order.date_order.date(), order.company_id.id)
@@ -338,7 +328,6 @@ class L10nDoRegistroUnico(models.Model):
                 continue
 
             for order in order_list:
-                # Crear línea de detalle
                 self.env['l10n_do_ncf.registro.unico.line'].create({
                     'registro_id': registro.id,
                     'pos_order_id': order.id,
@@ -350,7 +339,6 @@ class L10nDoRegistroUnico(models.Model):
                     'date_time': order.date_order,
                 })
                 
-                # Vincular orden al registro
                 order.l10n_do_registro_unico_id = registro.id
                 processed += 1
 
@@ -428,7 +416,7 @@ class PosOrderB12(models.Model):
     l10n_do_use_b12 = fields.Boolean(
         string='Usar B12',
         default=True,
-        help='Si está activo, esta venta se consolida en B12 en lugar de generar NCF individual'
+        help='Si está activo, esta venta se consolida en B12'
     )
 
     def _get_payment_method_type(self):

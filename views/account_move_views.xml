@@ -14,7 +14,7 @@
             <!-- NCF Banner superior -->
             <xpath expr="//div[hasclass('oe_title')]" position="before">
                 <!-- Banner NCF Ventas -->
-                <div class="alert alert-success text-center mb-3" 
+                <div class="alert alert-success text-center mb-3" role="alert"
                      invisible="not l10n_do_ncf_number or move_type not in ('out_invoice', 'out_refund')">
                     <div class="d-flex justify-content-center align-items-center">
                         <span class="me-2">NCF:</span>
@@ -28,7 +28,7 @@
                 </div>
 
                 <!-- Banner NCF Proveedor -->
-                <div class="alert alert-info text-center mb-3" 
+                <div class="alert alert-info text-center mb-3" role="status"
                      invisible="not l10n_do_vendor_ncf or move_type not in ('in_invoice', 'in_refund')">
                     <span class="me-2">NCF Proveedor:</span>
                     <span class="fs-4 fw-bold"><field name="l10n_do_vendor_ncf" readonly="1"/></span>
@@ -36,21 +36,21 @@
                 </div>
 
                 <!-- Banner BLOQUEADO si reportado -->
-                <div class="alert alert-danger text-center mb-3" 
+                <div class="alert alert-danger text-center mb-3" role="alert"
                      invisible="not l10n_do_reported_606 and not l10n_do_reported_607">
                     <strong>🔒 DOCUMENTO BLOQUEADO</strong>
                     <span class="ms-2">Reportado DGII período: <field name="l10n_do_report_period" readonly="1"/></span>
                 </div>
 
                 <!-- Banner Nota Débito -->
-                <div class="alert alert-warning text-center mb-3" 
+                <div class="alert alert-warning text-center mb-3" role="status"
                      invisible="not l10n_do_is_debit_note">
                     <strong>📝 NOTA DE DÉBITO (B03)</strong>
                     <span class="ms-2">NCF Afectado: <field name="l10n_do_debit_ncf_origin" readonly="1"/></span>
                 </div>
 
                 <!-- Banner ND Proveedor -->
-                <div class="alert alert-primary text-center mb-3" 
+                <div class="alert alert-primary text-center mb-3" role="status"
                      invisible="not l10n_do_is_vendor_debit_note">
                     <strong>📝 NOTA DE DÉBITO DE PROVEEDOR</strong>
                     <span class="ms-2">NCF Afectado: <field name="l10n_do_vendor_debit_ncf_origin" readonly="1"/></span>
