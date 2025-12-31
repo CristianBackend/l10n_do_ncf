@@ -1,8 +1,9 @@
 ﻿# -*- coding: utf-8 -*-
-# Modulo: l10n_do_ncf
+# Módulo: l10n_do_ncf
 # Archivo: hooks.py
-# Descripcion: Hooks de instalacion y desinstalacion
+# Descripción: Hooks de instalación y desinstalación
 # Compatibilidad: Odoo 19
+# Versión: 19.0.1.7.0
 
 import logging
 
@@ -11,42 +12,84 @@ _logger = logging.getLogger(__name__)
 
 def post_init_hook(env):
     """
-    Hook ejecutado despues de instalar el modulo.
-    Configura automaticamente:
+    Hook ejecutado después de instalar el módulo.
+    Configura automáticamente:
+    - Índice único para NCF (PostgreSQL)
     - Impuestos ITBIS por defecto
-    - Etiqueta RNC/Cedula para Republica Dominicana
+    - Etiqueta RNC/Cédula para República Dominicana
     """
-    _logger.info('l10n_do_ncf: Ejecutando configuracion post-instalacion...')
-    
-    # Obtener pais Republica Dominicana
+    _logger.info('l10n_do_ncf: Ejecutando configuración post-instalación...')
+
+    # 1. Crear índice único parcial para NCF (evita duplicados a nivel DB)
+    _create_ncf_unique_index(env)
+
+    # 2. Configurar etiqueta VAT y impuestos
+    _configure_vat_and_taxes(env)
+
+    _logger.info('l10n_do_ncf: Configuración post-instalación completada')
+
+
+def _create_ncf_unique_index(env):
+    """
+    Crear índice único parcial para NCF.
+    Esto evita duplicados a nivel de base de datos (race condition safe).
+    Solo aplica cuando l10n_do_ncf_number IS NOT NULL.
+    """
+    try:
+        env.cr.execute("""
+            SELECT indexname FROM pg_indexes 
+            WHERE tablename = 'account_move' 
+            AND indexname = 'unique_ncf_per_company'
+        """)
+        
+        if not env.cr.fetchone():
+            env.cr.execute("""
+                CREATE UNIQUE INDEX unique_ncf_per_company
+                ON account_move (company_id, l10n_do_ncf_number)
+                WHERE l10n_do_ncf_number IS NOT NULL
+            """)
+            _logger.info('l10n_do_ncf: Índice único NCF creado correctamente')
+        else:
+            _logger.info('l10n_do_ncf: Índice único NCF ya existe')
+            
+    except Exception as e:
+        _logger.warning('l10n_do_ncf: No se pudo crear índice único NCF: %s', str(e))
+
+
+def _configure_vat_and_taxes(env):
+    """
+    Configurar etiqueta VAT e impuestos ITBIS
+    """
+    # Obtener país República Dominicana
     country_do = env.ref('base.do', raise_if_not_found=False)
     if not country_do:
-        _logger.warning('l10n_do_ncf: Pais DO no encontrado')
+        _logger.warning('l10n_do_ncf: País DO no encontrado')
         return
-    
-    # Configurar etiqueta VAT como RNC/Cedula
-    if country_do.vat_label != 'RNC/Cedula':
-        country_do.vat_label = 'RNC/Cedula'
-        _logger.info('l10n_do_ncf: Etiqueta VAT configurada como RNC/Cedula')
-    
-    # Buscar companias dominicanas
+
+    # Configurar etiqueta VAT como RNC/Cédula
+    if country_do.vat_label != 'RNC/Cédula':
+        country_do.vat_label = 'RNC/Cédula'
+        _logger.info('l10n_do_ncf: Etiqueta VAT configurada como RNC/Cédula')
+
+    # Buscar compañías dominicanas
     companies = env['res.company'].search([
         ('country_id', '=', country_do.id)
     ])
-    
+
     if not companies:
         companies = env['res.company'].search([])
-    
+        _logger.info('l10n_do_ncf: No hay compañías dominicanas, verificando todas las compañías')
+
     for company in companies:
         _configure_company_taxes(env, company, country_do)
-    
-    _logger.info('l10n_do_ncf: Configuracion post-instalacion completada')
 
 
 def _configure_company_taxes(env, company, country_do):
-    """Configura impuestos ITBIS para una compania especifica."""
+    """
+    Configura impuestos ITBIS para una compañía específica.
+    """
     _logger.info('l10n_do_ncf: Configurando impuestos para %s', company.name)
-    
+
     # Verificar si ya tiene impuestos ITBIS configurados
     existing_sale_tax = env['account.tax'].search([
         ('company_id', '=', company.id),
@@ -54,26 +97,26 @@ def _configure_company_taxes(env, company, country_do):
         ('amount', '=', 18),
         ('amount_type', '=', 'percent')
     ], limit=1)
-    
+
     existing_purchase_tax = env['account.tax'].search([
         ('company_id', '=', company.id),
         ('type_tax_use', '=', 'purchase'),
         ('amount', '=', 18),
         ('amount_type', '=', 'percent')
     ], limit=1)
-    
-    # Si ya existen, solo asegurar que esten como default
+
+    # Si ya existen, solo asegurar que estén como default
     if existing_sale_tax and existing_purchase_tax:
         _logger.info('l10n_do_ncf: Impuestos ITBIS ya existen para %s', company.name)
         _set_default_taxes(company, existing_sale_tax, existing_purchase_tax)
         return
-    
+
     # Buscar o crear grupo de impuestos ITBIS
     itbis_group = env['account.tax.group'].search([
         ('name', '=', 'ITBIS'),
         ('country_id', '=', country_do.id)
     ], limit=1)
-    
+
     if not itbis_group:
         itbis_group = env['account.tax.group'].create({
             'name': 'ITBIS',
@@ -81,7 +124,7 @@ def _configure_company_taxes(env, company, country_do):
             'country_id': country_do.id,
         })
         _logger.info('l10n_do_ncf: Grupo ITBIS creado')
-    
+
     # Crear impuesto ITBIS Ventas si no existe
     if not existing_sale_tax:
         existing_sale_tax = env['account.tax'].with_company(company).create({
@@ -96,7 +139,7 @@ def _configure_company_taxes(env, company, country_do):
             'sequence': 1,
         })
         _logger.info('l10n_do_ncf: ITBIS 18%% Ventas creado para %s', company.name)
-    
+
     # Crear impuesto ITBIS Compras si no existe
     if not existing_purchase_tax:
         existing_purchase_tax = env['account.tax'].with_company(company).create({
@@ -111,23 +154,25 @@ def _configure_company_taxes(env, company, country_do):
             'sequence': 1,
         })
         _logger.info('l10n_do_ncf: ITBIS 18%% Compras creado para %s', company.name)
-    
+
     # Configurar impuestos por defecto
     _set_default_taxes(company, existing_sale_tax, existing_purchase_tax)
-    
+
     # Crear impuestos exentos
     _create_exempt_taxes(env, company, country_do, itbis_group)
 
 
 def _set_default_taxes(company, sale_tax, purchase_tax):
-    """Configura los impuestos por defecto de la compania."""
+    """
+    Configura los impuestos por defecto de la compañía.
+    """
     try:
         vals = {}
         if not company.account_sale_tax_id and sale_tax:
             vals['account_sale_tax_id'] = sale_tax.id
         if not company.account_purchase_tax_id and purchase_tax:
             vals['account_purchase_tax_id'] = purchase_tax.id
-        
+
         if vals:
             company.write(vals)
             _logger.info('l10n_do_ncf: Impuestos por defecto configurados para %s', company.name)
@@ -136,21 +181,23 @@ def _set_default_taxes(company, sale_tax, purchase_tax):
 
 
 def _create_exempt_taxes(env, company, country_do, itbis_group):
-    """Crea impuestos exentos (0%) si no existen."""
+    """
+    Crea impuestos exentos (0%) si no existen.
+    """
     exempt_sale = env['account.tax'].search([
         ('company_id', '=', company.id),
         ('type_tax_use', '=', 'sale'),
         ('amount', '=', 0),
         ('name', 'ilike', 'exento')
     ], limit=1)
-    
+
     exempt_purchase = env['account.tax'].search([
         ('company_id', '=', company.id),
         ('type_tax_use', '=', 'purchase'),
         ('amount', '=', 0),
         ('name', 'ilike', 'exento')
     ], limit=1)
-    
+
     if not exempt_sale:
         env['account.tax'].with_company(company).create({
             'name': 'Exento Ventas',
@@ -163,7 +210,7 @@ def _create_exempt_taxes(env, company, country_do, itbis_group):
             'sequence': 99,
         })
         _logger.info('l10n_do_ncf: Exento Ventas creado para %s', company.name)
-    
+
     if not exempt_purchase:
         env['account.tax'].with_company(company).create({
             'name': 'Exento Compras',
@@ -179,5 +226,18 @@ def _create_exempt_taxes(env, company, country_do, itbis_group):
 
 
 def uninstall_hook(env):
-    """Hook ejecutado antes de desinstalar el modulo."""
-    _logger.info('l10n_do_ncf: Modulo desinstalado. Los impuestos y cuentas se mantienen.')
+    """
+    Hook ejecutado antes de desinstalar el módulo.
+    Limpia el índice único.
+    """
+    _logger.info('l10n_do_ncf: Ejecutando limpieza pre-desinstalación...')
+    
+    try:
+        env.cr.execute("""
+            DROP INDEX IF EXISTS unique_ncf_per_company
+        """)
+        _logger.info('l10n_do_ncf: Índice único NCF eliminado')
+    except Exception as e:
+        _logger.warning('l10n_do_ncf: No se pudo eliminar índice: %s', str(e))
+    
+    _logger.info('l10n_do_ncf: Módulo desinstalado. Los impuestos y cuentas se mantienen.')
