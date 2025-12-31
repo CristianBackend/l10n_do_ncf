@@ -10,3 +10,9 @@ from . import ncf_alert
 from . import retention
 from . import dgii_reminder
 from . import pos_order
+from . import registro_unico
+from . import fiscal_audit
+from . import bc_exchange_rate
+from . import dgii_validation
+from . import dgii_txt_validator
+from . import fiscal_reconciliation  # AGREGAR

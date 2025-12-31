@@ -1,101 +1,162 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <data noupdate="0">
+    <data noupdate="1">
 
         <!-- ============================================= -->
-        <!-- RETENCIONES ISR -->
+        <!-- TIPOS DE RETENCIÓN ISR                       -->
         <!-- ============================================= -->
 
-        <record id="retention_isr_prof" model="l10n_do_ncf.retention.type">
+        <record id="retention_type_isr_prof" model="l10n_do_ncf.retention.type">
             <field name="name">ISR Servicios Profesionales (10%)</field>
             <field name="code">ISR_PROF</field>
             <field name="retention_type">isr</field>
-            <field name="rate">10</field>
+            <field name="dgii_606_bucket">isr_retenido</field>
+            <field name="rate">10.0</field>
             <field name="apply_on">base</field>
             <field name="partner_type">all</field>
+            <field name="for_informal">True</field>
             <field name="sequence">10</field>
-            <field name="description">Norma 02-05: Retención 10% ISR por servicios profesionales (abogados, contadores, consultores, etc.)</field>
+            <field name="description">Retención 10% ISR sobre servicios profesionales. Norma 07-2007. Aplica a B11.</field>
         </record>
 
-        <record id="retention_isr_tec" model="l10n_do_ncf.retention.type">
+        <record id="retention_type_isr_tec" model="l10n_do_ncf.retention.type">
             <field name="name">ISR Servicios Técnicos (2%)</field>
             <field name="code">ISR_TEC</field>
             <field name="retention_type">isr</field>
-            <field name="rate">2</field>
+            <field name="dgii_606_bucket">isr_retenido</field>
+            <field name="rate">2.0</field>
             <field name="apply_on">base</field>
             <field name="partner_type">all</field>
             <field name="sequence">20</field>
-            <field name="description">Retención 2% ISR por servicios técnicos (plomeros, electricistas, albañiles, etc.)</field>
+            <field name="description">Retención 2% ISR sobre servicios técnicos y bienes.</field>
         </record>
 
-        <record id="retention_isr_alq" model="l10n_do_ncf.retention.type">
-            <field name="name">ISR Alquiler Persona Física (10%)</field>
+        <record id="retention_type_isr_alq" model="l10n_do_ncf.retention.type">
+            <field name="name">ISR Alquileres Persona Física (10%)</field>
             <field name="code">ISR_ALQ</field>
             <field name="retention_type">isr</field>
-            <field name="rate">10</field>
+            <field name="dgii_606_bucket">isr_retenido</field>
+            <field name="rate">10.0</field>
             <field name="apply_on">base</field>
             <field name="partner_type">person</field>
             <field name="sequence">30</field>
-            <field name="description">Retención 10% ISR por alquiler de bienes muebles o inmuebles pagados a personas físicas.</field>
+            <field name="description">Retención 10% ISR sobre alquileres a personas físicas.</field>
         </record>
 
-        <record id="retention_isr_int" model="l10n_do_ncf.retention.type">
-            <field name="name">ISR Intereses (10%)</field>
-            <field name="code">ISR_INT</field>
+        <record id="retention_type_isr_ext" model="l10n_do_ncf.retention.type">
+            <field name="name">ISR Pagos al Exterior (27%)</field>
+            <field name="code">ISR_EXT</field>
             <field name="retention_type">isr</field>
-            <field name="rate">10</field>
+            <field name="dgii_606_bucket">isr_retenido</field>
+            <field name="rate">27.0</field>
             <field name="apply_on">base</field>
             <field name="partner_type">all</field>
             <field name="sequence">40</field>
-            <field name="description">Retención 10% ISR sobre intereses pagados.</field>
+            <field name="description">Retención 27% ISR sobre pagos a no residentes (B17). OBLIGATORIO.</field>
         </record>
 
-        <record id="retention_isr_estado" model="l10n_do_ncf.retention.type">
-            <field name="name">ISR Pagos del Estado (5%)</field>
+        <record id="retention_type_isr_state" model="l10n_do_ncf.retention.type">
+            <field name="name">ISR Proveedores del Estado (5%)</field>
             <field name="code">ISR_EST</field>
             <field name="retention_type">isr</field>
-            <field name="rate">5</field>
+            <field name="dgii_606_bucket">isr_retenido</field>
+            <field name="rate">5.0</field>
             <field name="apply_on">base</field>
             <field name="partner_type">all</field>
             <field name="sequence">50</field>
-            <field name="description">Retención 5% ISR en pagos realizados por el Estado.</field>
+            <field name="description">Retención 5% ISR para proveedores del Estado.</field>
+        </record>
+
+        <!-- ISR Percibido (cuando nos retienen a nosotros) -->
+        <record id="retention_type_isr_perc" model="l10n_do_ncf.retention.type">
+            <field name="name">ISR Percibido (nos retuvieron)</field>
+            <field name="code">ISR_PERC</field>
+            <field name="retention_type">isr</field>
+            <field name="dgii_606_bucket">isr_percibido</field>
+            <field name="rate">0.0</field>
+            <field name="apply_on">base</field>
+            <field name="partner_type">all</field>
+            <field name="sequence">55</field>
+            <field name="description">Para registrar ISR que nos retuvieron (columna 19 del 606).</field>
         </record>
 
         <!-- ============================================= -->
-        <!-- RETENCIONES ITBIS -->
+        <!-- TIPOS DE RETENCIÓN ITBIS                     -->
         <!-- ============================================= -->
 
-        <record id="retention_itbis_prof" model="l10n_do_ncf.retention.type">
+        <record id="retention_type_itbis_30" model="l10n_do_ncf.retention.type">
             <field name="name">ITBIS Servicios Profesionales (30%)</field>
             <field name="code">ITBIS_PROF</field>
             <field name="retention_type">itbis</field>
-            <field name="rate">30</field>
+            <field name="dgii_606_bucket">itbis_retenido</field>
+            <field name="rate">30.0</field>
             <field name="apply_on">itbis</field>
             <field name="partner_type">all</field>
-            <field name="sequence">100</field>
-            <field name="description">Norma 02-05: Retención 30% del ITBIS por servicios profesionales.</field>
+            <field name="sequence">60</field>
+            <field name="description">Retención 30% del ITBIS sobre servicios profesionales. Norma 02-05.</field>
         </record>
 
-        <record id="retention_itbis_pf" model="l10n_do_ncf.retention.type">
+        <!-- ITBIS 100% para B11 - CRÍTICO -->
+        <record id="retention_type_itbis_100" model="l10n_do_ncf.retention.type">
+            <field name="name">ITBIS Compra Informal (100%)</field>
+            <field name="code">ITBIS_100</field>
+            <field name="retention_type">itbis</field>
+            <field name="dgii_606_bucket">itbis_retenido</field>
+            <field name="rate">100.0</field>
+            <field name="apply_on">itbis</field>
+            <field name="partner_type">all</field>
+            <field name="for_informal">True</field>
+            <field name="sequence">65</field>
+            <field name="description">Retención 100% del ITBIS para compras informales (B11). Se retiene todo el ITBIS al proveedor no registrado.</field>
+        </record>
+
+        <record id="retention_type_itbis_pf" model="l10n_do_ncf.retention.type">
             <field name="name">ITBIS Persona Física (100%)</field>
             <field name="code">ITBIS_PF</field>
             <field name="retention_type">itbis</field>
-            <field name="rate">100</field>
+            <field name="dgii_606_bucket">itbis_retenido</field>
+            <field name="rate">100.0</field>
             <field name="apply_on">itbis</field>
             <field name="partner_type">person</field>
-            <field name="sequence">110</field>
-            <field name="description">Retención 100% del ITBIS cuando se paga a personas físicas.</field>
+            <field name="sequence">70</field>
+            <field name="description">Retención 100% del ITBIS a personas físicas sin RNC.</field>
         </record>
 
-        <record id="retention_itbis_seg" model="l10n_do_ncf.retention.type">
-            <field name="name">ITBIS Servicios de Seguridad (100%)</field>
-            <field name="code">ITBIS_SEG</field>
+        <record id="retention_type_itbis_state" model="l10n_do_ncf.retention.type">
+            <field name="name">ITBIS Proveedores del Estado (100%)</field>
+            <field name="code">ITBIS_EST</field>
             <field name="retention_type">itbis</field>
-            <field name="rate">100</field>
+            <field name="dgii_606_bucket">itbis_retenido</field>
+            <field name="rate">100.0</field>
             <field name="apply_on">itbis</field>
             <field name="partner_type">all</field>
-            <field name="sequence">120</field>
-            <field name="description">Norma 07-09: Retención 100% del ITBIS por servicios de vigilancia.</field>
+            <field name="sequence">80</field>
+            <field name="description">Retención 100% del ITBIS para ventas al Estado.</field>
+        </record>
+
+        <record id="retention_type_itbis_75" model="l10n_do_ncf.retention.type">
+            <field name="name">ITBIS Grandes Contribuyentes (75%)</field>
+            <field name="code">ITBIS_75</field>
+            <field name="retention_type">itbis</field>
+            <field name="dgii_606_bucket">itbis_retenido</field>
+            <field name="rate">75.0</field>
+            <field name="apply_on">itbis</field>
+            <field name="partner_type">all</field>
+            <field name="sequence">85</field>
+            <field name="description">Retención 75% del ITBIS por grandes contribuyentes.</field>
+        </record>
+
+        <!-- ITBIS Percibido (cuando nos cobran/retienen ITBIS) -->
+        <record id="retention_type_itbis_perc" model="l10n_do_ncf.retention.type">
+            <field name="name">ITBIS Percibido (nos cobraron)</field>
+            <field name="code">ITBIS_PERC</field>
+            <field name="retention_type">itbis</field>
+            <field name="dgii_606_bucket">itbis_percibido</field>
+            <field name="rate">0.0</field>
+            <field name="apply_on">itbis</field>
+            <field name="partner_type">all</field>
+            <field name="sequence">90</field>
+            <field name="description">Para registrar ITBIS percibido/cobrado (columna 16 del 606).</field>
         </record>
 
     </data>

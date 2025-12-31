@@ -1,102 +1,90 @@
 # -*- coding: utf-8 -*-
 # Módulo: l10n_do_ncf
 # Archivo: models/account_move.py
-# Descripción: Extensión de facturas con NCF - Enterprise DGII-Grade
+# Versión: 19.0.3.0.0 - CASOS DE USO COMPLETOS
 # Compatibilidad: Odoo 19
-# Versión: 19.0.1.7.0
 
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError, UserError
+from datetime import date, timedelta
 import re
 import logging
 
 _logger = logging.getLogger(__name__)
 
 # =========================================
-# PATRONES DE VALIDACIÓN NCF (DGII OFICIAL)
+# PATRONES Y CONSTANTES
 # =========================================
-# NCF tradicional: B + 2 dígitos tipo + 8 dígitos secuencia = 11 caracteres
 NCF_PATTERN = r'^B(01|02|03|04|11|12|13|14|15|16|17)\d{8}$'
+ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
+NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
 
-# e-CF: E + 2 dígitos tipo + 10 dígitos secuencia = 13 caracteres (DGII 2025+)
-ECF_PATTERN = r'^E(31|32|33|34|41|43|44|45|46|47)\d{10}$'
-
-# Patrón combinado NCF + e-CF
-NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|43|44|45|46|47)\d{10})$'
+# Límites
+B11_MONTHLY_LIMIT = 50
+B13_TRANSACTION_LIMIT = 10000  # RD$ por transacción
 
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
 
     # =========================================
-    # CAMPOS NCF PRINCIPALES
+    # NCF ÚNICO
     # =========================================
 
     l10n_do_ncf_number = fields.Char(
-        string='NCF',
-        copy=False,
-        readonly=True,
-        tracking=True,
-        index=True,
-        help='Numero de Comprobante Fiscal'
+        string='NCF', copy=False, readonly=True, tracking=True, index=True,
     )
 
     l10n_do_ncf_type_id = fields.Many2one(
-        'l10n_do_ncf.type',
-        string='Tipo de NCF',
-        tracking=True,
-        compute='_compute_l10n_do_ncf_type_id',
-        store=True,
-        readonly=False,
-        help='Tipo de comprobante fiscal a generar'
+        'l10n_do_ncf.type', string='Tipo NCF', tracking=True,
+        compute='_compute_l10n_do_ncf_type_id', store=True, readonly=False,
     )
 
     l10n_do_ncf_seq_id = fields.Many2one(
-        'l10n_do_ncf.sequence',
-        string='Secuencia NCF',
-        readonly=True,
-        copy=False,
-        help='Secuencia utilizada para generar el NCF'
+        'l10n_do_ncf.sequence', string='Secuencia', readonly=True, copy=False,
     )
 
-    l10n_do_ncf_expiration = fields.Date(
-        string='Vencimiento NCF',
-        related='l10n_do_ncf_seq_id.expiration_date',
-        store=True
-    )
+    l10n_do_ncf_expiration = fields.Date(related='l10n_do_ncf_seq_id.expiration_date', store=True)
 
     # =========================================
-    # ESTADO FISCAL (para auditoría)
+    # ESTADO FISCAL EXTENDIDO
     # =========================================
 
     l10n_do_fiscal_status = fields.Selection([
+        ('draft', 'Borrador'),
         ('pending', 'Pendiente'),
         ('valid', 'Válido'),
+        ('partial_credit', 'Parcialmente Acreditado'),  # NUEVO
         ('annulled', 'Anulado'),
-        ('credited', 'Con NC Aplicada'),
-    ], string='Estado Fiscal',
-       default='pending',
-       tracking=True,
-       help='Estado fiscal del documento según DGII')
+        ('credited', 'Con NC Total'),
+        ('debited', 'Con ND'),
+        ('rejected', 'Rechazado DGII'),
+        ('error_reported', 'Error Reportado'),
+    ], string='Estado Fiscal', default='draft', tracking=True)
 
-    # =========================================
-    # CAMPOS PARA NOTAS DE CRÉDITO/DÉBITO
-    # =========================================
-
-    l10n_do_ncf_origin = fields.Char(
-        string='NCF Afectado',
-        copy=False,
-        help='NCF de la factura original que se esta modificando (para NC/ND)'
+    # NUEVO: Control de reporte DGII
+    l10n_do_reported_606 = fields.Boolean(
+        string='Reportado 606', default=False, tracking=True,
+        help='Indica si este documento ya fue incluido en un reporte 606 enviado a DGII'
+    )
+    l10n_do_reported_607 = fields.Boolean(
+        string='Reportado 607', default=False, tracking=True,
+        help='Indica si este documento ya fue incluido en un reporte 607 enviado a DGII'
+    )
+    l10n_do_report_period = fields.Char(
+        string='Período Reportado',
+        help='Período fiscal en que se reportó (YYYYMM)'
     )
 
+    # =========================================
+    # NC/ND
+    # =========================================
+
+    l10n_do_ncf_origin = fields.Char(string='NCF Afectado', copy=False)
     l10n_do_origin_move_id = fields.Many2one(
-        'account.move',
-        string='Factura Origen',
-        copy=False,
-        domain="[('partner_id', '=', partner_id), ('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('l10n_do_ncf_number', '!=', False)]",
-        help='Factura original que se esta modificando'
+        'account.move', string='Factura Origen', copy=False,
+        domain="[('partner_id', '=', partner_id), ('move_type', '=', 'out_invoice'), ('state', '=', 'posted')]"
     )
-
     l10n_do_credit_note_reason = fields.Selection([
         ('01', '01 - Anulación total'),
         ('02', '02 - Corrección de errores'),
@@ -104,569 +92,946 @@ class AccountMove(models.Model):
         ('04', '04 - Descuento posterior'),
         ('05', '05 - Ajuste de precio'),
         ('06', '06 - Otros'),
-    ], string='Motivo NC/ND',
-       help='Motivo de la Nota de Crédito o Débito (requerido por DGII)')
+    ], string='Motivo NC')
 
-    # =========================================
-    # OPCIÓN SIN NCF
-    # =========================================
-
-    l10n_do_ncf_required = fields.Boolean(
-        string='Requiere NCF',
-        default=True,
-        help='Desmarcar para documentos que no requieren NCF (ej: exportaciones especiales)'
+    # NUEVO: Monto acreditado acumulado
+    l10n_do_credited_amount = fields.Monetary(
+        string='Monto Acreditado',
+        compute='_compute_credited_amount',
+        store=True,
+        currency_field='currency_id'
     )
 
+    # B03 Nota Débito
+    l10n_do_is_debit_note = fields.Boolean(string='Es Nota de Débito', default=False)
+    l10n_do_debit_note_reason = fields.Selection([
+        ('01', '01 - Intereses por mora'),
+        ('02', '02 - Gastos adicionales'),
+        ('03', '03 - Ajuste precio al alza'),
+        ('04', '04 - Otros cargos'),
+    ], string='Motivo ND')
+    l10n_do_debit_origin_move_id = fields.Many2one('account.move', string='Factura Origen ND', copy=False)
+    l10n_do_debit_ncf_origin = fields.Char(string='NCF Afectado ND', copy=False)
+
+    # ND en Compras
+    l10n_do_is_vendor_debit_note = fields.Boolean(string='Es ND de Proveedor', default=False)
+    l10n_do_vendor_debit_ncf_origin = fields.Char(string='NCF Afectado (ND Proveedor)')
+
+    l10n_do_ncf_required = fields.Boolean(string='Requiere NCF', default=True)
+
     # =========================================
-    # CAMPOS PARA COMPRAS (PROVEEDOR)
+    # COMPRAS
     # =========================================
 
-    l10n_do_vendor_ncf = fields.Char(
-        string='NCF Proveedor',
-        copy=False,
-        tracking=True,
-        help='NCF del comprobante recibido del proveedor'
-    )
-
-    l10n_do_vendor_ncf_validated = fields.Boolean(
-        string='NCF Validado',
-        default=False,
-        copy=False,
-        help='Indica si el NCF del proveedor fue validado contra DGII'
-    )
-
+    l10n_do_vendor_ncf = fields.Char(string='NCF Proveedor', copy=False, tracking=True)
+    l10n_do_vendor_ncf_validated = fields.Boolean(default=False, copy=False)
     l10n_do_vendor_ncf_validation_source = fields.Selection([
-        ('local', 'Validación Local'),
-        ('dgii', 'Validación DGII'),
-        ('manual', 'Verificación Manual'),
-    ], string='Fuente de Validación',
-       default='local',
-       help='Indica cómo fue validado el NCF del proveedor')
+        ('local', 'Local'), ('dgii', 'DGII'), ('manual', 'Manual')
+    ], default='local')
 
     l10n_do_fiscal_type = fields.Selection([
-        ('fiscal', 'Fiscal (con NCF)'),
-        ('informal', 'Compra Informal'),
-        ('minor_expense', 'Gasto Menor'),
-        ('exterior', 'Pago al Exterior'),
-        ('special', 'Regimen Especial'),
-        ('governmental', 'Gubernamental'),
-        ('export', 'Exportacion'),
-    ], string='Tipo Fiscal', default='fiscal')
+        ('fiscal', 'Compra Fiscal'),
+        ('informal', 'B11 - Compra Informal'),
+        ('minor_expense', 'B13 - Gasto Menor'),
+        ('exterior', 'B17 - Pago Exterior'),
+        ('special', 'B14 - Régimen Especial'),
+        ('governmental', 'B15 - Gubernamental'),
+    ], string='Tipo Fiscal', default='fiscal', tracking=True)
+
+    # =========================================
+    # B11 - INFORMAL
+    # =========================================
+
+    l10n_do_informal_provider_name = fields.Char(string='Nombre Proveedor Informal')
+    l10n_do_informal_provider_cedula = fields.Char(string='Cédula Proveedor')
+    l10n_do_informal_rnc_verified = fields.Boolean(default=False)
+
+    l10n_do_informal_service_type = fields.Selection([
+        ('professional', 'Servicios Profesionales (ISR 10%)'),
+        ('technical', 'Servicios Técnicos (ISR 2%)'),
+        ('goods', 'Bienes (ISR 2%)'),
+    ], string='Tipo Servicio Informal', default='professional')
+
+    # =========================================
+    # B13 - GASTOS MENORES
+    # =========================================
+
+    l10n_do_minor_expense_type = fields.Selection([
+        ('toll', 'Peaje'),
+        ('parking', 'Estacionamiento'),
+        ('transport', 'Transporte'),
+        ('consumables', 'Consumibles'),
+        ('meals', 'Alimentación'),
+        ('other', 'Otros'),
+    ], string='Tipo Gasto Menor')
+    l10n_do_minor_expense_employee = fields.Char(string='Empleado')
+    l10n_do_minor_expense_document = fields.Char(string='Documento Soporte')
+
+    # =========================================
+    # B17 - PAGO EXTERIOR
+    # =========================================
+
+    l10n_do_exterior_service_type = fields.Selection([
+        ('01', '01 - Servicios técnicos'),
+        ('02', '02 - Servicios profesionales'),
+        ('03', '03 - Regalías'),
+        ('04', '04 - Intereses'),
+        ('05', '05 - Dividendos'),
+        ('06', '06 - Otros'),
+    ], string='Tipo Servicio Exterior')
+
+    # =========================================
+    # MULTIMONEDA
+    # =========================================
+
+    l10n_do_exchange_rate = fields.Float(
+        string='Tasa de Cambio', digits=(12, 4), default=1.0,
+    )
+
+    l10n_do_amount_dop = fields.Monetary(
+        string='Monto en DOP', currency_field='l10n_do_dop_currency_id',
+        compute='_compute_amount_dop', store=True,
+    )
+
+    l10n_do_dop_currency_id = fields.Many2one(
+        'res.currency', compute='_compute_dop_currency', store=True
+    )
+
+    # =========================================
+    # FORMA DE PAGO MIXTA (NUEVO)
+    # =========================================
+
+    l10n_do_payment_cash = fields.Monetary(
+        string='Efectivo', currency_field='currency_id', default=0.0
+    )
+    l10n_do_payment_bank = fields.Monetary(
+        string='Cheque/Transferencia', currency_field='currency_id', default=0.0
+    )
+    l10n_do_payment_card = fields.Monetary(
+        string='Tarjeta', currency_field='currency_id', default=0.0
+    )
+    l10n_do_payment_credit = fields.Monetary(
+        string='Crédito', currency_field='currency_id', default=0.0
+    )
+    l10n_do_payment_bond = fields.Monetary(
+        string='Bonos/Certificados', currency_field='currency_id', default=0.0
+    )
+    l10n_do_payment_swap = fields.Monetary(
+        string='Permuta', currency_field='currency_id', default=0.0
+    )
+    l10n_do_payment_other = fields.Monetary(
+        string='Otras Formas', currency_field='currency_id', default=0.0
+    )
+
+    l10n_do_forma_pago = fields.Selection([
+        ('01', '01 - Efectivo'),
+        ('02', '02 - Cheque/Transferencia'),
+        ('03', '03 - Tarjeta'),
+        ('04', '04 - Crédito'),
+        ('05', '05 - Permuta'),
+        ('06', '06 - Nota Crédito'),
+        ('07', '07 - Mixto'),
+    ], string='Forma Pago', compute='_compute_forma_pago', store=True)
+
+    # =========================================
+    # RETENCIÓN POSTERIOR (607)
+    # =========================================
+
+    l10n_do_is_credit_sale = fields.Boolean(string='Venta a Crédito', default=False)
+    l10n_do_retention_date = fields.Date(string='Fecha Retención')
+    l10n_do_third_party_retention_itbis = fields.Monetary(
+        string='ITBIS Retenido por Tercero', currency_field='currency_id', default=0.0
+    )
+    l10n_do_third_party_retention_isr = fields.Monetary(
+        string='ISR Retenido por Tercero', currency_field='currency_id', default=0.0
+    )
+    l10n_do_retention_reported = fields.Boolean(string='Retención Reportada 607', default=False)
+
+    l10n_do_needs_607_retention_line = fields.Boolean(
+        string='Requiere Línea Retención 607',
+        compute='_compute_needs_607_retention', store=True
+    )
+
+    # =========================================
+    # CLASIFICACIÓN 606 - BIENES/SERVICIOS AUTO
+    # =========================================
 
     l10n_do_expense_type = fields.Selection([
         ('01', '01 - Gastos de Personal'),
-        ('02', '02 - Gastos por Trabajos, Suministros y Servicios'),
+        ('02', '02 - Gastos por Trabajos/Servicios'),
         ('03', '03 - Arrendamientos'),
-        ('04', '04 - Gastos de Activos Fijos'),
-        ('05', '05 - Gastos de Representacion'),
-        ('06', '06 - Otras Deducciones Admitidas'),
+        ('04', '04 - Gastos Activos Fijos'),
+        ('05', '05 - Gastos Representación'),
+        ('06', '06 - Otras Deducciones'),
         ('07', '07 - Gastos Financieros'),
         ('08', '08 - Gastos Extraordinarios'),
-        ('09', '09 - Compras y Gastos que forman parte del Costo de Venta'),
-        ('10', '10 - Adquisiciones de Activos'),
+        ('09', '09 - Costo de Venta'),
+        ('10', '10 - Adquisición Activos'),
         ('11', '11 - Gastos de Seguros'),
-    ], string='Tipo de Gasto', default='02', help='Clasificacion de gasto para reporte 606')
+    ], string='Tipo Gasto', default='02')
+
+    l10n_do_purchase_type = fields.Selection([
+        ('01', '01 - Gastos personal'),
+        ('02', '02 - Trabajos/servicios'),
+        ('03', '03 - Arrendamientos'),
+        ('04', '04 - Activos fijos'),
+        ('05', '05 - Representación'),
+        ('06', '06 - Otras deducciones'),
+        ('07', '07 - Financieros'),
+        ('08', '08 - Extraordinarios'),
+        ('09', '09 - Costo venta'),
+        ('10', '10 - Adquisición activos'),
+        ('11', '11 - Seguros'),
+    ], string='Tipo Compra (606)', default='02')
+
+    # NUEVO: Split automático bienes/servicios
+    l10n_do_606_monto_bienes = fields.Monetary(
+        string='Monto Bienes', currency_field='currency_id',
+        compute='_compute_606_split_bienes_servicios', store=True, readonly=False
+    )
+    l10n_do_606_monto_servicios = fields.Monetary(
+        string='Monto Servicios', currency_field='currency_id',
+        compute='_compute_606_split_bienes_servicios', store=True, readonly=False
+    )
 
     # =========================================
-    # ASIGNACIÓN AUTOMÁTICA DE TIPO NCF
+    # CAMPOS 606
     # =========================================
 
-    @api.depends('move_type', 'partner_id', 'reversed_entry_id')
-    def _compute_l10n_do_ncf_type_id(self):
-        """Asignar tipo NCF automáticamente según el tipo de documento y cliente"""
+    l10n_do_itbis_facturado = fields.Monetary(
+        string='ITBIS Facturado', currency_field='currency_id',
+        compute='_compute_606_itbis', store=True
+    )
+    l10n_do_itbis_retenido = fields.Monetary(
+        string='ITBIS Retenido (col 12)', currency_field='currency_id',
+        compute='_compute_606_buckets', store=True
+    )
+    l10n_do_itbis_proporcionalidad = fields.Monetary(
+        string='ITBIS Proporcionalidad', currency_field='currency_id', default=0.0
+    )
+    l10n_do_itbis_costo = fields.Monetary(
+        string='ITBIS al Costo', currency_field='currency_id',
+        compute='_compute_606_itbis_costo', store=True, readonly=False
+    )
+    l10n_do_itbis_adelantar = fields.Monetary(
+        string='ITBIS a Adelantar', currency_field='currency_id',
+        compute='_compute_606_itbis', store=True
+    )
+    l10n_do_itbis_percibido = fields.Monetary(
+        string='ITBIS Percibido (col 16)', currency_field='currency_id',
+        compute='_compute_606_buckets', store=True
+    )
+
+    l10n_do_tipo_retencion_isr = fields.Selection([
+        ('01', '01 - Alquileres'),
+        ('02', '02 - Honorarios'),
+        ('03', '03 - Otras rentas'),
+        ('04', '04 - Presunción renta'),
+        ('05', '05 - Intereses PJ'),
+        ('06', '06 - Intereses PF'),
+        ('07', '07 - Proveedores Estado'),
+        ('08', '08 - Juegos telefónicos'),
+    ], string='Tipo Retención ISR')
+
+    l10n_do_isr_retenido = fields.Monetary(
+        string='ISR Retenido (col 18)', currency_field='currency_id',
+        compute='_compute_606_buckets', store=True
+    )
+    l10n_do_isr_percibido = fields.Monetary(
+        string='ISR Percibido (col 19)', currency_field='currency_id',
+        compute='_compute_606_buckets', store=True
+    )
+
+    l10n_do_impuesto_selectivo = fields.Monetary(currency_field='currency_id', default=0.0)
+    l10n_do_otros_impuestos = fields.Monetary(currency_field='currency_id', default=0.0)
+    l10n_do_propina_legal = fields.Monetary(currency_field='currency_id', default=0.0)
+
+    # =========================================
+    # RETENCIONES
+    # =========================================
+
+    l10n_do_retention_ids = fields.One2many('l10n_do_ncf.move.retention', 'move_id', string='Retenciones')
+    l10n_do_total_isr_retention = fields.Monetary(
+        compute='_compute_retention_totals', store=True, currency_field='currency_id'
+    )
+    l10n_do_total_itbis_retention = fields.Monetary(
+        compute='_compute_retention_totals', store=True, currency_field='currency_id'
+    )
+    l10n_do_amount_to_pay = fields.Monetary(
+        compute='_compute_retention_totals', store=True, currency_field='currency_id'
+    )
+
+    # =========================================
+    # CÓMPUTOS MULTIMONEDA
+    # =========================================
+
+    @api.depends('company_id')
+    def _compute_dop_currency(self):
+        dop = self.env.ref('base.DOP', raise_if_not_found=False)
         for move in self:
-            # Solo para documentos de venta
-            if move.move_type not in ('out_invoice', 'out_refund'):
-                continue
+            move.l10n_do_dop_currency_id = dop.id if dop else move.currency_id.id
 
-            # No cambiar si ya tiene NCF generado
-            if move.l10n_do_ncf_number:
-                continue
-
-            if move.move_type == 'out_refund':
-                # NOTA DE CRÉDITO: SIEMPRE B04
-                ncf_type = self.env['l10n_do_ncf.type'].search([('code', '=', '04')], limit=1)
-                if ncf_type:
-                    move.l10n_do_ncf_type_id = ncf_type.id
-
-                # Copiar NCF origen si viene de reversión
-                if move.reversed_entry_id and move.reversed_entry_id.l10n_do_ncf_number:
-                    move.l10n_do_ncf_origin = move.reversed_entry_id.l10n_do_ncf_number
-                    move.l10n_do_origin_move_id = move.reversed_entry_id.id
-
-            elif move.move_type == 'out_invoice' and move.partner_id:
-                # FACTURA DE VENTA: según tipo de cliente
-                ncf_type = move._get_ncf_type_for_partner(move.partner_id)
-                if ncf_type:
-                    move.l10n_do_ncf_type_id = ncf_type.id
-
-    def _get_ncf_type_for_partner(self, partner):
-        """Obtener el tipo de NCF correcto según el tipo de cliente"""
-        if not partner:
-            return self.env['l10n_do_ncf.type'].search([('code', '=', '02')], limit=1)
-
-        taxpayer_type = partner.l10n_do_dgii_tax_payer_type
-        partner_vat = partner.vat
-        partner_country = partner.country_id
-
-        # Exportaciones: cliente extranjero
-        if partner_country and partner_country.code != 'DO':
-            ncf_type = self.env['l10n_do_ncf.type'].search([('code', '=', '16')], limit=1)
-            if ncf_type:
-                return ncf_type
-
-        # Gubernamental
-        if taxpayer_type == 'governmental':
-            ncf_type = self.env['l10n_do_ncf.type'].search([('code', '=', '15')], limit=1)
-            if ncf_type:
-                return ncf_type
-
-        # Régimen Especial
-        if taxpayer_type == 'special_regime':
-            ncf_type = self.env['l10n_do_ncf.type'].search([('code', '=', '14')], limit=1)
-            if ncf_type:
-                return ncf_type
-
-        # Contribuyente con RNC válido = Crédito Fiscal (B01)
-        if taxpayer_type == 'taxpayer' and partner_vat:
-            ncf_type = self.env['l10n_do_ncf.type'].search([('code', '=', '01')], limit=1)
-            if ncf_type:
-                return ncf_type
-
-        # Por defecto: Consumidor Final (B02)
-        return self.env['l10n_do_ncf.type'].search([('code', '=', '02')], limit=1)
-
-    def _get_ncf_type_for_move(self):
-        """Obtener el tipo de NCF correcto según el tipo de documento"""
-        self.ensure_one()
-
-        if self.move_type == 'out_refund':
-            return self.env['l10n_do_ncf.type'].search([('code', '=', '04')], limit=1)
-        elif self.move_type == 'out_invoice' and self.partner_id:
-            return self._get_ncf_type_for_partner(self.partner_id)
-
-        return False
-
-    # =========================================
-    # ONCHANGE HANDLERS
-    # =========================================
-
-    @api.onchange('partner_id')
-    def _onchange_partner_ncf_type(self):
-        """Asignar tipo NCF automáticamente según el tipo de cliente"""
-        if self.move_type == 'out_invoice' and self.partner_id:
-            if not self.l10n_do_ncf_number:
-                ncf_type = self._get_ncf_type_for_partner(self.partner_id)
-                if ncf_type:
-                    self.l10n_do_ncf_type_id = ncf_type.id
-
-                # Advertencia si es exportación con ITBIS
-                if self.partner_id.country_id and self.partner_id.country_id.code != 'DO':
-                    has_itbis = any(
-                        tax.amount > 0
-                        for line in self.invoice_line_ids
-                        for tax in line.tax_ids
-                        if 'ITBIS' in tax.name.upper() or tax.amount == 18
-                    )
-                    if has_itbis:
-                        return {
-                            'warning': {
-                                'title': _('Advertencia: Exportación con ITBIS'),
-                                'message': _(
-                                    'Este cliente es extranjero (Exportación B16).\n'
-                                    'Las exportaciones NO pueden llevar ITBIS.\n'
-                                    'Debe eliminar los impuestos antes de confirmar.'
-                                )
-                            }
-                        }
-
-    @api.onchange('l10n_do_origin_move_id')
-    def _onchange_origin_move(self):
-        """Copiar NCF de la factura origen al campo NCF Afectado"""
-        if self.l10n_do_origin_move_id and self.l10n_do_origin_move_id.l10n_do_ncf_number:
-            self.l10n_do_ncf_origin = self.l10n_do_origin_move_id.l10n_do_ncf_number
-
-    @api.onchange('l10n_do_ncf_required')
-    def _onchange_ncf_required(self):
-        """Limpiar tipo NCF si no requiere NCF"""
-        if not self.l10n_do_ncf_required:
-            self.l10n_do_ncf_type_id = False
-
-    @api.onchange('l10n_do_credit_note_reason', 'l10n_do_origin_move_id')
-    def _onchange_credit_note_reason(self):
-        """Validar monto cuando el motivo es Anulación Total"""
-        if self.move_type == 'out_refund' and self.l10n_do_credit_note_reason == '01':
-            if self.l10n_do_origin_move_id:
-                origin = self.l10n_do_origin_move_id
-                if abs(self.amount_total - origin.amount_total) > 0.01:
-                    return {
-                        'warning': {
-                            'title': _('Advertencia: Monto incorrecto para Anulación Total'),
-                            'message': _(
-                                'Para Anulación Total (Motivo 01), el monto de la Nota de Crédito '
-                                'debe ser exactamente igual al monto de la factura original.\n\n'
-                                'Monto Factura Original: %s\n'
-                                'Monto Nota de Crédito: %s'
-                            ) % (origin.amount_total, self.amount_total)
-                        }
-                    }
-
-    # =========================================
-    # VALIDACIONES DGII CRÍTICAS
-    # =========================================
-
-    @api.constrains('l10n_do_ncf_type_id', 'move_type')
-    def _check_ncf_type_for_document(self):
-        """Validar que el tipo de NCF sea correcto para el tipo de documento"""
+    @api.depends('amount_total', 'l10n_do_exchange_rate', 'currency_id')
+    def _compute_amount_dop(self):
+        dop = self.env.ref('base.DOP', raise_if_not_found=False)
         for move in self:
-            if not move.l10n_do_ncf_type_id:
-                continue
+            if move.currency_id and dop and move.currency_id.id != dop.id:
+                move.l10n_do_amount_dop = move.amount_total * (move.l10n_do_exchange_rate or 1.0)
+            else:
+                move.l10n_do_amount_dop = move.amount_total
 
-            ncf_code = move.l10n_do_ncf_type_id.code
+    # =========================================
+    # CÓMPUTO MONTO ACREDITADO
+    # =========================================
 
-            # Nota de Crédito DEBE ser B04
-            if move.move_type == 'out_refund' and ncf_code != '04':
-                raise ValidationError(_(
-                    'Las Notas de Crédito deben usar el tipo B04 (Nota de Crédito).\n'
-                    'No está permitido usar %s para notas de crédito según normativa DGII.'
-                ) % move.l10n_do_ncf_type_id.name)
-
-            # Facturas NO pueden ser B04
-            if move.move_type == 'out_invoice' and ncf_code == '04':
-                raise ValidationError(_(
-                    'Las Facturas no pueden usar el tipo B04 (Nota de Crédito).\n'
-                    'Use B01, B02, B14, B15 o B16 según corresponda.'
-                ))
-
-    @api.constrains('move_type', 'partner_id', 'invoice_line_ids', 'state')
-    def _check_export_no_itbis(self):
-        """DGII: Las exportaciones (B16) NO pueden llevar ITBIS"""
+    @api.depends('state')
+    def _compute_credited_amount(self):
         for move in self:
-            if move.state != 'posted':
-                continue
-
-            if move.move_type != 'out_invoice':
-                continue
-
-            if not move.partner_id or not move.partner_id.country_id:
-                continue
-
-            # Solo aplica a clientes extranjeros (exportación)
-            if move.partner_id.country_id.code == 'DO':
-                continue
-
-            # Verificar si hay ITBIS en las líneas
-            for line in move.invoice_line_ids:
-                for tax in line.tax_ids:
-                    if tax.amount > 0 and ('ITBIS' in tax.name.upper() or tax.amount == 18):
-                        raise ValidationError(_(
-                            'Las exportaciones (B16) NO pueden llevar ITBIS según normativa DGII.\n\n'
-                            'Cliente: %s (%s)\n'
-                            'Impuesto encontrado: %s\n\n'
-                            'Elimine los impuestos de las líneas antes de confirmar.'
-                        ) % (move.partner_id.name, move.partner_id.country_id.name, tax.name))
-
-    @api.constrains('l10n_do_ncf_origin', 'move_type', 'partner_id', 'l10n_do_origin_move_id',
-                    'l10n_do_credit_note_reason', 'amount_total', 'state')
-    def _check_ncf_origin_required(self):
-        """Validaciones completas para Notas de Crédito según DGII"""
-        for move in self:
-            if move.move_type != 'out_refund' or move.state != 'posted':
-                continue
-
-            if not move.l10n_do_ncf_required:
-                continue
-
-            # 1. Validar que tiene NCF afectado
-            if not move.l10n_do_ncf_origin:
-                if move._is_demo_or_test_mode():
-                    continue
-                raise ValidationError(_(
-                    'Las Notas de Crédito requieren el NCF Afectado.\n'
-                    'Debe indicar el NCF de la factura original que está modificando.'
-                ))
-
-            # 2. Validar que tiene motivo
-            if not move.l10n_do_credit_note_reason:
-                raise ValidationError(_(
-                    'Las Notas de Crédito requieren un Motivo.\n'
-                    'Seleccione el motivo de la nota de crédito (Anulación, Devolución, etc.)'
-                ))
-
-            # 3. Validaciones con factura origen
-            if move.l10n_do_origin_move_id:
-                origin_move = move.l10n_do_origin_move_id
-
-                # 3.1 Validar mismo cliente
-                if origin_move.partner_id != move.partner_id:
-                    raise ValidationError(_(
-                        'El NCF Afectado pertenece a otro cliente.\n'
-                        'NCF: %s - Cliente original: %s\n'
-                        'Cliente actual: %s\n\n'
-                        'La Nota de Crédito debe ser del mismo cliente.'
-                    ) % (move.l10n_do_ncf_origin, origin_move.partner_id.name, move.partner_id.name))
-
-                # 3.2 Validar que la factura origen está posted
-                if origin_move.state != 'posted':
-                    raise ValidationError(_(
-                        'La factura origen debe estar confirmada (posted).\n'
-                        'Factura: %s - Estado: %s'
-                    ) % (origin_move.name, origin_move.state))
-
-                # 3.3 CRÍTICO: Validar monto para Anulación Total (Motivo 01)
-                if move.l10n_do_credit_note_reason == '01':
-                    if abs(move.amount_total - origin_move.amount_total) > 0.01:
-                        raise ValidationError(_(
-                            'Para Anulación Total (Motivo 01), el monto de la Nota de Crédito '
-                            'debe ser EXACTAMENTE igual al monto de la factura original.\n\n'
-                            'Factura Original: %s\n'
-                            'Monto Factura: %s\n'
-                            'Monto Nota de Crédito: %s\n\n'
-                            'Si desea hacer una anulación parcial, use otro motivo.'
-                        ) % (origin_move.name, origin_move.amount_total, move.amount_total))
-
-                # 3.4 Calcular total de NC existentes sobre esta factura
-                existing_nc = self.search([
-                    ('l10n_do_origin_move_id', '=', origin_move.id),
+            if move.move_type == 'out_invoice':
+                credit_notes = self.search([
+                    ('l10n_do_origin_move_id', '=', move.id),
                     ('state', '=', 'posted'),
-                    ('id', '!=', move.id),
                     ('move_type', '=', 'out_refund'),
                 ])
+                move.l10n_do_credited_amount = sum(credit_notes.mapped('amount_total'))
+            else:
+                move.l10n_do_credited_amount = 0
 
-                total_nc_existentes = sum(existing_nc.mapped('amount_total'))
+    # =========================================
+    # CÓMPUTO SPLIT BIENES/SERVICIOS AUTOMÁTICO
+    # =========================================
 
-                # 3.5 CRÍTICO: Validar que la factura no esté ya totalmente anulada
-                if abs(total_nc_existentes - origin_move.amount_total) < 0.01:
-                    raise ValidationError(_(
-                        'La factura %s ya ha sido anulada totalmente.\n'
-                        'No se pueden aplicar más Notas de Crédito.\n\n'
-                        'NCF Factura: %s\n'
-                        'Monto original: %s\n'
-                        'Total NC aplicadas: %s'
-                    ) % (origin_move.name, origin_move.l10n_do_ncf_number,
-                         origin_move.amount_total, total_nc_existentes))
-
-                # 3.6 Validar que no exceda el monto disponible
-                if existing_nc:
-                    monto_disponible = origin_move.amount_total - total_nc_existentes
-
-                    # Si ya hay NC y el motivo actual es Anulación Total, bloquear
-                    if move.l10n_do_credit_note_reason == '01':
-                        raise ValidationError(_(
-                            'La factura %s ya tiene Notas de Crédito aplicadas.\n'
-                            'No se permite Anulación Total cuando ya existe otra NC.\n\n'
-                            'NCF Factura: %s\n'
-                            'Total NC existentes: %s\n'
-                            'Monto disponible: %s\n\n'
-                            'Use otro motivo para NC parcial.'
-                        ) % (origin_move.name, origin_move.l10n_do_ncf_number,
-                             total_nc_existentes, monto_disponible))
-
-                    # Validar que no excede monto disponible
-                    if move.amount_total > monto_disponible + 0.01:
-                        raise ValidationError(_(
-                            'El monto de la Nota de Crédito excede el saldo disponible.\n\n'
-                            'Factura: %s\n'
-                            'Monto original: %s\n'
-                            'NC existentes: %s\n'
-                            'Monto disponible: %s\n'
-                            'Monto NC actual: %s\n\n'
-                            'No puede aplicar más crédito del monto disponible.'
-                        ) % (origin_move.name, origin_move.amount_total,
-                             total_nc_existentes, monto_disponible, move.amount_total))
-
-    @api.constrains('l10n_do_ncf_number', 'company_id')
-    def _check_ncf_unique(self):
-        """Validar que el NCF generado no esté duplicado"""
+    @api.depends('invoice_line_ids', 'invoice_line_ids.product_id', 'invoice_line_ids.price_subtotal')
+    def _compute_606_split_bienes_servicios(self):
+        """
+        Split automático basado en tipo de producto.
+        product.detailed_type:
+        - 'consu' / 'product' = Bien
+        - 'service' = Servicio
+        """
         for move in self:
-            if move.l10n_do_ncf_number and move.move_type in ('out_invoice', 'out_refund'):
-                existing = self.search([
-                    ('l10n_do_ncf_number', '=', move.l10n_do_ncf_number),
-                    ('company_id', '=', move.company_id.id),
-                    ('id', '!=', move.id),
-                    ('state', '!=', 'cancel'),
-                ])
-                if existing:
-                    _logger.critical(
-                        'NCF DUPLICADO DETECTADO: %s - Factura actual: %s - Existente: %s',
-                        move.l10n_do_ncf_number, move.name, existing[0].name
-                    )
+            if move.move_type not in ('in_invoice', 'in_refund'):
+                move.l10n_do_606_monto_bienes = 0
+                move.l10n_do_606_monto_servicios = 0
+                continue
+
+            bienes = 0.0
+            servicios = 0.0
+
+            for line in move.invoice_line_ids.filtered(lambda l: not l.display_type):
+                subtotal = line.price_subtotal or 0
+                if line.product_id:
+                    # Verificar tipo de producto
+                    if line.product_id.detailed_type in ('consu', 'product'):
+                        bienes += subtotal
+                    else:  # service
+                        servicios += subtotal
+                else:
+                    # Sin producto, asumir servicio
+                    servicios += subtotal
+
+            move.l10n_do_606_monto_bienes = bienes
+            move.l10n_do_606_monto_servicios = servicios
+
+    # =========================================
+    # CÓMPUTOS 606
+    # =========================================
+
+    @api.depends('l10n_do_fiscal_type', 'amount_tax')
+    def _compute_606_itbis_costo(self):
+        for move in self:
+            if move.l10n_do_fiscal_type == 'minor_expense':
+                move.l10n_do_itbis_costo = abs(move.amount_tax or 0)
+
+    @api.depends('amount_tax', 'l10n_do_itbis_costo', 'l10n_do_itbis_proporcionalidad', 'l10n_do_fiscal_type')
+    def _compute_606_itbis(self):
+        for move in self:
+            if move.move_type not in ('in_invoice', 'in_refund'):
+                move.l10n_do_itbis_facturado = 0
+                move.l10n_do_itbis_adelantar = 0
+                continue
+            move.l10n_do_itbis_facturado = abs(move.amount_tax or 0)
+            if move.l10n_do_fiscal_type in ('informal', 'minor_expense'):
+                move.l10n_do_itbis_adelantar = 0
+            else:
+                move.l10n_do_itbis_adelantar = max(
+                    move.l10n_do_itbis_facturado - (move.l10n_do_itbis_costo or 0) - (move.l10n_do_itbis_proporcionalidad or 0), 0
+                )
+
+    @api.depends('l10n_do_retention_ids', 'l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.dgii_606_bucket')
+    def _compute_606_buckets(self):
+        for move in self:
+            buckets = {'itbis_retenido': 0, 'itbis_percibido': 0, 'isr_retenido': 0, 'isr_percibido': 0}
+            for ret in move.l10n_do_retention_ids:
+                if ret.dgii_606_bucket in buckets:
+                    buckets[ret.dgii_606_bucket] += ret.retention_amount or 0
+            move.l10n_do_itbis_retenido = buckets['itbis_retenido']
+            move.l10n_do_itbis_percibido = buckets['itbis_percibido']
+            move.l10n_do_isr_retenido = buckets['isr_retenido']
+            move.l10n_do_isr_percibido = buckets['isr_percibido']
+
+    @api.depends('l10n_do_retention_ids', 'l10n_do_retention_ids.retention_amount', 'amount_total')
+    def _compute_retention_totals(self):
+        for move in self:
+            isr = itbis = 0
+            for ret in move.l10n_do_retention_ids:
+                if ret.retention_type_id:
+                    if ret.retention_type_id.retention_type == 'isr':
+                        isr += ret.retention_amount or 0
+                    elif ret.retention_type_id.retention_type == 'itbis':
+                        itbis += ret.retention_amount or 0
+            move.l10n_do_total_isr_retention = isr
+            move.l10n_do_total_itbis_retention = itbis
+            move.l10n_do_amount_to_pay = (move.amount_total or 0) - isr - itbis
+
+    # =========================================
+    # FORMA DE PAGO MIXTA
+    # =========================================
+
+    @api.depends('l10n_do_payment_cash', 'l10n_do_payment_bank', 'l10n_do_payment_card',
+                 'l10n_do_payment_credit', 'l10n_do_payment_bond', 'l10n_do_payment_swap',
+                 'l10n_do_payment_other', 'payment_state')
+    def _compute_forma_pago(self):
+        for move in self:
+            if move.move_type not in ('in_invoice', 'in_refund', 'out_invoice', 'out_refund'):
+                move.l10n_do_forma_pago = False
+                continue
+
+            # Contar formas de pago con monto > 0
+            payments = {
+                '01': move.l10n_do_payment_cash or 0,
+                '02': move.l10n_do_payment_bank or 0,
+                '03': move.l10n_do_payment_card or 0,
+                '04': move.l10n_do_payment_credit or 0,
+                '05': move.l10n_do_payment_swap or 0,
+                '07': move.l10n_do_payment_other or 0,
+            }
+
+            active_payments = [k for k, v in payments.items() if v > 0]
+
+            if len(active_payments) > 1:
+                move.l10n_do_forma_pago = '07'  # Mixto
+            elif len(active_payments) == 1:
+                move.l10n_do_forma_pago = active_payments[0]
+            elif move.payment_state == 'not_paid':
+                move.l10n_do_forma_pago = '04'  # Crédito
+            elif move.payment_state == 'paid':
+                move.l10n_do_forma_pago = '02'  # Transferencia por defecto
+            else:
+                move.l10n_do_forma_pago = '04'
+
+    @api.depends('l10n_do_is_credit_sale', 'l10n_do_retention_date', 'l10n_do_retention_reported',
+                 'l10n_do_third_party_retention_itbis', 'l10n_do_third_party_retention_isr')
+    def _compute_needs_607_retention(self):
+        for move in self:
+            move.l10n_do_needs_607_retention_line = (
+                move.l10n_do_is_credit_sale and
+                move.l10n_do_retention_date and
+                not move.l10n_do_retention_reported and
+                (move.l10n_do_third_party_retention_itbis > 0 or move.l10n_do_third_party_retention_isr > 0)
+            )
+
+    # =========================================
+    # CÓMPUTO TIPO NCF
+    # =========================================
+
+    @api.depends('move_type', 'partner_id', 'partner_id.vat', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
+    def _compute_l10n_do_ncf_type_id(self):
+        NcfType = self.env['l10n_do_ncf.type']
+        for move in self:
+            ncf_type = False
+            if move.move_type == 'out_invoice':
+                if move.l10n_do_is_debit_note:
+                    ncf_type = NcfType.search([('code', '=', '03')], limit=1)
+                elif move.partner_id and move.partner_id.vat:
+                    ncf_type = NcfType.search([('code', '=', '01')], limit=1)
+                else:
+                    ncf_type = NcfType.search([('code', '=', '02')], limit=1)
+            elif move.move_type == 'out_refund':
+                ncf_type = NcfType.search([('code', '=', '04')], limit=1)
+            elif move.move_type in ('in_invoice', 'in_refund'):
+                type_map = {'informal': '11', 'minor_expense': '13', 'exterior': '17', 'special': '14', 'governmental': '15'}
+                code = type_map.get(move.l10n_do_fiscal_type)
+                if code:
+                    ncf_type = NcfType.search([('code', '=', code)], limit=1)
+            move.l10n_do_ncf_type_id = ncf_type.id if ncf_type else False
+
+    # =========================================
+    # VALIDACIONES CÉDULA RD (NUEVO)
+    # =========================================
+
+    def _validate_cedula_rd(self, cedula):
+        """
+        Validar cédula dominicana con algoritmo Luhn modificado.
+        """
+        if not cedula:
+            return False
+
+        cedula = re.sub(r'[^0-9]', '', str(cedula))
+
+        if len(cedula) != 11:
+            return False
+
+        try:
+            weights = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2]
+            total = 0
+            for i in range(10):
+                product = int(cedula[i]) * weights[i]
+                total += product if product < 10 else product - 9
+
+            check_digit = (10 - (total % 10)) % 10
+            return int(cedula[10]) == check_digit
+        except:
+            return False
+
+    def _validate_rnc_rd(self, rnc):
+        """
+        Validar RNC dominicano con Módulo 11.
+        """
+        if not rnc:
+            return False
+
+        rnc = re.sub(r'[^0-9]', '', str(rnc))
+
+        if len(rnc) != 9:
+            return False
+
+        try:
+            weights = [7, 9, 8, 6, 5, 4, 3, 2]
+            total = sum(int(rnc[i]) * weights[i] for i in range(8))
+            remainder = total % 11
+            check_digit = 0 if remainder == 0 else (11 - remainder) if remainder != 1 else 0
+            return int(rnc[8]) == check_digit
+        except:
+            return False
+
+    # =========================================
+    # VALIDACIONES
+    # =========================================
+
+    @api.constrains('l10n_do_informal_provider_cedula')
+    def _check_cedula_format(self):
+        """Validar formato de cédula para B11"""
+        for move in self:
+            if move.l10n_do_fiscal_type == 'informal' and move.l10n_do_informal_provider_cedula:
+                cedula = move.l10n_do_informal_provider_cedula
+                if not self._validate_cedula_rd(cedula):
                     raise ValidationError(_(
-                        'El NCF %s ya existe.\n'
-                        'Factura existente: %s\n\n'
-                        'Contacte al administrador del sistema.'
-                    ) % (move.l10n_do_ncf_number, existing[0].name))
+                        'Cédula inválida: %s\n\n'
+                        'Verifique que:\n'
+                        '- Tenga 11 dígitos\n'
+                        '- El dígito verificador sea correcto'
+                    ) % cedula)
+
+    @api.constrains('l10n_do_vendor_ncf', 'company_id', 'partner_id')
+    def _check_vendor_ncf_duplicate(self):
+        """Validar que no exista duplicado de NCF proveedor"""
+        for move in self:
+            if not move.l10n_do_vendor_ncf or move.move_type not in ('in_invoice', 'in_refund'):
+                continue
+
+            ncf = move.l10n_do_vendor_ncf.strip().upper()
+            duplicates = self.search([
+                ('id', '!=', move.id),
+                ('company_id', '=', move.company_id.id),
+                ('l10n_do_vendor_ncf', '=ilike', ncf),
+                ('move_type', 'in', ('in_invoice', 'in_refund')),
+                ('state', '!=', 'cancel'),
+            ])
+
+            if duplicates:
+                raise ValidationError(_(
+                    '⚠️ NCF DUPLICADO\n\n'
+                    'El NCF %s ya existe en:\n'
+                    '- Documento: %s\n'
+                    '- Proveedor: %s\n'
+                    '- Fecha: %s'
+                ) % (ncf, duplicates[0].name, duplicates[0].partner_id.name, duplicates[0].invoice_date))
 
     @api.constrains('l10n_do_vendor_ncf')
     def _check_vendor_ncf_format(self):
-        """Validar formato del NCF del proveedor según estándar DGII"""
         for move in self:
-            if move.l10n_do_vendor_ncf:
+            if move.l10n_do_vendor_ncf and move.move_type in ('in_invoice', 'in_refund'):
                 ncf = move.l10n_do_vendor_ncf.strip().upper()
-
-                # Validar formato completo: NCF tradicional o e-CF
                 if not re.match(NCF_FULL_PATTERN, ncf):
-                    raise ValidationError(_(
-                        'El formato del NCF del proveedor no es válido.\n\n'
-                        'Formatos aceptados:\n'
-                        '- NCF tradicional: B0100000001 (11 caracteres)\n'
-                        '  B + tipo (01-17) + 8 dígitos secuencia\n\n'
-                        '- e-CF: E310000000001 (13 caracteres)\n'
-                        '  E + tipo (31-47) + 10 dígitos secuencia\n\n'
-                        'NCF ingresado: %s\n\n'
-                        'Tipos NCF válidos: 01-04, 11-17\n'
-                        'Tipos e-CF válidos: 31-34, 41-47'
-                    ) % ncf)
+                    raise ValidationError(_('NCF proveedor inválido: %s') % ncf)
 
-    @api.constrains('l10n_do_vendor_ncf', 'partner_id', 'company_id')
-    def _check_vendor_ncf_unique(self):
-        """Validar que el NCF del proveedor no esté duplicado"""
+    @api.constrains('l10n_do_ncf_origin', 'move_type')
+    def _check_ncf_origin(self):
         for move in self:
-            if move.l10n_do_vendor_ncf and move.partner_id:
-                existing = self.search([
-                    ('l10n_do_vendor_ncf', '=', move.l10n_do_vendor_ncf),
-                    ('partner_id', '=', move.partner_id.id),
-                    ('company_id', '=', move.company_id.id),
-                    ('id', '!=', move.id),
-                    ('state', '!=', 'cancel'),
-                ])
-                if existing:
-                    raise ValidationError(_(
-                        'El NCF %s ya fue registrado para este proveedor.\n'
-                        'Factura existente: %s\n\n'
-                        'No puede duplicar el NCF del proveedor.'
-                    ) % (move.l10n_do_vendor_ncf, existing[0].name))
+            if move.move_type == 'out_refund' and move.l10n_do_ncf_required:
+                if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
+                    raise ValidationError(_('NC requiere NCF afectado.'))
 
-    def _is_demo_or_test_mode(self):
-        """Verificar si estamos en modo demo o test"""
-        return self.env.context.get('install_mode') or \
-               self.env.context.get('demo') or \
-               self.env.registry.in_test_mode()
+    @api.constrains('l10n_do_is_debit_note', 'l10n_do_debit_ncf_origin')
+    def _check_debit_note_origin(self):
+        for move in self:
+            if move.l10n_do_is_debit_note and move.state == 'posted':
+                if not move.l10n_do_debit_ncf_origin and not move.l10n_do_debit_origin_move_id:
+                    raise ValidationError(_('ND requiere NCF afectado.'))
+
+    @api.constrains('l10n_do_is_vendor_debit_note', 'l10n_do_vendor_debit_ncf_origin')
+    def _check_vendor_debit_note(self):
+        for move in self:
+            if move.l10n_do_is_vendor_debit_note and move.state == 'posted':
+                if not move.l10n_do_vendor_debit_ncf_origin:
+                    raise ValidationError(_('ND proveedor requiere NCF afectado.'))
 
     # =========================================
-    # GENERACIÓN DE NCF
+    # BLOQUEO POST-REPORTE DGII (NUEVO)
     # =========================================
 
-    def _get_ncf_sequence(self):
-        """Obtener la secuencia NCF activa para el tipo de comprobante"""
+    def _check_dgii_reported_block(self):
+        """
+        Bloquear modificaciones si ya fue reportado a DGII.
+        """
         self.ensure_one()
-
-        if not self.l10n_do_ncf_required:
-            return False
-
-        if not self.l10n_do_ncf_type_id:
+        if self.l10n_do_reported_606 or self.l10n_do_reported_607:
             raise UserError(_(
-                'No se ha definido el tipo de comprobante fiscal.\n'
-                'Esto puede ocurrir si el cliente no tiene configurado correctamente su tipo de contribuyente.'
+                '🚫 DOCUMENTO BLOQUEADO\n\n'
+                'Este documento ya fue reportado a DGII en el período %s.\n\n'
+                'No puede ser modificado ni cancelado.\n\n'
+                'Para corregir errores debe:\n'
+                '- Emitir Nota de Crédito (NC)\n'
+                '- O realizar ajuste en período siguiente'
+            ) % (self.l10n_do_report_period or 'anterior'))
+
+    def button_cancel(self):
+        """Override para bloquear cancelación post-reporte"""
+        for move in self:
+            if move.l10n_do_reported_606 or move.l10n_do_reported_607:
+                move._check_dgii_reported_block()
+        return super().button_cancel()
+
+    def button_draft(self):
+        """Override para bloquear volver a borrador post-reporte"""
+        for move in self:
+            if move.l10n_do_reported_606 or move.l10n_do_reported_607:
+                move._check_dgii_reported_block()
+        return super().button_draft()
+
+    def unlink(self):
+        """Override para bloquear eliminación post-reporte"""
+        for move in self:
+            if move.l10n_do_reported_606 or move.l10n_do_reported_607:
+                raise UserError(_(
+                    '🚫 No puede eliminar documentos reportados a DGII.\n'
+                    'Documento: %s | Período: %s'
+                ) % (move.name, move.l10n_do_report_period or 'N/A'))
+        return super().unlink()
+
+    # =========================================
+    # VALIDACIONES B11/B13/B17
+    # =========================================
+
+    def _check_informal_provider_rnc(self):
+        """Verificar que proveedor NO tenga RNC"""
+        self.ensure_one()
+        if self.l10n_do_fiscal_type != 'informal':
+            return True
+
+        if self.partner_id and self.partner_id.vat:
+            vat = self.partner_id.vat.replace('-', '').strip()
+            if vat and len(vat) >= 9:
+                raise UserError(_(
+                    '⚠️ NO puede usar B11 para proveedor con RNC.\n\n'
+                    'Proveedor: %s\nRNC: %s\n\n'
+                    'Use "Compra Fiscal" y solicite NCF.'
+                ) % (self.partner_id.name, self.partner_id.vat))
+
+        if not self.l10n_do_informal_provider_name:
+            raise UserError(_('B11 requiere nombre del proveedor informal.'))
+
+        self.l10n_do_informal_rnc_verified = True
+        return True
+
+    def _check_b11_monthly_limit(self):
+        """Verificar uso excesivo de B11"""
+        self.ensure_one()
+        if self.l10n_do_fiscal_type != 'informal':
+            return
+
+        first_day = self.invoice_date.replace(day=1) if self.invoice_date else date.today().replace(day=1)
+        count = self.search_count([
+            ('company_id', '=', self.company_id.id),
+            ('l10n_do_fiscal_type', '=', 'informal'),
+            ('state', '=', 'posted'),
+            ('invoice_date', '>=', first_day),
+        ])
+
+        if count >= B11_MONTHLY_LIMIT:
+            _logger.warning('B11 Alerta: %s - %s B11 este mes', self.company_id.name, count)
+
+    def _check_b13_no_itbis(self):
+        """Validar que B13 no tenga ITBIS acreditable"""
+        self.ensure_one()
+        if self.l10n_do_fiscal_type != 'minor_expense':
+            return True
+
+        for line in self.invoice_line_ids:
+            for tax in line.tax_ids:
+                if tax.amount > 0 and 'itbis' in (tax.name or '').lower():
+                    raise UserError(_(
+                        '⚠️ B13 (Gasto Menor) no permite ITBIS acreditable.\n\n'
+                        'Línea: %s\nImpuesto: %s\n\n'
+                        'Use impuesto 0%% o quite el impuesto ITBIS.'
+                    ) % (line.name, tax.name))
+
+        # Validar límite de monto B13
+        if self.amount_total > B13_TRANSACTION_LIMIT:
+            raise UserError(_(
+                '⚠️ B13 excede límite de RD$ %s por transacción.\n\n'
+                'Monto: RD$ %s\n\n'
+                'Use "Compra Fiscal" para montos mayores.'
+            ) % (B13_TRANSACTION_LIMIT, self.amount_total))
+
+        return True
+
+    def _check_b17_no_itbis(self):
+        """Validar que B17 no tenga ITBIS (solo ISR 27%)"""
+        self.ensure_one()
+        if self.l10n_do_fiscal_type != 'exterior':
+            return True
+
+        # Verificar que no tenga ITBIS
+        if self.amount_tax > 0:
+            raise UserError(_(
+                '⚠️ B17 (Pago Exterior) no debe tener ITBIS.\n\n'
+                'Los pagos al exterior están exentos de ITBIS.\n'
+                'Use impuesto 0%% y aplique retención ISR 27%%.'
             ))
 
+        # Verificar ISR 27%
+        has_isr_27 = any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids)
+        if not has_isr_27:
+            raise UserError(_('B17 requiere retención ISR 27%.'))
+
+        return True
+
+    # =========================================
+    # GENERADOR NCF
+    # =========================================
+
+    def _generate_ncf(self):
+        self.ensure_one()
+        if self.l10n_do_ncf_number:
+            return
+
+        if not self.l10n_do_ncf_type_id:
+            raise UserError(_('Seleccione tipo de comprobante.'))
+
+        ncf_type = self.l10n_do_ncf_type_id
         sequence = self.env['l10n_do_ncf.sequence'].search([
+            ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
-            ('ncf_type_id', '=', self.l10n_do_ncf_type_id.id),
             ('state', '=', 'active'),
         ], limit=1, order='id desc')
 
         if not sequence:
-            raise UserError(_(
-                'No hay secuencia NCF activa para el tipo "%s".\n\n'
-                'Por favor, configure una secuencia en:\n'
-                'Facturación → Configuración → NCF → Secuencias NCF'
-            ) % self.l10n_do_ncf_type_id.name)
+            raise UserError(_('No hay secuencia activa para %s.') % ncf_type.name)
 
-        return sequence
+        if sequence.current_number > sequence.final_number:
+            # NUEVO: Buscar secuencia alternativa
+            alt_sequence = self.env['l10n_do_ncf.sequence'].search([
+                ('ncf_type_id', '=', ncf_type.id),
+                ('company_id', '=', self.company_id.id),
+                ('state', '=', 'active'),
+                ('current_number', '<=', 'final_number'),
+                ('id', '!=', sequence.id),
+            ], limit=1)
 
-    def _generate_ncf(self):
-        """Generar NCF para la factura"""
-        self.ensure_one()
+            if alt_sequence:
+                sequence = alt_sequence
+                _logger.info('NCF: Usando secuencia alternativa %s', sequence.name)
+            else:
+                raise UserError(_(
+                    '⚠️ SECUENCIA AGOTADA\n\n'
+                    'La secuencia %s está agotada y no hay alternativas.\n\n'
+                    'Solicite nuevos rangos NCF a DGII.'
+                ) % sequence.name)
 
-        if not self.l10n_do_ncf_required:
-            _logger.info('Factura %s: No requiere NCF', self.name)
-            return False
+        # Validar fecha vs secuencia
+        if sequence.expiration_date:
+            if self.invoice_date and self.invoice_date > sequence.expiration_date:
+                raise UserError(_(
+                    'La fecha de factura (%s) es posterior al vencimiento de la secuencia (%s).'
+                ) % (self.invoice_date, sequence.expiration_date))
+            if sequence.expiration_date < fields.Date.today():
+                raise UserError(_('Secuencia %s vencida.') % sequence.name)
 
-        if self.l10n_do_ncf_number:
-            return self.l10n_do_ncf_number
+        prefix = ncf_type.prefix
+        if ncf_type.is_electronic:
+            ncf = '%s%010d' % (prefix, sequence.current_number)
+        else:
+            ncf = '%s%08d' % (prefix, sequence.current_number)
 
-        if self.move_type not in ('out_invoice', 'out_refund'):
-            return False
+        self.write({
+            'l10n_do_ncf_number': ncf,
+            'l10n_do_ncf_seq_id': sequence.id,
+            'l10n_do_fiscal_status': 'valid',
+        })
+        sequence.sudo().write({'current_number': sequence.current_number + 1})
 
-        sequence = self._get_ncf_sequence()
-        if not sequence:
-            return False
+        # Auditoría
+        self.env['l10n_do_ncf.fiscal.audit'].log_event(
+            'ncf_generated', move=self, description='NCF generado automáticamente'
+        )
 
-        try:
-            ncf = sequence.get_next_ncf()
-            self.write({
-                'l10n_do_ncf_number': ncf,
-                'l10n_do_ncf_seq_id': sequence.id,
-                'l10n_do_fiscal_status': 'valid',
-            })
-            _logger.info('NCF generado: %s para factura %s', ncf, self.name)
-            return ncf
-        except Exception as e:
-            _logger.error('Error generando NCF para %s: %s', self.name, str(e))
-            raise
+        _logger.info('NCF generado: %s | Doc: %s', ncf, self.name)
 
     # =========================================
-    # OVERRIDE: ACTION_POST
+    # ONCHANGE
+    # =========================================
+
+    @api.onchange('l10n_do_fiscal_type')
+    def _onchange_fiscal_type(self):
+        if self.move_type not in ('in_invoice', 'in_refund'):
+            return
+
+        if self.l10n_do_fiscal_type in ('informal', 'minor_expense'):
+            self.l10n_do_retention_ids = [(5, 0, 0)]
+            self.l10n_do_vendor_ncf = False
+
+        if self.l10n_do_fiscal_type == 'informal':
+            self._apply_b11_retentions()
+        elif self.l10n_do_fiscal_type == 'exterior':
+            self._apply_b17_retentions()
+
+    def _apply_b11_retentions(self):
+        """Retenciones B11: 100% ITBIS + ISR según tipo servicio"""
+        retentions = []
+        base = self.amount_untaxed or 0
+        itbis = self.amount_tax or 0
+        RetType = self.env['l10n_do_ncf.retention.type']
+
+        if itbis > 0:
+            itbis_type = RetType.search([('code', '=', 'ITBIS_100')], limit=1)
+            if itbis_type:
+                retentions.append((0, 0, {'retention_type_id': itbis_type.id, 'base_amount': itbis}))
+
+        if base > 0:
+            if self.l10n_do_informal_service_type == 'professional':
+                isr_type = RetType.search([('code', '=', 'ISR_PROF')], limit=1)
+                self.l10n_do_tipo_retencion_isr = '02'
+            else:
+                isr_type = RetType.search([('code', '=', 'ISR_TEC')], limit=1)
+                self.l10n_do_tipo_retencion_isr = '03'
+
+            if isr_type:
+                retentions.append((0, 0, {'retention_type_id': isr_type.id, 'base_amount': base}))
+
+        if retentions:
+            self.l10n_do_retention_ids = retentions
+
+    @api.onchange('l10n_do_informal_service_type')
+    def _onchange_informal_service_type(self):
+        if self.l10n_do_fiscal_type == 'informal':
+            self._apply_b11_retentions()
+
+    def _apply_b17_retentions(self):
+        """Retenciones B17: 27% ISR"""
+        retentions = []
+        base = self.amount_untaxed or 0
+        RetType = self.env['l10n_do_ncf.retention.type']
+        if base > 0:
+            isr_type = RetType.search([('code', '=', 'ISR_EXT')], limit=1)
+            if isr_type:
+                retentions.append((0, 0, {'retention_type_id': isr_type.id, 'base_amount': base}))
+        if retentions:
+            self.l10n_do_retention_ids = retentions
+            self.l10n_do_tipo_retencion_isr = '03'
+
+    @api.onchange('l10n_do_origin_move_id')
+    def _onchange_origin_move(self):
+        if self.l10n_do_origin_move_id:
+            self.l10n_do_ncf_origin = self.l10n_do_origin_move_id.l10n_do_ncf_number
+
+    @api.onchange('l10n_do_debit_origin_move_id')
+    def _onchange_debit_origin_move(self):
+        if self.l10n_do_debit_origin_move_id:
+            self.l10n_do_debit_ncf_origin = self.l10n_do_debit_origin_move_id.l10n_do_ncf_number
+
+    @api.onchange('l10n_do_vendor_ncf')
+    def _onchange_vendor_ncf(self):
+        if self.l10n_do_vendor_ncf:
+            self.l10n_do_vendor_ncf = self.l10n_do_vendor_ncf.strip().upper()
+            self.l10n_do_vendor_ncf_validated = False
+
+    @api.onchange('partner_id')
+    def _onchange_partner_check_rnc_change(self):
+        """
+        NUEVO: Detectar cambio de RNC en cliente con facturas previas.
+        Sugiere emitir NC si hay facturas B02 y ahora tiene RNC.
+        """
+        if self.move_type != 'out_invoice' or not self.partner_id:
+            return
+
+        # Verificar si cliente ahora tiene RNC
+        if self.partner_id.vat:
+            # Buscar facturas B02 anteriores de este cliente
+            b02_invoices = self.search([
+                ('partner_id', '=', self.partner_id.id),
+                ('l10n_do_ncf_number', '=like', 'B02%'),
+                ('state', '=', 'posted'),
+            ], limit=1)
+
+            if b02_invoices:
+                return {
+                    'warning': {
+                        'title': _('⚠️ Cliente con RNC nuevo'),
+                        'message': _(
+                            'Este cliente tiene facturas B02 anteriores.\n\n'
+                            'Ahora tiene RNC: %s\n\n'
+                            'Si necesita corregir facturas anteriores:\n'
+                            '1. Emita NC (B04) a la factura B02\n'
+                            '2. Emita nueva factura B01 con RNC'
+                        ) % self.partner_id.vat
+                    }
+                }
+
+    # =========================================
+    # ACTION_POST
     # =========================================
 
     def action_post(self):
-        """Override para generar NCF al confirmar factura"""
         for move in self:
+            # VENTAS
             if move.move_type in ('out_invoice', 'out_refund') and move.l10n_do_ncf_required:
-                # Asignar tipo NCF si no tiene
                 if not move.l10n_do_ncf_type_id:
-                    ncf_type = move._get_ncf_type_for_move()
-                    if ncf_type:
-                        move.l10n_do_ncf_type_id = ncf_type.id
+                    raise UserError(_('Seleccione tipo de comprobante.'))
+                if move.move_type == 'out_refund':
+                    if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
+                        raise UserError(_('NC requiere factura origen.'))
+                    if not move.l10n_do_credit_note_reason:
+                        raise UserError(_('NC requiere motivo.'))
+                if move.l10n_do_is_debit_note:
+                    if not move.l10n_do_debit_ncf_origin and not move.l10n_do_debit_origin_move_id:
+                        raise UserError(_('ND requiere factura origen.'))
+                    if not move.l10n_do_debit_note_reason:
+                        raise UserError(_('ND requiere motivo.'))
 
-                # Validar licencia
-                if move.l10n_do_ncf_type_id and not move.l10n_do_ncf_number:
-                    license_config = self.env['l10n_do_ncf.license.config'].search([
-                        ('company_id', '=', move.company_id.id)
-                    ], limit=1)
+            # COMPRAS
+            if move.move_type in ('in_invoice', 'in_refund'):
+                if move.l10n_do_fiscal_type == 'informal':
+                    move._check_informal_provider_rnc()
+                    move._check_b11_monthly_limit()
+                elif move.l10n_do_fiscal_type == 'minor_expense':
+                    move._check_b13_no_itbis()
+                elif move.l10n_do_fiscal_type == 'exterior':
+                    move._check_b17_no_itbis()
+                elif move.l10n_do_fiscal_type == 'fiscal':
+                    if not move.l10n_do_vendor_ncf:
+                        raise UserError(_('Ingrese NCF del proveedor o cambie Tipo Fiscal.'))
 
-                    if not license_config:
-                        raise UserError(_(
-                            'No hay licencia NCF configurada para la compañía %s.\n\n'
-                            'Configure la licencia en:\n'
-                            'Facturación → Configuración → NCF → Licencia'
-                        ) % move.company_id.name)
-
-                    # Validación estricta de vencimiento (incluyendo hoy)
-                    today = fields.Date.today()
-                    if license_config.expiration_date and license_config.expiration_date <= today:
-                        _logger.critical(
-                            'NCF BLOQUEADO: Licencia vencida para %s - Factura: %s - Vencimiento: %s',
-                            move.company_id.name, move.name, license_config.expiration_date
-                        )
-                        raise UserError(_(
-                            'La licencia NCF ha expirado.\n'
-                            'Fecha de vencimiento: %s\n'
-                            'Fecha actual: %s\n\n'
-                            'Renueve su licencia NCF para continuar facturando.'
-                        ) % (license_config.expiration_date, today))
-
-                    if not license_config.is_valid:
-                        _logger.critical(
-                            'NCF BLOQUEADO: Licencia inválida para %s - Factura: %s',
-                            move.company_id.name, move.name
-                        )
-                        raise UserError(_(
-                            'La licencia NCF no es válida.\n\n'
-                            'Verifique la configuración de su licencia NCF.'
-                        ))
-
-        # Llamar al método original
         result = super().action_post()
 
-        # Generar NCF después de confirmar
         for move in self:
+            # Generar NCF ventas
             if move.move_type in ('out_invoice', 'out_refund') and move.l10n_do_ncf_required:
                 if not move.l10n_do_ncf_number:
                     move._generate_ncf()
 
-                # Actualizar estado fiscal de factura origen si es NC
+                # Estado origen para NC
                 if move.move_type == 'out_refund' and move.l10n_do_origin_move_id:
                     origin = move.l10n_do_origin_move_id
                     total_nc = sum(self.search([
@@ -675,129 +1040,197 @@ class AccountMove(models.Model):
                         ('move_type', '=', 'out_refund'),
                     ]).mapped('amount_total'))
 
+                    # Determinar estado: parcial vs total
                     if abs(total_nc - origin.amount_total) < 0.01:
                         origin.l10n_do_fiscal_status = 'annulled'
                     else:
-                        origin.l10n_do_fiscal_status = 'credited'
+                        origin.l10n_do_fiscal_status = 'partial_credit'
+
+                    # Auditoría
+                    self.env['l10n_do_ncf.fiscal.audit'].log_credit_note(move, origin)
+
+                if move.l10n_do_is_debit_note and move.l10n_do_debit_origin_move_id:
+                    move.l10n_do_debit_origin_move_id.l10n_do_fiscal_status = 'debited'
+
+            # Generar NCF compras B11/B13
+            if move.move_type in ('in_invoice', 'in_refund'):
+                if move.l10n_do_fiscal_type in ('informal', 'minor_expense'):
+                    if not move.l10n_do_ncf_number:
+                        move._generate_ncf()
 
         return result
 
     # =========================================
-    # MÉTODOS DE VALIDACIÓN NCF PROVEEDOR
+    # MÉTODOS AUXILIARES
     # =========================================
 
     def action_validate_vendor_ncf(self):
-        """Validar NCF del proveedor - Validación local"""
         self.ensure_one()
-
         if not self.l10n_do_vendor_ncf:
-            raise UserError(_('Ingrese el NCF del proveedor primero.'))
-
-        if not self.partner_id or not self.partner_id.vat:
-            raise UserError(_('El proveedor debe tener un RNC configurado.'))
-
+            raise UserError(_('Ingrese NCF.'))
         ncf = self.l10n_do_vendor_ncf.strip().upper()
-
-        # Validar formato
         if not re.match(NCF_FULL_PATTERN, ncf):
-            raise UserError(_(
-                'Formato de NCF inválido.\n'
-                'Formatos válidos: B0100000001 (11 chars) o E310000000001 (13 chars)'
-            ))
+            raise UserError(_('Formato inválido.'))
+        self.write({'l10n_do_vendor_ncf': ncf, 'l10n_do_vendor_ncf_validated': True, 'l10n_do_vendor_ncf_validation_source': 'local'})
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': _('✓ Validado'), 'message': ncf, 'type': 'success'}}
 
-        # Marcar como validado localmente
-        self.write({
-            'l10n_do_vendor_ncf': ncf,
-            'l10n_do_vendor_ncf_validated': True,
-            'l10n_do_vendor_ncf_validation_source': 'local',
-        })
-
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': _('NCF Validado (Local)'),
-                'message': _(
-                    'El NCF %s ha sido validado localmente.\n'
-                    'Para validación oficial, consulte dgii.gov.do'
-                ) % ncf,
-                'type': 'success',
-                'sticky': False,
-            }
-        }
-
-    # =========================================
-    # RETENCIONES
-    # =========================================
-
-    l10n_do_retention_ids = fields.One2many(
-        'l10n_do_ncf.retention.line',
-        'move_id',
-        string='Retenciones'
-    )
-
-    l10n_do_total_isr_retention = fields.Monetary(
-        string='Retención ISR',
-        compute='_compute_retentions',
-        store=True
-    )
-
-    l10n_do_total_itbis_retention = fields.Monetary(
-        string='Retención ITBIS',
-        compute='_compute_retentions',
-        store=True
-    )
-
-    l10n_do_amount_to_pay = fields.Monetary(
-        string='Monto a Pagar',
-        compute='_compute_retentions',
-        store=True
-    )
-
-    @api.depends('l10n_do_retention_ids', 'l10n_do_retention_ids.retention_amount', 'amount_total')
-    def _compute_retentions(self):
-        """Calcular totales de retenciones"""
-        for move in self:
-            isr_total = 0.0
-            itbis_total = 0.0
-
-            for retention in move.l10n_do_retention_ids:
-                if retention.retention_type_id.retention_type == 'isr':
-                    isr_total += retention.retention_amount
-                elif retention.retention_type_id.retention_type == 'itbis':
-                    itbis_total += retention.retention_amount
-
-            move.l10n_do_total_isr_retention = isr_total
-            move.l10n_do_total_itbis_retention = itbis_total
-            move.l10n_do_amount_to_pay = move.amount_total - isr_total - itbis_total
+    def action_verify_informal_rnc(self):
+        self.ensure_one()
+        if self.partner_id and self.partner_id.vat:
+            raise UserError(_('Proveedor tiene RNC: %s') % self.partner_id.vat)
+        self.l10n_do_informal_rnc_verified = True
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': _('✓ Verificado'), 'message': _('Sin RNC'), 'type': 'success'}}
 
     def action_add_retention(self):
-        """Abrir wizard para agregar retención"""
         return {
-            'type': 'ir.actions.act_window',
-            'name': _('Agregar Retención'),
-            'res_model': 'l10n_do_ncf.retention.line',
-            'view_mode': 'form',
-            'target': 'new',
-            'context': {
-                'default_move_id': self.id,
-                'default_currency_id': self.currency_id.id,
-                'default_base_amount': self.amount_untaxed,
-            }
+            'type': 'ir.actions.act_window', 'name': _('Agregar Retención'),
+            'res_model': 'l10n_do_ncf.retention.wizard', 'view_mode': 'form', 'target': 'new',
+            'context': {'default_move_id': self.id, 'default_base_amount': self.amount_untaxed, 'default_itbis_amount': self.amount_tax}
         }
 
     def action_clear_retentions(self):
-        """Eliminar todas las retenciones"""
         self.l10n_do_retention_ids.unlink()
 
-    @api.onchange('l10n_do_vendor_ncf')
-    def _onchange_vendor_ncf(self):
-        """Limpiar y formatear NCF del proveedor"""
-        if self.l10n_do_vendor_ncf:
-            self.l10n_do_vendor_ncf = self.l10n_do_vendor_ncf.strip().upper()
+    def action_mark_reported_606(self):
+        """Marcar como reportado en 606"""
+        self.ensure_one()
+        period = self.invoice_date.strftime('%Y%m') if self.invoice_date else fields.Date.today().strftime('%Y%m')
+        self.write({
+            'l10n_do_reported_606': True,
+            'l10n_do_report_period': period,
+        })
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': _('✓ Marcado'), 'message': _('Reportado 606 período %s') % period, 'type': 'success'}}
+
+    def action_mark_reported_607(self):
+        """Marcar como reportado en 607"""
+        self.ensure_one()
+        period = self.invoice_date.strftime('%Y%m') if self.invoice_date else fields.Date.today().strftime('%Y%m')
+        self.write({
+            'l10n_do_reported_607': True,
+            'l10n_do_report_period': period,
+        })
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': _('✓ Marcado'), 'message': _('Reportado 607 período %s') % period, 'type': 'success'}}
+
+    def action_mark_retention_reported(self):
+        self.ensure_one()
+        self.l10n_do_retention_reported = True
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': _('✓ Marcada'), 'message': _('Retención reportada en 607.'), 'type': 'success'}}
 
     # =========================================
-    # NOTA: NO USAMOS _sql_constraints
-    # El índice único se crea en hooks.py
-    # para manejar correctamente valores NULL
+    # HELPERS REPORTES 606/607
     # =========================================
+
+    def _get_ncf_for_report(self):
+        self.ensure_one()
+        if self.move_type in ('out_invoice', 'out_refund'):
+            return self.l10n_do_ncf_number or ''
+        elif self.move_type in ('in_invoice', 'in_refund'):
+            if self.l10n_do_fiscal_type in ('informal', 'minor_expense'):
+                return self.l10n_do_ncf_number or ''
+            return self.l10n_do_vendor_ncf or ''
+        return ''
+
+    def _get_rnc_for_606(self):
+        self.ensure_one()
+        if self.l10n_do_fiscal_type == 'minor_expense':
+            return self.company_id.vat or ''
+        elif self.l10n_do_fiscal_type == 'informal':
+            return self.l10n_do_informal_provider_cedula or ''
+        return self.partner_id.vat or '' if self.partner_id else ''
+
+    def _get_606_line_data(self):
+        """Datos completos para línea 606"""
+        self.ensure_one()
+
+        ncf_modificado = ''
+        if self.move_type == 'in_refund':
+            ncf_modificado = self.l10n_do_ncf_origin or ''
+        elif self.l10n_do_is_vendor_debit_note:
+            ncf_modificado = self.l10n_do_vendor_debit_ncf_origin or ''
+
+        return {
+            'rnc': self._get_rnc_for_606(),
+            'tipo_id': '2' if self.l10n_do_informal_provider_cedula else '1',
+            'tipo_bienes_servicios': self.l10n_do_purchase_type or '02',
+            'ncf': self._get_ncf_for_report(),
+            'ncf_modificado': ncf_modificado,
+            'fecha': self.invoice_date,
+            'monto_bienes': self.l10n_do_606_monto_bienes or 0,
+            'monto_servicios': self.l10n_do_606_monto_servicios or 0,
+            'itbis_facturado': self.l10n_do_itbis_facturado or 0,
+            'itbis_retenido': self.l10n_do_itbis_retenido or 0,
+            'itbis_proporcionalidad': self.l10n_do_itbis_proporcionalidad or 0,
+            'itbis_costo': self.l10n_do_itbis_costo or 0,
+            'itbis_adelantar': self.l10n_do_itbis_adelantar or 0,
+            'itbis_percibido': self.l10n_do_itbis_percibido or 0,
+            'tipo_retencion_isr': self.l10n_do_tipo_retencion_isr or '',
+            'isr_retenido': self.l10n_do_isr_retenido or 0,
+            'isr_percibido': self.l10n_do_isr_percibido or 0,
+            'impuesto_selectivo': self.l10n_do_impuesto_selectivo or 0,
+            'otros_impuestos': self.l10n_do_otros_impuestos or 0,
+            'propina_legal': self.l10n_do_propina_legal or 0,
+            'forma_pago': self.l10n_do_forma_pago or '04',
+            'monto_dop': self.l10n_do_amount_dop or self.amount_total,
+            'tasa_cambio': self.l10n_do_exchange_rate or 1.0,
+            'es_nota_debito': self.l10n_do_is_vendor_debit_note,
+        }
+
+    def _get_607_lines_data(self):
+        """
+        Datos para 607 incluyendo segunda línea de retención posterior.
+        """
+        self.ensure_one()
+        lines = []
+
+        # Forma de pago detallada
+        main_line = {
+            'rnc_cedula': self.partner_id.vat or '',
+            'tipo_id': '1' if len(self.partner_id.vat or '') == 9 else '2',
+            'ncf': self.l10n_do_ncf_number or '',
+            'ncf_modificado': self.l10n_do_ncf_origin or '',
+            'fecha_comprobante': self.invoice_date,
+            'fecha_retencion': None,
+            'itbis_facturado': abs(self.amount_tax) if self.move_type == 'out_invoice' else 0,
+            'itbis_retenido_terceros': 0,
+            'monto_facturado': self.amount_total,
+            'isr_retenido_terceros': 0,
+            # Formas de pago detalladas
+            'efectivo': self.l10n_do_payment_cash or 0,
+            'cheque_transfer': self.l10n_do_payment_bank or 0,
+            'tarjeta': self.l10n_do_payment_card or 0,
+            'credito': self.l10n_do_payment_credit or 0,
+            'bonos': self.l10n_do_payment_bond or 0,
+            'permuta': self.l10n_do_payment_swap or 0,
+            'otras_formas': self.l10n_do_payment_other or 0,
+        }
+        lines.append(main_line)
+
+        # Segunda línea si hay retención posterior
+        if self.l10n_do_needs_607_retention_line:
+            retention_line = {
+                'rnc_cedula': self.partner_id.vat or '',
+                'tipo_id': '1' if len(self.partner_id.vat or '') == 9 else '2',
+                'ncf': self.l10n_do_ncf_number or '',
+                'ncf_modificado': '',
+                'fecha_comprobante': self.invoice_date,
+                'fecha_retencion': self.l10n_do_retention_date,
+                'itbis_facturado': 0,
+                'itbis_retenido_terceros': self.l10n_do_third_party_retention_itbis or 0,
+                'monto_facturado': 0,
+                'isr_retenido_terceros': self.l10n_do_third_party_retention_isr or 0,
+                'efectivo': 0,
+                'cheque_transfer': self.l10n_do_payment_bank or 0,
+                'tarjeta': 0,
+                'credito': 0,
+                'bonos': 0,
+                'permuta': 0,
+                'otras_formas': 0,
+            }
+            lines.append(retention_line)
+
+        return lines
