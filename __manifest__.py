@@ -1,4 +1,4 @@
-{
+﻿{
     'name': 'Republica Dominicana - Comprobantes Fiscales (NCF)',
     'version': '19.0.3.0.0',
     'summary': 'Gestion completa de NCF para Republica Dominicana segun normativa DGII',
@@ -116,7 +116,7 @@ Compatible con Odoo 19.
         ],
     },
     # Hooks de instalacion
-    'post_init_hook': 'post_init_hook',
+    # 'post_init_hook': 'post_init_hook',
     'uninstall_hook': 'uninstall_hook',
     'installable': True,
     'application': True,
