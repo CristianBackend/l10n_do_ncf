@@ -105,12 +105,11 @@
                 <separator/>
                 <filter name="today" string="Hoy" domain="[('validation_date', '&gt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
                 <filter name="last_24h" string="Ãšltimas 24h" domain="[('validation_date', '&gt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'))]"/>
-                <group expand="0" string="Agrupar por">
+                
                     <filter name="group_type" string="Tipo" context="{'group_by': 'validation_type'}"/>
                     <filter name="group_valid" string="VÃ¡lido" context="{'group_by': 'is_valid'}"/>
                     <filter name="group_date" string="Fecha" context="{'group_by': 'validation_date:day'}"/>
-                </group>
-            </search>
+                </search>
         </field>
     </record>
 
@@ -199,11 +198,10 @@
                 <separator/>
                 <filter name="bc_api" string="API BC" domain="[('source', '=', 'bc_api')]"/>
                 <filter name="manual" string="Manual" domain="[('source', '=', 'manual')]"/>
-                <group expand="0" string="Agrupar por">
+                
                     <filter name="group_month" string="Mes" context="{'group_by': 'date:month'}"/>
                     <filter name="group_currency" string="Moneda" context="{'group_by': 'currency_id'}"/>
-                </group>
-            </search>
+                </search>
         </field>
     </record>
 
@@ -317,12 +315,11 @@
                 <separator/>
                 <filter name="today" string="Hoy" domain="[('create_date', '&gt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
                 <filter name="this_week" string="Esta Semana" domain="[('create_date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
-                <group expand="0" string="Agrupar por">
+                
                     <filter name="group_type" string="Tipo Evento" context="{'group_by': 'event_type'}"/>
                     <filter name="group_user" string="Usuario" context="{'group_by': 'user_id'}"/>
                     <filter name="group_date" string="Fecha" context="{'group_by': 'create_date:day'}"/>
-                </group>
-            </search>
+                </search>
         </field>
     </record>
 
@@ -395,3 +392,4 @@
     </record>
 
 </odoo>
+
