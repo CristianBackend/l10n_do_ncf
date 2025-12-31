@@ -1,12 +1,13 @@
 {
     'name': 'Republica Dominicana - Comprobantes Fiscales (NCF)',
-    'version': '19.0.1.4.0',
+    'version': '19.0.1.5.0',
     'summary': 'Gestion de NCF para Republica Dominicana segun normativa DGII',
     'description': """
 Modulo de Comprobantes Fiscales para Republica Dominicana
 =========================================================
 
 Funcionalidades:
+----------------
 - Generacion automatica de NCF (B01, B02, B03, B04, B14, B15)
 - Validacion de RNC contra DGII
 - Reportes DGII (606, 607, 608, 609)
@@ -16,6 +17,20 @@ Funcionalidades:
 - Integracion con Ventas
 - Integracion con CRM
 - Sistema de licencias
+
+Configuracion Automatica:
+-------------------------
+Al instalar el modulo se configura automaticamente:
+- Impuestos ITBIS 18% (Ventas y Compras)
+- Impuestos Exentos (0%)
+- Impuestos por defecto de la compania
+- Etiqueta RNC/Cedula para Republica Dominicana
+
+Configuracion Manual Requerida:
+-------------------------------
+1. Licencia NCF: Configuracion > NCF > Licencia
+2. Secuencias NCF: Configuracion > NCF > Secuencias (rangos autorizados por DGII)
+3. POS: Configurar secuencias NCF en cada punto de venta
 
 Compatible con Odoo 19.
     """,
@@ -83,6 +98,9 @@ Compatible con Odoo 19.
             'l10n_do_ncf/static/src/xml/pos_receipt_ncf.xml',
         ],
     },
+    # Hooks de instalacion
+    'post_init_hook': 'post_init_hook',
+    'uninstall_hook': 'uninstall_hook',
     'installable': True,
     'application': True,
     'auto_install': False,
