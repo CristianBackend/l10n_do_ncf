@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # modulo: l10n_do_ncf
 # Archivo: models/account_move.py
-# VersiÃƒÆ’Ã‚Â³n: 19.0.3.0.0 - CASOS DE USO COMPLETOS
+# VersiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n: 19.0.3.0.0 - CASOS DE USO COMPLETOS
 # Compatibilidad: Odoo 19
 
 from odoo import models, fields, api, _
@@ -19,16 +19,16 @@ NCF_PATTERN = r'^B(01|02|03|04|11|12|13|14|15|16|17)\d{8}$'
 ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
 NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
 
-# LÃƒÆ’Ã‚Â­mites
+# LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­mites
 B11_MONTHLY_LIMIT = 50
-B13_TRANSACTION_LIMIT = 10000  # RD$ por transacciÃƒÆ’Ã‚Â³n
+B13_TRANSACTION_LIMIT = 10000  # RD$ por transacciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n
 
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
 
     # =========================================
-    # NCF ÃƒÆ’Ã…Â¡NICO
+    # NCF ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¡NICO
     # =========================================
 
     l10n_do_ncf_number = fields.Char(
@@ -53,7 +53,7 @@ class AccountMove(models.Model):
     l10n_do_fiscal_status = fields.Selection([
         ('draft', 'Borrador'),
         ('pending', 'Pendiente'),
-        ('valid', 'VÃƒÆ’Ã‚Â¡lido'),
+        ('valid', 'VÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lido'),
         ('partial_credit', 'Parcialmente Acreditado'),  # NUEVO
         ('annulled', 'Anulado'),
         ('credited', 'Con NC Total'),
@@ -72,8 +72,8 @@ class AccountMove(models.Model):
         help='Indica si este documento ya fue incluido en un reporte 607 enviado a DGII'
     )
     l10n_do_report_period = fields.Char(
-        string='PerÃƒÆ’Ã‚Â­odo Reportado',
-        help='PerÃƒÆ’Ã‚Â­odo fiscal en que se reportÃƒÆ’Ã‚Â³ (YYYYMM)'
+        string='PerÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo Reportado',
+        help='PerÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo fiscal en que se reportÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³ (YYYYMM)'
     )
 
     # =========================================
@@ -86,9 +86,9 @@ class AccountMove(models.Model):
         domain="[('partner_id', '=', partner_id), ('move_type', '=', 'out_invoice'), ('state', '=', 'posted')]"
     )
     l10n_do_credit_note_reason = fields.Selection([
-        ('01', '01 - AnulaciÃƒÆ’Ã‚Â³n total'),
-        ('02', '02 - CorrecciÃƒÆ’Ã‚Â³n de errores'),
-        ('03', '03 - DevoluciÃƒÆ’Ã‚Â³n de bienes'),
+        ('01', '01 - AnulaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n total'),
+        ('02', '02 - CorrecciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n de errores'),
+        ('03', '03 - DevoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n de bienes'),
         ('04', '04 - Descuento posterior'),
         ('05', '05 - Ajuste de precio'),
         ('06', '06 - Otros'),
@@ -102,8 +102,8 @@ class AccountMove(models.Model):
         currency_field='currency_id'
     )
 
-    # B03 Nota DÃƒÆ’Ã‚Â©bito
-    l10n_do_is_debit_note = fields.Boolean(string='Es Nota de DÃƒÆ’Ã‚Â©bito', default=False)
+    # B03 Nota DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©bito
+    l10n_do_is_debit_note = fields.Boolean(string='Es Nota de DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©bito', default=False)
     l10n_do_debit_note_reason = fields.Selection([
         ('01', '01 - Intereses por mora'),
         ('02', '02 - Gastos adicionales'),
@@ -134,7 +134,7 @@ class AccountMove(models.Model):
         ('informal', 'B11 - Compra Informal'),
         ('minor_expense', 'B13 - Gasto Menor'),
         ('exterior', 'B17 - Pago Exterior'),
-        ('special', 'B14 - RÃƒÆ’Ã‚Â©gimen Especial'),
+        ('special', 'B14 - RÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©gimen Especial'),
         ('governmental', 'B15 - Gubernamental'),
     ], string='Tipo Fiscal', default='fiscal', tracking=True)
 
@@ -143,12 +143,12 @@ class AccountMove(models.Model):
     # =========================================
 
     l10n_do_informal_provider_name = fields.Char(string='Nombre Proveedor Informal')
-    l10n_do_informal_provider_cedula = fields.Char(string='CÃƒÆ’Ã‚Â©dula Proveedor')
+    l10n_do_informal_provider_cedula = fields.Char(string='CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dula Proveedor')
     l10n_do_informal_rnc_verified = fields.Boolean(default=False)
 
     l10n_do_informal_service_type = fields.Selection([
         ('professional', 'Servicios Profesionales (ISR 10%)'),
-        ('technical', 'Servicios TÃƒÆ’Ã‚Â©cnicos (ISR 2%)'),
+        ('technical', 'Servicios TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cnicos (ISR 2%)'),
         ('goods', 'Bienes (ISR 2%)'),
     ], string='Tipo Servicio Informal', default='professional')
 
@@ -161,7 +161,7 @@ class AccountMove(models.Model):
         ('parking', 'Estacionamiento'),
         ('transport', 'Transporte'),
         ('consumables', 'Consumibles'),
-        ('meals', 'AlimentaciÃƒÆ’Ã‚Â³n'),
+        ('meals', 'AlimentaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n'),
         ('other', 'Otros'),
     ], string='Tipo Gasto Menor')
     l10n_do_minor_expense_employee = fields.Char(string='Empleado')
@@ -172,9 +172,9 @@ class AccountMove(models.Model):
     # =========================================
 
     l10n_do_exterior_service_type = fields.Selection([
-        ('01', '01 - Servicios tÃƒÆ’Ã‚Â©cnicos'),
+        ('01', '01 - Servicios tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cnicos'),
         ('02', '02 - Servicios profesionales'),
-        ('03', '03 - RegalÃƒÆ’Ã‚Â­as'),
+        ('03', '03 - RegalÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­as'),
         ('04', '04 - Intereses'),
         ('05', '05 - Dividendos'),
         ('06', '06 - Otros'),
@@ -211,7 +211,7 @@ class AccountMove(models.Model):
         string='Tarjeta', currency_field='currency_id', default=0.0
     )
     l10n_do_payment_credit = fields.Monetary(
-        string='CrÃƒÆ’Ã‚Â©dito', currency_field='currency_id', default=0.0
+        string='CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dito', currency_field='currency_id', default=0.0
     )
     l10n_do_payment_bond = fields.Monetary(
         string='Bonos/Certificados', currency_field='currency_id', default=0.0
@@ -227,33 +227,33 @@ class AccountMove(models.Model):
         ('01', '01 - Efectivo'),
         ('02', '02 - Cheque/Transferencia'),
         ('03', '03 - Tarjeta'),
-        ('04', '04 - CrÃƒÆ’Ã‚Â©dito'),
+        ('04', '04 - CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dito'),
         ('05', '05 - Permuta'),
-        ('06', '06 - Nota CrÃƒÆ’Ã‚Â©dito'),
+        ('06', '06 - Nota CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dito'),
         ('07', '07 - Mixto'),
     ], string='Forma Pago', compute='_compute_forma_pago', store=True)
 
     # =========================================
-    # RETENCIÃƒÆ’Ã¢â‚¬Å“N POSTERIOR (607)
+    # RETENCIÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œN POSTERIOR (607)
     # =========================================
 
-    l10n_do_is_credit_sale = fields.Boolean(string='Venta a CrÃƒÆ’Ã‚Â©dito', default=False)
-    l10n_do_retention_date = fields.Date(string='Fecha RetenciÃƒÆ’Ã‚Â³n')
+    l10n_do_is_credit_sale = fields.Boolean(string='Venta a CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dito', default=False)
+    l10n_do_retention_date = fields.Date(string='Fecha RetenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n')
     l10n_do_third_party_retention_itbis = fields.Monetary(
         string='ITBIS Retenido por Tercero', currency_field='currency_id', default=0.0
     )
     l10n_do_third_party_retention_isr = fields.Monetary(
         string='ISR Retenido por Tercero', currency_field='currency_id', default=0.0
     )
-    l10n_do_retention_reported = fields.Boolean(string='RetenciÃƒÆ’Ã‚Â³n Reportada 607', default=False)
+    l10n_do_retention_reported = fields.Boolean(string='RetenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n Reportada 607', default=False)
 
     l10n_do_needs_607_retention_line = fields.Boolean(
-        string='Requiere LÃƒÆ’Ã‚Â­nea RetenciÃƒÆ’Ã‚Â³n 607',
+        string='Requiere LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea RetenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n 607',
         compute='_compute_needs_607_retention', store=True
     )
 
     # =========================================
-    # CLASIFICACIÃƒÆ’Ã¢â‚¬Å“N 606 - BIENES/SERVICIOS AUTO
+    # CLASIFICACIÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œN 606 - BIENES/SERVICIOS AUTO
     # =========================================
 
     l10n_do_expense_type = fields.Selection([
@@ -261,12 +261,12 @@ class AccountMove(models.Model):
         ('02', '02 - Gastos por Trabajos/Servicios'),
         ('03', '03 - Arrendamientos'),
         ('04', '04 - Gastos Activos Fijos'),
-        ('05', '05 - Gastos RepresentaciÃƒÆ’Ã‚Â³n'),
+        ('05', '05 - Gastos RepresentaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n'),
         ('06', '06 - Otras Deducciones'),
         ('07', '07 - Gastos Financieros'),
         ('08', '08 - Gastos Extraordinarios'),
         ('09', '09 - Costo de Venta'),
-        ('10', '10 - AdquisiciÃƒÆ’Ã‚Â³n Activos'),
+        ('10', '10 - AdquisiciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n Activos'),
         ('11', '11 - Gastos de Seguros'),
     ], string='Tipo Gasto', default='02')
 
@@ -275,16 +275,16 @@ class AccountMove(models.Model):
         ('02', '02 - Trabajos/servicios'),
         ('03', '03 - Arrendamientos'),
         ('04', '04 - Activos fijos'),
-        ('05', '05 - RepresentaciÃƒÆ’Ã‚Â³n'),
+        ('05', '05 - RepresentaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n'),
         ('06', '06 - Otras deducciones'),
         ('07', '07 - Financieros'),
         ('08', '08 - Extraordinarios'),
         ('09', '09 - Costo venta'),
-        ('10', '10 - AdquisiciÃƒÆ’Ã‚Â³n activos'),
+        ('10', '10 - AdquisiciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n activos'),
         ('11', '11 - Seguros'),
     ], string='Tipo Compra (606)', default='02')
 
-    # NUEVO: Split automÃƒÆ’Ã‚Â¡tico bienes/servicios
+    # NUEVO: Split automÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡tico bienes/servicios
     l10n_do_606_monto_bienes = fields.Monetary(
         string='Monto Bienes', currency_field='currency_id',
         compute='_compute_606_split_bienes_servicios', store=True, readonly=False
@@ -326,12 +326,12 @@ class AccountMove(models.Model):
         ('01', '01 - Alquileres'),
         ('02', '02 - Honorarios'),
         ('03', '03 - Otras rentas'),
-        ('04', '04 - PresunciÃƒÆ’Ã‚Â³n renta'),
+        ('04', '04 - PresunciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n renta'),
         ('05', '05 - Intereses PJ'),
         ('06', '06 - Intereses PF'),
         ('07', '07 - Proveedores Estado'),
-        ('08', '08 - Juegos telefÃƒÆ’Ã‚Â³nicos'),
-    ], string='Tipo RetenciÃƒÆ’Ã‚Â³n ISR')
+        ('08', '08 - Juegos telefÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³nicos'),
+    ], string='Tipo RetenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n ISR')
 
     l10n_do_isr_retenido = fields.Monetary(
         string='ISR Retenido (col 18)', currency_field='currency_id',
@@ -362,7 +362,7 @@ class AccountMove(models.Model):
     )
 
     # =========================================
-    # CÃƒÆ’Ã¢â‚¬Å“MPUTOS MULTIMONEDA
+    # CÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œMPUTOS MULTIMONEDA
     # =========================================
 
     @api.depends('company_id')
@@ -381,7 +381,7 @@ class AccountMove(models.Model):
                 move.l10n_do_amount_dop = move.amount_total
 
     # =========================================
-    # CÃƒÆ’Ã¢â‚¬Å“MPUTO MONTO ACREDITADO
+    # CÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œMPUTO MONTO ACREDITADO
     # =========================================
 
     @api.depends('state')
@@ -398,13 +398,13 @@ class AccountMove(models.Model):
                 move.l10n_do_credited_amount = 0
 
     # =========================================
-    # CÃƒÆ’Ã¢â‚¬Å“MPUTO SPLIT BIENES/SERVICIOS AUTOMÃƒÆ’Ã‚ÂTICO
+    # CÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œMPUTO SPLIT BIENES/SERVICIOS AUTOMÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂTICO
     # =========================================
 
     @api.depends('invoice_line_ids', 'invoice_line_ids.product_id', 'invoice_line_ids.price_subtotal')
     def _compute_606_split_bienes_servicios(self):
         """
-        Split automÃƒÆ’Ã‚Â¡tico basado en tipo de producto.
+        Split automÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡tico basado en tipo de producto.
         product.detailed_type:
         - 'consu' / 'product' = Bien
         - 'service' = Servicio
@@ -434,7 +434,7 @@ class AccountMove(models.Model):
             move.l10n_do_606_monto_servicios = servicios
 
     # =========================================
-    # CÃƒÆ’Ã¢â‚¬Å“MPUTOS 606
+    # CÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œMPUTOS 606
     # =========================================
 
     @api.depends('l10n_do_fiscal_type', 'amount_tax')
@@ -514,7 +514,7 @@ class AccountMove(models.Model):
             elif len(active_payments) == 1:
                 move.l10n_do_forma_pago = active_payments[0]
             elif move.payment_state == 'not_paid':
-                move.l10n_do_forma_pago = '04'  # CrÃƒÆ’Ã‚Â©dito
+                move.l10n_do_forma_pago = '04'  # CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dito
             elif move.payment_state == 'paid':
                 move.l10n_do_forma_pago = '02'  # Transferencia por defecto
             else:
@@ -532,7 +532,7 @@ class AccountMove(models.Model):
             )
 
     # =========================================
-    # CÃƒÆ’Ã¢â‚¬Å“MPUTO TIPO NCF
+    # CÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œMPUTO TIPO NCF
     # =========================================
 
     @api.depends('move_type', 'partner_id', 'partner_id.vat', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
@@ -557,12 +557,12 @@ class AccountMove(models.Model):
             move.l10n_do_ncf_type_id = ncf_type.id if ncf_type else False
 
     # =========================================
-    # VALIDACIONES CÃƒÆ’Ã¢â‚¬Â°DULA RD (NUEVO)
+    # VALIDACIONES CÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°DULA RD (NUEVO)
     # =========================================
 
     def _validate_cedula_rd(self, cedula):
         """
-        Validar cÃƒÆ’Ã‚Â©dula dominicana con algoritmo Luhn modificado.
+        Validar cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dula dominicana con algoritmo Luhn modificado.
         """
         if not cedula:
             return False
@@ -586,7 +586,7 @@ class AccountMove(models.Model):
 
     def _validate_rnc_rd(self, rnc):
         """
-        Validar RNC dominicano con MÃƒÆ’Ã‚Â³dulo 11.
+        Validar RNC dominicano con MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³dulo 11.
         """
         if not rnc:
             return False
@@ -611,16 +611,16 @@ class AccountMove(models.Model):
 
     @api.constrains('l10n_do_informal_provider_cedula')
     def _check_cedula_format(self):
-        """Validar formato de cÃƒÆ’Ã‚Â©dula para B11"""
+        """Validar formato de cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dula para B11"""
         for move in self:
             if move.l10n_do_fiscal_type == 'informal' and move.l10n_do_informal_provider_cedula:
                 cedula = move.l10n_do_informal_provider_cedula
                 if not self._validate_cedula_rd(cedula):
                     raise ValidationError(_(
-                        'CÃƒÆ’Ã‚Â©dula invÃƒÆ’Ã‚Â¡lida: %s\n\n'
+                        'CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dula invÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lida: %s\n\n'
                         'Verifique que:\n'
-                        '- Tenga 11 dÃƒÆ’Ã‚Â­gitos\n'
-                        '- El dÃƒÆ’Ã‚Â­gito verificador sea correcto'
+                        '- Tenga 11 dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­gitos\n'
+                        '- El dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­gito verificador sea correcto'
                     ) % cedula)
 
     @api.constrains('l10n_do_vendor_ncf', 'company_id', 'partner_id')
@@ -641,7 +641,7 @@ class AccountMove(models.Model):
 
             if duplicates:
                 raise ValidationError(_(
-                    'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â NCF DUPLICADO\n\n'
+                    'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â NCF DUPLICADO\n\n'
                     'El NCF %s ya existe en:\n'
                     '- Documento: %s\n'
                     '- Proveedor: %s\n'
@@ -654,7 +654,7 @@ class AccountMove(models.Model):
             if move.l10n_do_vendor_ncf and move.move_type in ('in_invoice', 'in_refund'):
                 ncf = move.l10n_do_vendor_ncf.strip().upper()
                 if not re.match(NCF_FULL_PATTERN, ncf):
-                    raise ValidationError(_('NCF proveedor invÃƒÆ’Ã‚Â¡lido: %s') % ncf)
+                    raise ValidationError(_('NCF proveedor invÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lido: %s') % ncf)
 
     @api.constrains('l10n_do_ncf_origin', 'move_type')
     def _check_ncf_origin(self):
@@ -697,16 +697,16 @@ class AccountMove(models.Model):
         self.ensure_one()
         if self.l10n_do_reported_606 or self.l10n_do_reported_607:
             raise UserError(_(
-                'ÃƒÂ°Ã…Â¸Ã…Â¡Ã‚Â« DOCUMENTO BLOQUEADO\n\n'
-                'Este documento ya fue reportado a DGII en el perÃƒÆ’Ã‚Â­odo %s.\n\n'
+                'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â« DOCUMENTO BLOQUEADO\n\n'
+                'Este documento ya fue reportado a DGII en el perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo %s.\n\n'
                 'No puede ser modificado ni cancelado.\n\n'
                 'Para corregir errores debe:\n'
-                '- Emitir Nota de CrÃƒÆ’Ã‚Â©dito (NC)\n'
-                '- O realizar ajuste en perÃƒÆ’Ã‚Â­odo siguiente'
+                '- Emitir Nota de CrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dito (NC)\n'
+                '- O realizar ajuste en perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo siguiente'
             ) % (self.l10n_do_report_period or 'anterior'))
 
     def button_cancel(self):
-        """Override para bloquear cancelaciÃƒÆ’Ã‚Â³n post-reporte"""
+        """Override para bloquear cancelaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n post-reporte"""
         for move in self:
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
@@ -720,12 +720,12 @@ class AccountMove(models.Model):
         return super().button_draft()
 
     def unlink(self):
-        """Override para bloquear eliminaciÃƒÆ’Ã‚Â³n post-reporte"""
+        """Override para bloquear eliminaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n post-reporte"""
         for move in self:
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 raise UserError(_(
-                    'ÃƒÂ°Ã…Â¸Ã…Â¡Ã‚Â« No puede eliminar documentos reportados a DGII.\n'
-                    'Documento: %s | PerÃƒÆ’Ã‚Â­odo: %s'
+                    'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â« No puede eliminar documentos reportados a DGII.\n'
+                    'Documento: %s | PerÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo: %s'
                 ) % (move.name, move.l10n_do_report_period or 'N/A'))
         return super().unlink()
 
@@ -743,7 +743,7 @@ class AccountMove(models.Model):
             vat = self.partner_id.vat.replace('-', '').strip()
             if vat and len(vat) >= 9:
                 raise UserError(_(
-                    'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â NO puede usar B11 para proveedor con RNC.\n\n'
+                    'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â NO puede usar B11 para proveedor con RNC.\n\n'
                     'Proveedor: %s\nRNC: %s\n\n'
                     'Use "Compra Fiscal" y solicite NCF.'
                 ) % (self.partner_id.name, self.partner_id.vat))
@@ -781,15 +781,15 @@ class AccountMove(models.Model):
             for tax in line.tax_ids:
                 if tax.amount > 0 and 'itbis' in (tax.name or '').lower():
                     raise UserError(_(
-                        'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â B13 (Gasto Menor) no permite ITBIS acreditable.\n\n'
-                        'LÃƒÆ’Ã‚Â­nea: %s\nImpuesto: %s\n\n'
+                        'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â B13 (Gasto Menor) no permite ITBIS acreditable.\n\n'
+                        'LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea: %s\nImpuesto: %s\n\n'
                         'Use impuesto 0%% o quite el impuesto ITBIS.'
                     ) % (line.name, tax.name))
 
-        # Validar lÃƒÆ’Ã‚Â­mite de monto B13
+        # Validar lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­mite de monto B13
         if self.amount_total > B13_TRANSACTION_LIMIT:
             raise UserError(_(
-                'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â B13 excede lÃƒÆ’Ã‚Â­mite de RD$ %s por transacciÃƒÆ’Ã‚Â³n.\n\n'
+                'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â B13 excede lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­mite de RD$ %s por transacciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n.\n\n'
                 'Monto: RD$ %s\n\n'
                 'Use "Compra Fiscal" para montos mayores.'
             ) % (B13_TRANSACTION_LIMIT, self.amount_total))
@@ -805,15 +805,15 @@ class AccountMove(models.Model):
         # Verificar que no tenga ITBIS
         if self.amount_tax > 0:
             raise UserError(_(
-                'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â B17 (Pago Exterior) no debe tener ITBIS.\n\n'
-                'Los pagos al exterior estÃƒÆ’Ã‚Â¡n exentos de ITBIS.\n'
-                'Use impuesto 0%% y aplique retenciÃƒÆ’Ã‚Â³n ISR 27%%.'
+                'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â B17 (Pago Exterior) no debe tener ITBIS.\n\n'
+                'Los pagos al exterior estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n exentos de ITBIS.\n'
+                'Use impuesto 0%% y aplique retenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n ISR 27%%.'
             ))
 
         # Verificar ISR 27%
         has_isr_27 = any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids)
         if not has_isr_27:
-            raise UserError(_('B17 requiere retenciÃƒÆ’Ã‚Â³n ISR 27%.'))
+            raise UserError(_('B17 requiere retenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n ISR 27%.'))
 
         return True
 
@@ -839,13 +839,13 @@ class AccountMove(models.Model):
         if not sequence:
             raise UserError(_('No hay secuencia activa para %s.') % ncf_type.name)
 
-        if sequence.current_number > sequence.final_number:
+        if sequence.current_number > sequence.range_to:
             # NUEVO: Buscar secuencia alternativa
             alt_sequence = self.env['l10n_do_ncf.sequence'].search([
                 ('ncf_type_id', '=', ncf_type.id),
                 ('company_id', '=', self.company_id.id),
                 ('state', '=', 'active'),
-                ('current_number', '<=', 'final_number'),
+                ('current_number', '<=', 'range_to'),
                 ('id', '!=', sequence.id),
             ], limit=1)
 
@@ -854,8 +854,8 @@ class AccountMove(models.Model):
                 _logger.info('NCF: Usando secuencia alternativa %s', sequence.name)
             else:
                 raise UserError(_(
-                    'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â SECUENCIA AGOTADA\n\n'
-                    'La secuencia %s estÃƒÆ’Ã‚Â¡ agotada y no hay alternativas.\n\n'
+                    'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â SECUENCIA AGOTADA\n\n'
+                    'La secuencia %s estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ agotada y no hay alternativas.\n\n'
                     'Solicite nuevos rangos NCF a DGII.'
                 ) % sequence.name)
 
@@ -881,9 +881,9 @@ class AccountMove(models.Model):
         })
         sequence.sudo().write({'current_number': sequence.current_number + 1})
 
-        # AuditorÃƒÆ’Ã‚Â­a
+        # AuditorÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a
         self.env['l10n_do_ncf.fiscal.audit'].log_event(
-            'ncf_generated', move=self, description='NCF generado automÃƒÆ’Ã‚Â¡ticamente'
+            'ncf_generated', move=self, description='NCF generado automÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ticamente'
         )
 
         _logger.info('NCF generado: %s | Doc: %s', ncf, self.name)
@@ -907,7 +907,7 @@ class AccountMove(models.Model):
             self._apply_b17_retentions()
 
     def _apply_b11_retentions(self):
-        """Retenciones B11: 100% ITBIS + ISR segÃƒÆ’Ã‚Âºn tipo servicio"""
+        """Retenciones B11: 100% ITBIS + ISR segÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºn tipo servicio"""
         retentions = []
         base = self.amount_untaxed or 0
         itbis = self.amount_tax or 0
@@ -987,7 +987,7 @@ class AccountMove(models.Model):
             if b02_invoices:
                 return {
                     'warning': {
-                        'title': _('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Cliente con RNC nuevo'),
+                        'title': _('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Cliente con RNC nuevo'),
                         'message': _(
                             'Este cliente tiene facturas B02 anteriores.\n\n'
                             'Ahora tiene RNC: %s\n\n'
@@ -1076,7 +1076,7 @@ class AccountMove(models.Model):
 
         return result
     # =========================================
-    # MÃƒÆ’Ã¢â‚¬Â°TODOS AUXILIARES
+    # MÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°TODOS AUXILIARES
     # =========================================
 
     def action_validate_vendor_ncf(self):
@@ -1085,10 +1085,10 @@ class AccountMove(models.Model):
             raise UserError(_('Ingrese NCF.'))
         ncf = self.l10n_do_vendor_ncf.strip().upper()
         if not re.match(NCF_FULL_PATTERN, ncf):
-            raise UserError(_('Formato invÃƒÆ’Ã‚Â¡lido.'))
+            raise UserError(_('Formato invÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lido.'))
         self.write({'l10n_do_vendor_ncf': ncf, 'l10n_do_vendor_ncf_validated': True, 'l10n_do_vendor_ncf_validation_source': 'local'})
         return {'type': 'ir.actions.client', 'tag': 'display_notification',
-                'params': {'title': _('ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Validado'), 'message': ncf, 'type': 'success'}}
+                'params': {'title': _('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Validado'), 'message': ncf, 'type': 'success'}}
 
     def action_verify_informal_rnc(self):
         self.ensure_one()
@@ -1096,11 +1096,11 @@ class AccountMove(models.Model):
             raise UserError(_('Proveedor tiene RNC: %s') % self.partner_id.vat)
         self.l10n_do_informal_rnc_verified = True
         return {'type': 'ir.actions.client', 'tag': 'display_notification',
-                'params': {'title': _('ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Verificado'), 'message': _('Sin RNC'), 'type': 'success'}}
+                'params': {'title': _('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Verificado'), 'message': _('Sin RNC'), 'type': 'success'}}
 
     def action_add_retention(self):
         return {
-            'type': 'ir.actions.act_window', 'name': _('Agregar RetenciÃƒÆ’Ã‚Â³n'),
+            'type': 'ir.actions.act_window', 'name': _('Agregar RetenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n'),
             'res_model': 'l10n_do_ncf.retention.wizard', 'view_mode': 'form', 'target': 'new',
             'context': {'default_move_id': self.id, 'default_base_amount': self.amount_untaxed, 'default_itbis_amount': self.amount_tax}
         }
@@ -1117,7 +1117,7 @@ class AccountMove(models.Model):
             'l10n_do_report_period': period,
         })
         return {'type': 'ir.actions.client', 'tag': 'display_notification',
-                'params': {'title': _('ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Marcado'), 'message': _('Reportado 606 perÃƒÆ’Ã‚Â­odo %s') % period, 'type': 'success'}}
+                'params': {'title': _('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Marcado'), 'message': _('Reportado 606 perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo %s') % period, 'type': 'success'}}
 
     def action_mark_reported_607(self):
         """Marcar como reportado en 607"""
@@ -1128,13 +1128,13 @@ class AccountMove(models.Model):
             'l10n_do_report_period': period,
         })
         return {'type': 'ir.actions.client', 'tag': 'display_notification',
-                'params': {'title': _('ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Marcado'), 'message': _('Reportado 607 perÃƒÆ’Ã‚Â­odo %s') % period, 'type': 'success'}}
+                'params': {'title': _('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Marcado'), 'message': _('Reportado 607 perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo %s') % period, 'type': 'success'}}
 
     def action_mark_retention_reported(self):
         self.ensure_one()
         self.l10n_do_retention_reported = True
         return {'type': 'ir.actions.client', 'tag': 'display_notification',
-                'params': {'title': _('ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Marcada'), 'message': _('RetenciÃƒÆ’Ã‚Â³n reportada en 607.'), 'type': 'success'}}
+                'params': {'title': _('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Marcada'), 'message': _('RetenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n reportada en 607.'), 'type': 'success'}}
 
     # =========================================
     # HELPERS REPORTES 606/607
@@ -1159,7 +1159,7 @@ class AccountMove(models.Model):
         return self.partner_id.vat or '' if self.partner_id else ''
 
     def _get_606_line_data(self):
-        """Datos completos para lÃƒÆ’Ã‚Â­nea 606"""
+        """Datos completos para lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea 606"""
         self.ensure_one()
 
         ncf_modificado = ''
@@ -1197,7 +1197,7 @@ class AccountMove(models.Model):
 
     def _get_607_lines_data(self):
         """
-        Datos para 607 incluyendo segunda lÃƒÆ’Ã‚Â­nea de retenciÃƒÆ’Ã‚Â³n posterior.
+        Datos para 607 incluyendo segunda lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea de retenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n posterior.
         """
         self.ensure_one()
         lines = []
@@ -1225,7 +1225,7 @@ class AccountMove(models.Model):
         }
         lines.append(main_line)
 
-        # Segunda lÃƒÆ’Ã‚Â­nea si hay retenciÃƒÆ’Ã‚Â³n posterior
+        # Segunda lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea si hay retenciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n posterior
         if self.l10n_do_needs_607_retention_line:
             retention_line = {
                 'rnc_cedula': self.partner_id.vat or '',
