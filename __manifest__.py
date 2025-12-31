@@ -116,9 +116,10 @@ Compatible con Odoo 19.
         ],
     },
     # Hooks de instalacion
-    # 'post_init_hook': 'post_init_hook',
+    # # 'post_init_hook': 'post_init_hook',
     'uninstall_hook': 'uninstall_hook',
     'installable': True,
     'application': True,
     'auto_install': False,
 }
+
