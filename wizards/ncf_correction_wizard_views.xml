@@ -1,20 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
     <!-- ============================================= -->
-    <!-- WIZARD CORRECCIÓN RNC (B02 → B01)            -->
+    <!-- WIZARD CORRECCIÃ“N RNC (B02 â†’ B01)            -->
     <!-- ============================================= -->
 
     <record id="view_ncf_rnc_correction_wizard_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.rnc.correction.wizard.form</field>
         <field name="model">l10n_do_ncf.rnc.correction.wizard</field>
         <field name="arch" type="xml">
-            <form string="Corrección RNC - B02 a B01">
+            <form string="CorrecciÃ³n RNC - B02 a B01">
                 <div class="alert alert-info">
-                    <strong>📋 Este wizard le ayuda a corregir facturas B02 cuando el cliente obtiene RNC.</strong>
+                    <strong>ðŸ“‹ Este wizard le ayuda a corregir facturas B02 cuando el cliente obtiene RNC.</strong>
                     <p class="mt-2 mb-0">
-                        Se generará automáticamente:<br/>
-                        1. Nota de Crédito (B04) a la factura B02 original<br/>
+                        Se generarÃ¡ automÃ¡ticamente:<br/>
+                        1. Nota de CrÃ©dito (B04) a la factura B02 original<br/>
                         2. Nueva factura B01 con el RNC del cliente
                     </p>
                 </div>
@@ -28,10 +28,10 @@
                         <field name="partner_id" readonly="1"/>
                         <field name="partner_vat"/>
                         <div class="alert alert-success" invisible="not partner_vat">
-                            <strong>✓ Cliente tiene RNC</strong>
+                            <strong>âœ“ Cliente tiene RNC</strong>
                         </div>
                         <div class="alert alert-danger" invisible="partner_vat">
-                            <strong>✗ Cliente sin RNC - Asigne primero</strong>
+                            <strong>âœ— Cliente sin RNC - Asigne primero</strong>
                         </div>
                     </group>
                 </group>
@@ -43,7 +43,7 @@
 
                 <footer>
                     <button name="action_validate" string="Validar" type="object" class="btn-secondary"/>
-                    <button name="action_process" string="Procesar Corrección" type="object" class="btn-primary"
+                    <button name="action_process" string="Procesar CorrecciÃ³n" type="object" class="btn-primary"
                             invisible="not partner_vat"/>
                     <button string="Cancelar" class="btn-secondary" special="cancel"/>
                 </footer>
@@ -59,19 +59,19 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- WIZARD CORRECCIÓN RETENCIÓN                  -->
+    <!-- WIZARD CORRECCIÃ“N RETENCIÃ“N                  -->
     <!-- ============================================= -->
 
     <record id="view_ncf_retention_correction_wizard_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.retention.correction.wizard.form</field>
         <field name="model">l10n_do_ncf.retention.correction.wizard</field>
         <field name="arch" type="xml">
-            <form string="Corrección de Retención">
+            <form string="CorrecciÃ³n de RetenciÃ³n">
                 <div class="alert alert-warning">
-                    <strong>⚠️ Corrección de retención mal aplicada</strong>
+                    <strong>âš ï¸ CorrecciÃ³n de retenciÃ³n mal aplicada</strong>
                     <p class="mt-2 mb-0">
                         Use este wizard cuando detecte un error en retenciones ya reportadas.<br/>
-                        La corrección se aplicará en el próximo período fiscal.
+                        La correcciÃ³n se aplicarÃ¡ en el prÃ³ximo perÃ­odo fiscal.
                     </p>
                 </div>
 
@@ -81,19 +81,19 @@
                         <field name="original_isr"/>
                         <field name="original_itbis"/>
                     </group>
-                    <group string="Corrección">
+                    <group string="CorrecciÃ³n">
                         <field name="correction_type"/>
                         <field name="correction_amount"/>
                         <field name="apply_next_period"/>
                     </group>
                 </group>
 
-                <group string="Motivo de la Corrección">
-                    <field name="reason" nolabel="1" placeholder="Explique el motivo de la corrección..."/>
+                <group string="Motivo de la CorrecciÃ³n">
+                    <field name="reason" nolabel="1" placeholder="Explique el motivo de la correcciÃ³n..."/>
                 </group>
 
                 <footer>
-                    <button name="action_process" string="Registrar Corrección" type="object" class="btn-primary"/>
+                    <button name="action_process" string="Registrar CorrecciÃ³n" type="object" class="btn-primary"/>
                     <button string="Cancelar" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>
@@ -101,31 +101,31 @@
     </record>
 
     <record id="action_ncf_retention_correction_wizard" model="ir.actions.act_window">
-        <field name="name">Corregir Retención</field>
+        <field name="name">Corregir RetenciÃ³n</field>
         <field name="res_model">l10n_do_ncf.retention.correction.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>
 
     <!-- ============================================= -->
-    <!-- WIZARD NC MULTI-PERÍODO 607                  -->
+    <!-- WIZARD NC MULTI-PERÃODO 607                  -->
     <!-- ============================================= -->
 
     <record id="view_ncf_607_multiperiod_wizard_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.607.multiperiod.wizard.form</field>
         <field name="model">l10n_do_ncf.607.multiperiod.wizard</field>
         <field name="arch" type="xml">
-            <form string="NC Multi-período 607">
+            <form string="NC Multi-perÃ­odo 607">
                 <div class="alert alert-info" invisible="not is_different_period">
-                    <strong>📋 Nota de Crédito de período diferente</strong>
+                    <strong>ðŸ“‹ Nota de CrÃ©dito de perÃ­odo diferente</strong>
                     <p class="mt-2 mb-0">
-                        La NC y la factura original son de períodos fiscales diferentes.<br/>
+                        La NC y la factura original son de perÃ­odos fiscales diferentes.<br/>
                         Esto es normal y permitido por DGII.
                     </p>
                 </div>
 
                 <group>
-                    <group string="Nota de Crédito">
+                    <group string="Nota de CrÃ©dito">
                         <field name="credit_note_id" options="{'no_create': True}"/>
                         <field name="credit_period"/>
                     </group>
@@ -138,10 +138,10 @@
                 <group>
                     <field name="is_different_period" invisible="1"/>
                     <div class="alert alert-success" invisible="is_different_period">
-                        <strong>✓ Mismo período fiscal</strong> - Se reportan juntas en 607.
+                        <strong>âœ“ Mismo perÃ­odo fiscal</strong> - Se reportan juntas en 607.
                     </div>
                     <div class="alert alert-warning" invisible="not is_different_period">
-                        <strong>⚠️ Períodos diferentes</strong> - La NC va al 607 del período <field name="credit_period" readonly="1" class="fw-bold"/>
+                        <strong>âš ï¸ PerÃ­odos diferentes</strong> - La NC va al 607 del perÃ­odo <field name="credit_period" readonly="1" class="fw-bold"/>
                     </div>
                 </group>
 
@@ -154,14 +154,14 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- CONCILIACIÓN FISCAL                          -->
+    <!-- CONCILIACIÃ“N FISCAL                          -->
     <!-- ============================================= -->
 
     <record id="view_fiscal_reconciliation_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.fiscal.reconciliation.form</field>
         <field name="model">l10n_do_ncf.fiscal.reconciliation</field>
         <field name="arch" type="xml">
-            <form string="Conciliación Fiscal 606/607">
+            <form string="ConciliaciÃ³n Fiscal 606/607">
                 <header>
                     <button name="action_calculate" string="Calcular" type="object" 
                             class="btn-primary" invisible="state == 'done'"/>
@@ -172,11 +172,11 @@
                 
                 <sheet>
                     <div class="oe_title">
-                        <h1>Conciliación Fiscal</h1>
+                        <h1>ConciliaciÃ³n Fiscal</h1>
                     </div>
 
                     <group>
-                        <group string="Parámetros">
+                        <group string="ParÃ¡metros">
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="date_from"/>
                             <field name="date_to"/>
@@ -227,7 +227,7 @@
                         <page string="Discrepancias" name="tab_discrepancies" 
                               badge="discrepancy_ids">
                             <field name="discrepancy_ids">
-                                <tree decoration-danger="severity == 'high'" 
+                                <list decoration-danger="severity == 'high'" 
                                       decoration-warning="severity == 'medium'"
                                       create="false" edit="false">
                                     <field name="report_type" widget="badge"/>
@@ -243,7 +243,7 @@
                                            decoration-success="severity == 'low'"/>
                                     <button name="action_open_document" type="object" 
                                             icon="fa-external-link" title="Ver documento"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                     </notebook>
@@ -253,14 +253,14 @@
     </record>
 
     <record id="action_fiscal_reconciliation" model="ir.actions.act_window">
-        <field name="name">Conciliación Fiscal</field>
+        <field name="name">ConciliaciÃ³n Fiscal</field>
         <field name="res_model">l10n_do_ncf.fiscal.reconciliation</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>
 
     <!-- ============================================= -->
-    <!-- MENÚS                                        -->
+    <!-- MENÃšS                                        -->
     <!-- ============================================= -->
 
     <menuitem id="menu_ncf_corrections"
@@ -269,19 +269,19 @@
               sequence="95"/>
 
     <menuitem id="menu_ncf_rnc_correction"
-              name="Corregir B02 → B01"
+              name="Corregir B02 â†’ B01"
               parent="menu_ncf_corrections"
               action="action_ncf_rnc_correction_wizard"
               sequence="10"/>
 
     <menuitem id="menu_ncf_retention_correction"
-              name="Corregir Retención"
+              name="Corregir RetenciÃ³n"
               parent="menu_ncf_corrections"
               action="action_ncf_retention_correction_wizard"
               sequence="20"/>
 
     <menuitem id="menu_fiscal_reconciliation"
-              name="Conciliación 606/607"
+              name="ConciliaciÃ³n 606/607"
               parent="menu_ncf_corrections"
               action="action_fiscal_reconciliation"
               sequence="30"/>
