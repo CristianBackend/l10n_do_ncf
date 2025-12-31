@@ -2,44 +2,43 @@
 <odoo>
 
     <!-- ============================================= -->
-    <!-- REGISTRO ÚNICO B12 - FORMULARIO              -->
+    <!-- B12 - REGISTRO ÚNICO DE INGRESOS             -->
     <!-- ============================================= -->
-    
+
     <record id="view_registro_unico_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.registro.unico.form</field>
         <field name="model">l10n_do_ncf.registro.unico</field>
         <field name="arch" type="xml">
             <form string="Registro Único B12">
                 <header>
-                    <button name="action_confirm" string="Confirmar" type="object" 
+                    <button name="action_confirm" string="Confirmar" type="object"
                             class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_post" string="Publicar y Generar NCF" type="object" 
+                    <button name="action_post" string="Publicar" type="object"
                             class="btn-primary" invisible="state != 'confirmed'"/>
-                    <button name="action_cancel" string="Cancelar" type="object" 
+                    <button name="action_cancel" string="Cancelar" type="object"
                             class="btn-secondary" invisible="state in ('cancelled', 'posted')"/>
-                    <button name="action_draft" string="Volver a Borrador" type="object" 
+                    <button name="action_draft" string="A Borrador" type="object"
                             class="btn-secondary" invisible="state != 'cancelled'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,confirmed,posted"/>
                 </header>
-                
+
                 <sheet>
                     <!-- Banner NCF -->
-                    <div class="alert alert-success text-center" invisible="not l10n_do_ncf_number">
+                    <div class="alert alert-success text-center" role="alert" invisible="not l10n_do_ncf_number">
                         <strong>NCF B12:</strong>
-                        <span class="fs-3 fw-bold ms-2"><field name="l10n_do_ncf_number" readonly="1"/></span>
+                        <span class="fs-4 fw-bold ms-2"><field name="l10n_do_ncf_number" readonly="1"/></span>
                     </div>
-                    
+
                     <div class="oe_title">
                         <h1>
                             <field name="name" readonly="1"/>
                         </h1>
                     </div>
-                    
+
                     <group>
-                        <group string="Información General">
+                        <group string="Información">
                             <field name="date" readonly="state != 'draft'"/>
-                            <field name="company_id" groups="base.group_multi_company" readonly="state != 'draft'"/>
-                            <field name="currency_id" invisible="1"/>
+                            <field name="company_id" readonly="state != 'draft'" groups="base.group_multi_company"/>
                         </group>
                         <group string="Totales">
                             <field name="total_transactions" readonly="1"/>
@@ -48,7 +47,7 @@
                             <field name="amount_total" readonly="1" class="fw-bold"/>
                         </group>
                     </group>
-                    
+
                     <group>
                         <group string="Formas de Pago">
                             <field name="amount_cash" readonly="1"/>
@@ -60,83 +59,72 @@
                             <field name="l10n_do_ncf_seq_id" readonly="1"/>
                         </group>
                     </group>
-                    
+
                     <notebook>
                         <page string="Transacciones" name="lines">
-                            <field name="line_ids" readonly="state == 'posted'">
-                                <tree editable="bottom">
-                                    <field name="reference"/>
-                                    <field name="date_time"/>
-                                    <field name="amount_untaxed" sum="Total Base"/>
-                                    <field name="amount_tax" sum="Total ITBIS"/>
-                                    <field name="amount_total" sum="Total"/>
-                                    <field name="payment_method"/>
-                                    <field name="pos_order_id" optional="hide"/>
-                                    <field name="notes" optional="hide"/>
-                                    <field name="currency_id" column_invisible="1"/>
-                                </tree>
-                            </field>
+                            <field name="line_ids" readonly="state == 'posted'" widget="one2many"/>
                         </page>
-                        
-                        <page string="Órdenes POS" name="pos_orders" invisible="not pos_order_ids">
-                            <field name="pos_order_ids" readonly="1">
-                                <tree>
-                                    <field name="name"/>
-                                    <field name="pos_reference"/>
-                                    <field name="date_order"/>
-                                    <field name="amount_total"/>
-                                    <field name="state"/>
-                                </tree>
-                            </field>
-                        </page>
-                        
+
                         <page string="Notas" name="notes">
                             <field name="notes" placeholder="Notas adicionales..."/>
                         </page>
                     </notebook>
                 </sheet>
-                
+
                 <chatter/>
             </form>
         </field>
     </record>
 
-    <!-- ============================================= -->
-    <!-- REGISTRO ÚNICO B12 - LISTA                   -->
-    <!-- ============================================= -->
-    
+    <!-- Vista Tree para line_ids (modelo separado) -->
+    <record id="view_registro_unico_line_tree" model="ir.ui.view">
+        <field name="name">l10n_do_ncf.registro.unico.line.tree</field>
+        <field name="model">l10n_do_ncf.registro.unico.line</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="reference"/>
+                <field name="date_time"/>
+                <field name="amount_untaxed" sum="Total Base"/>
+                <field name="amount_tax" sum="Total ITBIS"/>
+                <field name="amount_total" sum="Total"/>
+                <field name="payment_method"/>
+                <field name="pos_order_id" optional="hide"/>
+                <field name="notes" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Lista principal -->
     <record id="view_registro_unico_tree" model="ir.ui.view">
         <field name="name">l10n_do_ncf.registro.unico.tree</field>
         <field name="model">l10n_do_ncf.registro.unico</field>
         <field name="arch" type="xml">
-            <tree string="Registros Únicos B12" decoration-info="state == 'draft'" 
-                  decoration-warning="state == 'confirmed'" decoration-success="state == 'posted'"
+            <tree decoration-info="state == 'draft'"
+                  decoration-warning="state == 'confirmed'"
+                  decoration-success="state == 'posted'"
                   decoration-muted="state == 'cancelled'">
                 <field name="name"/>
                 <field name="date"/>
-                <field name="l10n_do_ncf_number" string="NCF"/>
+                <field name="l10n_do_ncf_number"/>
                 <field name="total_transactions"/>
                 <field name="amount_total" sum="Total"/>
-                <field name="l10n_do_reported_607" string="607"/>
-                <field name="state" widget="badge" 
+                <field name="state" widget="badge"
                        decoration-info="state == 'draft'"
                        decoration-warning="state == 'confirmed'"
                        decoration-success="state == 'posted'"
                        decoration-danger="state == 'cancelled'"/>
+                <field name="l10n_do_reported_607" widget="boolean"/>
                 <field name="company_id" groups="base.group_multi_company"/>
             </tree>
         </field>
     </record>
 
-    <!-- ============================================= -->
-    <!-- REGISTRO ÚNICO B12 - BÚSQUEDA                -->
-    <!-- ============================================= -->
-    
+    <!-- Búsqueda -->
     <record id="view_registro_unico_search" model="ir.ui.view">
         <field name="name">l10n_do_ncf.registro.unico.search</field>
         <field name="model">l10n_do_ncf.registro.unico</field>
         <field name="arch" type="xml">
-            <search string="Buscar Registros Únicos">
+            <search string="Buscar Registro Único">
                 <field name="name"/>
                 <field name="l10n_do_ncf_number"/>
                 <field name="date"/>
@@ -145,63 +133,33 @@
                 <filter name="confirmed" string="Confirmado" domain="[('state', '=', 'confirmed')]"/>
                 <filter name="posted" string="Publicado" domain="[('state', '=', 'posted')]"/>
                 <separator/>
-                <filter name="not_reported" string="Sin Reportar 607" domain="[('l10n_do_reported_607', '=', False), ('state', '=', 'posted')]"/>
+                <filter name="not_reported" string="Sin Reportar" domain="[('l10n_do_reported_607', '=', False)]"/>
+                <filter name="reported" string="Reportado 607" domain="[('l10n_do_reported_607', '=', True)]"/>
                 <separator/>
+                <filter name="today" string="Hoy" domain="[('date', '=', context_today().strftime('%Y-%m-%d'))]"/>
                 <filter name="this_month" string="Este Mes" domain="[('date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d'))]"/>
-                <filter name="last_month" string="Mes Anterior" domain="[('date', '&gt;=', (context_today() - relativedelta(months=1, day=1)).strftime('%Y-%m-%d')), ('date', '&lt;', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d'))]"/>
                 <group expand="0" string="Agrupar por">
                     <filter name="group_date" string="Fecha" context="{'group_by': 'date'}"/>
                     <filter name="group_state" string="Estado" context="{'group_by': 'state'}"/>
-                    <filter name="group_month" string="Mes" context="{'group_by': 'date:month'}"/>
                 </group>
             </search>
         </field>
     </record>
 
-    <!-- ============================================= -->
-    <!-- REGISTRO ÚNICO B12 - CALENDARIO              -->
-    <!-- ============================================= -->
-    
-    <record id="view_registro_unico_calendar" model="ir.ui.view">
-        <field name="name">l10n_do_ncf.registro.unico.calendar</field>
-        <field name="model">l10n_do_ncf.registro.unico</field>
-        <field name="arch" type="xml">
-            <calendar string="Registros Únicos" date_start="date" color="state" mode="month">
-                <field name="name"/>
-                <field name="amount_total"/>
-                <field name="total_transactions"/>
-            </calendar>
-        </field>
-    </record>
-
-    <!-- ============================================= -->
-    <!-- ACCIÓN                                       -->
-    <!-- ============================================= -->
-    
+    <!-- Acción -->
     <record id="action_registro_unico" model="ir.actions.act_window">
-        <field name="name">Registro Único (B12)</field>
+        <field name="name">Registro Único B12</field>
         <field name="res_model">l10n_do_ncf.registro.unico</field>
-        <field name="view_mode">tree,form,calendar</field>
-        <field name="context">{'search_default_this_month': 1}</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_not_reported': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Crear un Registro Único de Ingresos (B12)
+                Crear Registro Único de Ingresos (B12)
             </p>
             <p>
-                El B12 consolida ventas diarias de bajo monto en un solo comprobante fiscal.
-                Ideal para retail, colmados y negocios con alto volumen de ventas menores.
+                Consolide las ventas diarias de bajo monto en un solo comprobante fiscal.
             </p>
         </field>
     </record>
-
-    <!-- ============================================= -->
-    <!-- MENÚ                                         -->
-    <!-- ============================================= -->
-    
-    <menuitem id="menu_registro_unico"
-              name="Registro Único (B12)"
-              parent="account.menu_finance_receivables"
-              action="action_registro_unico"
-              sequence="25"/>
 
 </odoo>
