@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # modulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # VersiÃƒÂ³n: 19.0.3.0.0 - CASOS DE USO COMPLETOS
@@ -660,7 +660,7 @@ class AccountMove(models.Model):
     def _check_ncf_origin(self):
         for move in self:
             # Solo validar para companias de Republica Dominicana
-            if not move.company_id.country_id or move.company_id.country_id.code != 'DO':
+            if not move.company_id or not move.company_id.country_id or move.company_id.country_id.code != 'DO':
                 continue
             if move.move_type == 'out_refund' and move.l10n_do_ncf_required:
                 if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
@@ -670,7 +670,7 @@ class AccountMove(models.Model):
     def _check_debit_note_origin(self):
         for move in self:
             # Solo validar para companias de Republica Dominicana
-            if not move.company_id.country_id or move.company_id.country_id.code != 'DO':
+            if not move.company_id or not move.company_id.country_id or move.company_id.country_id.code != 'DO':
                 continue
             if move.l10n_do_is_debit_note and move.state == 'posted':
                 if not move.l10n_do_debit_ncf_origin and not move.l10n_do_debit_origin_move_id:
@@ -680,7 +680,7 @@ class AccountMove(models.Model):
     def _check_vendor_debit_note(self):
         for move in self:
             # Solo validar para companias de Republica Dominicana
-            if not move.company_id.country_id or move.company_id.country_id.code != 'DO':
+            if not move.company_id or not move.company_id.country_id or move.company_id.country_id.code != 'DO':
                 continue
             if move.l10n_do_is_vendor_debit_note and move.state == 'posted':
                 if not move.l10n_do_vendor_debit_ncf_origin:
