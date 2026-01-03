@@ -17,3 +17,5 @@ access_dgii_report_wizard_user,l10n_do_ncf.dgii.report.wizard.user,model_l10n_do
 access_setup_wizard_manager,l10n_do_ncf.setup.wizard.manager,model_l10n_do_ncf_setup_wizard,group_ncf_manager,1,1,1,1
 access_dgii_reminder_user,l10n_do_ncf.dgii.reminder.user,model_l10n_do_ncf_dgii_reminder,group_ncf_user,1,0,0,0
 access_dgii_reminder_manager,l10n_do_ncf.dgii.reminder.manager,model_l10n_do_ncf_dgii_reminder,group_ncf_manager,1,1,1,1
+access_bc_exchange_rate_user,l10n_do_ncf.bc.exchange.rate.user,model_l10n_do_ncf_bc_exchange_rate,group_ncf_user,1,0,0,0
+access_bc_exchange_rate_manager,l10n_do_ncf.bc.exchange.rate.manager,model_l10n_do_ncf_bc_exchange_rate,group_ncf_manager,1,1,1,1
