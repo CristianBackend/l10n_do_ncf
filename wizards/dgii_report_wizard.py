@@ -11,7 +11,7 @@ Validado contra:
 - Especificaciones técnicas DGII
 - Validador oficial DGII
 
-Versión: 19.0.1.8.0
+Versión: 19.0.1.9.0
 """
 
 from odoo import models, fields, api, _
@@ -60,16 +60,16 @@ class DgiiReportWizard(models.TransientModel):
     record_count = fields.Integer(string='Registros', readonly=True)
     total_amount = fields.Monetary(string='Monto Total', readonly=True, currency_field='currency_id')
     total_itbis = fields.Monetary(string='Total ITBIS', readonly=True, currency_field='currency_id')
-    
+
     # Resumen 606 específico
     total_itbis_retenido = fields.Monetary(string='ITBIS Retenido', readonly=True, currency_field='currency_id')
     total_isr_retenido = fields.Monetary(string='ISR Retenido', readonly=True, currency_field='currency_id')
-    
+
     # IR-17
     ir17_total_isr = fields.Monetary(string='Total Retención ISR', readonly=True, currency_field='currency_id')
     ir17_total_itbis = fields.Monetary(string='Total Retención ITBIS', readonly=True, currency_field='currency_id')
     ir17_total = fields.Monetary(string='Total a Pagar DGII', readonly=True, currency_field='currency_id')
-    
+
     currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
 
     @api.onchange('date_from')
@@ -88,10 +88,14 @@ class DgiiReportWizard(models.TransientModel):
     # =========================================
 
     def _format_amount(self, amount):
-        """Formatear monto (vacío si es 0)"""
+        """Formatear monto - DGII requiere vacío si es 0"""
         if not amount or amount == 0:
             return ''
         return '{:.2f}'.format(abs(amount))
+
+    def _format_amount_zero(self, amount):
+        """Formatear monto - Muestra 0.00 si es cero (para columnas requeridas)"""
+        return '{:.2f}'.format(abs(amount) if amount else 0)
 
     def _format_amount_required(self, amount):
         """Formatear monto (siempre muestra valor)"""
@@ -146,7 +150,7 @@ class DgiiReportWizard(models.TransientModel):
     def action_generate_report(self):
         """Generar el reporte seleccionado"""
         self.ensure_one()
-        
+
         if self.report_type == '606':
             return self._generate_606()
         elif self.report_type == '607':
@@ -175,6 +179,9 @@ class DgiiReportWizard(models.TransientModel):
             ('invoice_date', '<=', self.date_to),
         ], order='invoice_date')
 
+        if not invoices:
+            raise UserError(_('No hay facturas de compra en el período seleccionado.'))
+
         lines = []
         total_monto = 0.0
         total_itbis = 0.0
@@ -183,20 +190,27 @@ class DgiiReportWizard(models.TransientModel):
 
         rnc = self._clean_rnc(self.company_id.vat)
         period = self.date_from.strftime('%Y%m')
-        
+
         # Encabezado
         lines.append(f"606|{rnc}|{period}|{len(invoices)}")
 
         for inv in invoices:
             # Columna 1: RNC/Cédula del proveedor
             rnc_supplier = self._clean_rnc(inv.partner_id.vat)
-            
-            # Columna 2: Tipo de identificación
-            if rnc_supplier:
+
+            # Para B11 informal, usar cédula del proveedor informal
+            if inv.l10n_do_fiscal_type == 'informal':
+                rnc_supplier = self._clean_rnc(inv.l10n_do_informal_provider_cedula) or '00000000000'
+                tipo_id = '2'  # Cédula
+            elif inv.l10n_do_fiscal_type == 'minor_expense':
+                # B13 usa RNC de la propia empresa
+                rnc_supplier = self._clean_rnc(self.company_id.vat)
+                tipo_id = '1'  # RNC
+            elif rnc_supplier:
                 tipo_id = self._get_rnc_type(inv.partner_id.vat)
             else:
                 rnc_supplier = '00000000000'
-                tipo_id = '2'  # Cédula para informales
+                tipo_id = '2'
 
             # Columna 3: Tipo de Bienes/Servicios
             tipo_bienes = self._validate_tipo_bienes(
@@ -204,7 +218,10 @@ class DgiiReportWizard(models.TransientModel):
             )
 
             # Columna 4: NCF
-            ncf = self._pad_ncf(inv.l10n_do_vendor_ncf or '')
+            if inv.l10n_do_fiscal_type in ('informal', 'minor_expense'):
+                ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
+            else:
+                ncf = self._pad_ncf(inv.l10n_do_vendor_ncf or '')
 
             # Columna 5: NCF Modificado (para NC)
             ncf_modificado = ''
@@ -226,15 +243,15 @@ class DgiiReportWizard(models.TransientModel):
                 except Exception:
                     fecha_pago = fecha_comprobante
 
-            # Columna 8: Monto facturado en servicios de bienes
+            # Columnas 8-9: Monto bienes y servicios
+            monto_servicios = abs(inv.l10n_do_606_monto_servicios or 0.0)
             monto_bienes = abs(inv.l10n_do_606_monto_bienes or 0.0)
+            
+            # Si no hay split, todo va a servicios por defecto
+            if monto_bienes == 0 and monto_servicios == 0:
+                monto_servicios = abs(inv.amount_untaxed or 0.0)
 
-            # Columna 9: Monto facturado en servicios
-            monto_servicios = abs(inv.l10n_do_606_monto_servicios or inv.amount_untaxed or 0.0)
-            if monto_bienes > 0:
-                monto_servicios = abs(inv.amount_untaxed) - monto_bienes
-
-            # Columna 10: Monto total
+            # Columna 10: Monto total (base imponible)
             monto_total = monto_bienes + monto_servicios
 
             # Columna 11: ITBIS Facturado
@@ -248,11 +265,14 @@ class DgiiReportWizard(models.TransientModel):
 
             # Columna 14: ITBIS llevado al costo
             itbis_costo = abs(inv.l10n_do_itbis_costo or 0.0)
+            
+            # Para B13, todo el ITBIS va al costo
+            if inv.l10n_do_fiscal_type == 'minor_expense' and itbis_costo == 0:
+                itbis_costo = itbis_facturado
 
             # Columna 15: ITBIS a adelantar
             itbis_adelantar = abs(inv.l10n_do_itbis_adelantar or 0.0)
-            if itbis_adelantar == 0:
-                # Calcular si no está definido
+            if itbis_adelantar == 0 and inv.l10n_do_fiscal_type not in ('informal', 'minor_expense'):
                 itbis_adelantar = max(itbis_facturado - itbis_costo - itbis_proporcionalidad, 0)
 
             # Columna 16: ITBIS percibido en compras
@@ -260,12 +280,11 @@ class DgiiReportWizard(models.TransientModel):
 
             # Columna 17: Tipo de retención en ISR
             tipo_retencion_isr = inv.l10n_do_tipo_retencion_isr or ''
+            
+            # Columna 18: Monto retención renta (ISR)
             isr_retenido = abs(inv.l10n_do_isr_retenido or inv.l10n_do_total_isr_retention or 0.0)
             if isr_retenido > 0 and not tipo_retencion_isr:
                 tipo_retencion_isr = '02'  # Default: Honorarios
-
-            # Columna 18: Monto retención renta
-            monto_isr = isr_retenido
 
             # Columna 19: ISR percibido en compras
             isr_percibido = abs(inv.l10n_do_isr_percibido or 0.0)
@@ -280,46 +299,46 @@ class DgiiReportWizard(models.TransientModel):
             propina_legal = abs(inv.l10n_do_propina_legal or 0.0)
 
             # Columna 23: Forma de pago
-            forma_pago = inv.l10n_do_forma_pago or '04'
+            forma_pago = inv.l10n_do_forma_pago or ''
             if not forma_pago:
                 if inv.payment_state == 'paid':
-                    forma_pago = '02'
+                    forma_pago = '02'  # Cheque/Transferencia
                 elif inv.payment_state == 'not_paid':
-                    forma_pago = '04'
+                    forma_pago = '04'  # Crédito
                 else:
-                    forma_pago = '07'
+                    forma_pago = '04'
 
             # Acumuladores
             total_monto += monto_total
             total_itbis += itbis_facturado
             total_itbis_ret += itbis_retenido
-            total_isr_ret += monto_isr
+            total_isr_ret += isr_retenido
 
             # Construir línea (23 columnas)
             campos = [
-                rnc_supplier,                          # 1
-                tipo_id,                               # 2
-                tipo_bienes,                           # 3
-                ncf,                                   # 4
-                ncf_modificado,                        # 5
-                fecha_comprobante,                     # 6
-                fecha_pago,                            # 7
-                self._format_amount(monto_bienes),     # 8
-                self._format_amount(monto_servicios),  # 9
-                self._format_amount_required(monto_total),  # 10
-                self._format_amount(itbis_facturado),  # 11
-                self._format_amount(itbis_retenido),   # 12
-                self._format_amount(itbis_proporcionalidad),  # 13
-                self._format_amount(itbis_costo),      # 14
-                self._format_amount(itbis_adelantar),  # 15
-                self._format_amount(itbis_percibido),  # 16
-                tipo_retencion_isr,                    # 17
-                self._format_amount(monto_isr),        # 18
-                self._format_amount(isr_percibido),    # 19
-                self._format_amount(isc),              # 20
-                self._format_amount(otros_impuestos),  # 21
-                self._format_amount(propina_legal),    # 22
-                forma_pago,                            # 23
+                rnc_supplier,                              # 1 - RNC/Cédula
+                tipo_id,                                   # 2 - Tipo ID
+                tipo_bienes,                               # 3 - Tipo Bienes/Servicios
+                ncf,                                       # 4 - NCF
+                ncf_modificado,                            # 5 - NCF Modificado
+                fecha_comprobante,                         # 6 - Fecha Comprobante
+                fecha_pago,                                # 7 - Fecha Pago
+                self._format_amount(monto_servicios),      # 8 - Monto Servicios
+                self._format_amount(monto_bienes),         # 9 - Monto Bienes
+                self._format_amount_required(monto_total), # 10 - Total
+                self._format_amount(itbis_facturado),      # 11 - ITBIS Facturado
+                self._format_amount(itbis_retenido),       # 12 - ITBIS Retenido
+                self._format_amount(itbis_proporcionalidad), # 13 - ITBIS Proporcionalidad
+                self._format_amount(itbis_costo),          # 14 - ITBIS Costo
+                self._format_amount(itbis_adelantar),      # 15 - ITBIS Adelantar
+                self._format_amount(itbis_percibido),      # 16 - ITBIS Percibido
+                tipo_retencion_isr,                        # 17 - Tipo Ret. ISR
+                self._format_amount(isr_retenido),         # 18 - ISR Retenido
+                self._format_amount(isr_percibido),        # 19 - ISR Percibido
+                self._format_amount(isc),                  # 20 - ISC
+                self._format_amount(otros_impuestos),      # 21 - Otros Impuestos
+                self._format_amount(propina_legal),        # 22 - Propina Legal
+                forma_pago,                                # 23 - Forma Pago
             ]
             lines.append('|'.join(campos))
 
@@ -333,7 +352,7 @@ class DgiiReportWizard(models.TransientModel):
         self.total_itbis = total_itbis
         self.total_itbis_retenido = total_itbis_ret
         self.total_isr_retenido = total_isr_ret
-        
+
         return self._return_wizard()
 
     # =========================================
@@ -354,13 +373,16 @@ class DgiiReportWizard(models.TransientModel):
             ('l10n_do_ncf_number', '!=', False),
         ], order='invoice_date')
 
+        if not invoices:
+            raise UserError(_('No hay facturas de venta con NCF en el período seleccionado.'))
+
         lines = []
         total_monto = 0.0
         total_itbis = 0.0
 
         rnc = self._clean_rnc(self.company_id.vat)
         period = self.date_from.strftime('%Y%m')
-        
+
         # Encabezado
         lines.append(f"607|{rnc}|{period}|{len(invoices)}")
 
@@ -393,8 +415,10 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 6: Fecha del comprobante
             fecha_comprobante = self._format_date(inv.invoice_date)
 
-            # Columna 7: Fecha de retención
+            # Columna 7: Fecha de retención (solo si aplica)
             fecha_retencion = ''
+            if inv.l10n_do_is_credit_sale and inv.l10n_do_retention_date:
+                fecha_retencion = self._format_date(inv.l10n_do_retention_date)
 
             # Columna 8: Monto facturado
             monto_facturado = abs(inv.amount_untaxed)
@@ -402,36 +426,39 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 9: ITBIS Facturado
             itbis_facturado = abs(inv.amount_tax)
 
-            # Columnas 10-16: Retenciones e impuestos (generalmente 0 para ventas)
-            itbis_retenido_terceros = 0.0
+            # Columnas 10-16: Retenciones por terceros
+            itbis_retenido_terceros = abs(inv.l10n_do_third_party_retention_itbis or 0.0)
             itbis_percibido = 0.0
-            retencion_renta_terceros = 0.0
+            retencion_renta_terceros = abs(inv.l10n_do_third_party_retention_isr or 0.0)
             isr_percibido = 0.0
             isc = 0.0
             otros_impuestos = 0.0
             propina_legal = 0.0
 
             # Columnas 17-23: Formas de pago
-            efectivo = 0.0
-            cheque = 0.0
-            tarjeta = 0.0
-            credito = 0.0
-            bonos = 0.0
-            permuta = 0.0
-            otras = 0.0
+            efectivo = abs(inv.l10n_do_payment_cash or 0.0)
+            cheque = abs(inv.l10n_do_payment_bank or 0.0)
+            tarjeta = abs(inv.l10n_do_payment_card or 0.0)
+            credito = abs(inv.l10n_do_payment_credit or 0.0)
+            bonos = abs(inv.l10n_do_payment_bond or 0.0)
+            permuta = abs(inv.l10n_do_payment_swap or 0.0)
+            otras = abs(inv.l10n_do_payment_other or 0.0)
 
             monto_total = abs(inv.amount_total)
 
-            if inv.payment_state == 'paid':
-                cheque = monto_total
-            elif inv.payment_state == 'not_paid':
-                credito = monto_total
-            elif inv.payment_state == 'partial':
-                pagado = monto_total - abs(inv.amount_residual)
-                cheque = pagado
-                credito = abs(inv.amount_residual)
-            else:
-                credito = monto_total
+            # Si no hay formas de pago específicas, usar default
+            total_formas = efectivo + cheque + tarjeta + credito + bonos + permuta + otras
+            if total_formas == 0:
+                if inv.payment_state == 'paid':
+                    cheque = monto_total
+                elif inv.payment_state == 'not_paid':
+                    credito = monto_total
+                elif inv.payment_state == 'partial':
+                    pagado = monto_total - abs(inv.amount_residual)
+                    cheque = pagado
+                    credito = abs(inv.amount_residual)
+                else:
+                    credito = monto_total
 
             # Acumuladores
             total_monto += monto_facturado
@@ -473,7 +500,7 @@ class DgiiReportWizard(models.TransientModel):
         self.record_count = len(invoices)
         self.total_amount = total_monto
         self.total_itbis = total_itbis
-        
+
         return self._return_wizard()
 
     # =========================================
@@ -499,29 +526,20 @@ class DgiiReportWizard(models.TransientModel):
         lines = []
         rnc = self._clean_rnc(self.company_id.vat)
         period = self.date_from.strftime('%Y%m')
-        
+
         # Encabezado
         lines.append(f"608|{rnc}|{period}|{len(invoices)}")
 
         for inv in invoices:
             # Columna 1: NCF
             ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
-            
+
             # Columna 2: Fecha
             fecha = self._format_date(inv.invoice_date)
-            
+
             # Columna 3: Tipo de anulación
-            # 01=Deterioro de impresión
-            # 02=Errores de impresión
-            # 03=Impresión defectuosa
-            # 04=Duplicidad de impresión
-            # 05=Corrección de información
-            # 06=Cambio de productos
-            # 07=Devolución de productos
-            # 08=Omisión de productos
-            # 09=Otros
             tipo_anulacion = '05'  # Default: Corrección de información
-            
+
             campos = [ncf, fecha, tipo_anulacion]
             lines.append('|'.join(campos))
 
@@ -531,7 +549,7 @@ class DgiiReportWizard(models.TransientModel):
         self.file_name = f"DGII_608_{rnc}_{period}.txt"
         self.state = 'generated'
         self.record_count = len(invoices)
-        
+
         return self._return_wizard()
 
     # =========================================
@@ -549,59 +567,70 @@ class DgiiReportWizard(models.TransientModel):
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
+            '|',
+            ('l10n_do_fiscal_type', '=', 'exterior'),
+            '&',
             ('partner_id.country_id', '!=', False),
             ('partner_id.country_id.code', '!=', 'DO'),
         ], order='invoice_date')
 
+        if not invoices:
+            raise UserError(_('No hay pagos al exterior en el período seleccionado.'))
+
         lines = []
         total_monto = 0.0
+        total_isr = 0.0
         rnc = self._clean_rnc(self.company_id.vat)
         period = self.date_from.strftime('%Y%m')
-        
+
         # Encabezado
         lines.append(f"609|{rnc}|{period}|{len(invoices)}")
 
         for inv in invoices:
             # Columna 1: Razón Social
             razon_social = (inv.partner_id.name or '')[:50]
-            
-            # Columna 2: Tipo de identificación
+
+            # Columna 2: Tipo de identificación (1=PF, 2=PJ)
             tipo_id = '2' if inv.partner_id.company_type == 'company' else '1'
-            
+
             # Columna 3: Identificación tributaria
             id_tributaria = self._clean_rnc(inv.partner_id.vat) or 'N/A'
-            
+
             # Columna 4: País
             pais = inv.partner_id.country_id.code or 'US'
-            
+
             # Columna 5: Tipo de servicio
-            tipo_servicio = '02'  # Servicios
-            
+            tipo_servicio = inv.l10n_do_exterior_service_type or '02'
+
             # Columna 6: Detalle del servicio
-            detalle_servicio = '02'
-            
-            # Columna 7: Parte relacionada
-            parte_relacionada = '0'  # No relacionada
-            
+            detalle_servicio = tipo_servicio
+
+            # Columna 7: Parte relacionada (0=No, 1=Sí)
+            parte_relacionada = '0'
+
             # Columna 8: Número del documento
             numero_doc = (inv.ref or inv.name or '')[:30]
-            
+
             # Columna 9: Fecha del documento
             fecha_doc = self._format_date(inv.invoice_date)
-            
+
             # Columna 10: Monto pagado
             monto = abs(inv.amount_total)
-            
+
             # Columna 11: Fecha de retención
             fecha_retencion = fecha_doc
-            
+
             # Columna 12: Renta presunta
             renta_presunta = monto
-            
-            # Columna 13: ISR retenido (27% típico para exterior)
-            isr_retenido = monto * 0.27
-            
+
+            # Columna 13: ISR retenido
+            isr_retenido = abs(inv.l10n_do_total_isr_retention or 0.0)
+            if isr_retenido == 0:
+                # Por defecto 27% para exterior
+                isr_retenido = monto * 0.27
+
             total_monto += monto
+            total_isr += isr_retenido
 
             campos = [
                 razon_social,                              # 1
@@ -627,7 +656,8 @@ class DgiiReportWizard(models.TransientModel):
         self.state = 'generated'
         self.record_count = len(invoices)
         self.total_amount = total_monto
-        
+        self.total_isr_retenido = total_isr
+
         return self._return_wizard()
 
     # =========================================
@@ -637,6 +667,7 @@ class DgiiReportWizard(models.TransientModel):
     def _generate_ir17(self):
         """
         Generar resumen IR-17 de Retenciones
+        Formato interno para control (no es archivo DGII oficial)
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
@@ -649,7 +680,9 @@ class DgiiReportWizard(models.TransientModel):
         # Filtrar solo las que tienen retenciones
         invoices_ret = invoices.filtered(
             lambda i: (i.l10n_do_total_isr_retention or 0) > 0 or
-                      (i.l10n_do_total_itbis_retention or 0) > 0
+                      (i.l10n_do_total_itbis_retention or 0) > 0 or
+                      (i.l10n_do_isr_retenido or 0) > 0 or
+                      (i.l10n_do_itbis_retenido or 0) > 0
         )
 
         if not invoices_ret:
@@ -661,44 +694,50 @@ class DgiiReportWizard(models.TransientModel):
         rnc = self._clean_rnc(self.company_id.vat)
         period = self.date_from.strftime('%Y%m')
 
-        # Encabezado
-        lines.append('RNC|Proveedor|NCF|Fecha|Base|ITBIS|Ret.ISR|Ret.ITBIS|Tipo Ret.')
+        # Encabezado estilo tabla
+        lines.append('=' * 120)
+        lines.append(f'RESUMEN IR-17 - RETENCIONES DEL PERÍODO {period}')
+        lines.append(f'Empresa: {self.company_id.name}')
+        lines.append(f'RNC: {rnc}')
+        lines.append('=' * 120)
+        lines.append('')
+        lines.append('RNC Proveedor    | Proveedor                        | NCF           | Fecha      | Base       | ITBIS     | Ret.ISR   | Ret.ITBIS | Tipo')
+        lines.append('-' * 120)
 
         for inv in invoices_ret:
-            isr = inv.l10n_do_total_isr_retention or 0
-            itbis_ret = inv.l10n_do_total_itbis_retention or 0
+            isr = abs(inv.l10n_do_total_isr_retention or inv.l10n_do_isr_retenido or 0)
+            itbis_ret = abs(inv.l10n_do_total_itbis_retention or inv.l10n_do_itbis_retenido or 0)
             total_isr += isr
             total_itbis += itbis_ret
-            
+
             tipo_ret = inv.l10n_do_tipo_retencion_isr or ''
+            rnc_prov = self._clean_rnc(inv.partner_id.vat)
             
-            campos = [
-                self._clean_rnc(inv.partner_id.vat),
-                (inv.partner_id.name or '')[:40],
-                inv.l10n_do_vendor_ncf or '',
-                self._format_date(inv.invoice_date),
-                self._format_amount_required(inv.amount_untaxed),
-                self._format_amount(inv.amount_tax),
-                self._format_amount(isr),
-                self._format_amount(itbis_ret),
-                tipo_ret,
-            ]
-            lines.append('|'.join(campos))
+            # Para B11 usar cédula
+            if inv.l10n_do_fiscal_type == 'informal':
+                rnc_prov = self._clean_rnc(inv.l10n_do_informal_provider_cedula) or ''
+
+            ncf = inv.l10n_do_vendor_ncf or inv.l10n_do_ncf_number or ''
+
+            line = f'{rnc_prov:<16} | {inv.partner_id.name[:32]:<32} | {ncf:<13} | {inv.invoice_date} | {inv.amount_untaxed:>10.2f} | {inv.amount_tax:>9.2f} | {isr:>9.2f} | {itbis_ret:>9.2f} | {tipo_ret}'
+            lines.append(line)
 
         # Resumen
         lines.extend([
             '',
-            '=' * 60,
-            f'RESUMEN IR-17 - Período: {period}',
-            f'Empresa: {self.company_id.name}',
-            f'RNC: {rnc}',
-            '=' * 60,
-            f'Total Retención ISR:   RD$ {self._format_amount_required(total_isr)}',
-            f'Total Retención ITBIS: RD$ {self._format_amount_required(total_itbis)}',
-            '-' * 60,
-            f'TOTAL A PAGAR DGII:    RD$ {self._format_amount_required(total_isr + total_itbis)}',
-            '=' * 60,
-            f'Cantidad de Facturas: {len(invoices_ret)}',
+            '-' * 120,
+            f'TOTALES                                                                                          | {total_isr:>9.2f} | {total_itbis:>9.2f} |',
+            '=' * 120,
+            '',
+            'RESUMEN PARA DECLARACIÓN IR-17:',
+            '-' * 40,
+            f'  Retención ISR:           RD$ {total_isr:,.2f}',
+            f'  Retención ITBIS:         RD$ {total_itbis:,.2f}',
+            f'  ----------------------------------------',
+            f'  TOTAL A PAGAR DGII:      RD$ {total_isr + total_itbis:,.2f}',
+            '',
+            f'  Cantidad de Facturas: {len(invoices_ret)}',
+            '=' * 120,
         ])
 
         # Generar archivo
@@ -710,7 +749,7 @@ class DgiiReportWizard(models.TransientModel):
         self.ir17_total_isr = total_isr
         self.ir17_total_itbis = total_itbis
         self.ir17_total = total_isr + total_itbis
-        
+
         return self._return_wizard()
 
     # =========================================

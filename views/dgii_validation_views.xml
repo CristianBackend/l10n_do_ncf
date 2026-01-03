@@ -2,21 +2,21 @@
 <odoo>
 
     <!-- ============================================= -->
-    <!-- VALIDACIÃ“N DGII - FORMULARIO                 -->
+    <!-- VALIDACIÓN DGII - FORMULARIO                 -->
     <!-- ============================================= -->
     
     <record id="view_dgii_validation_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.dgii.validation.form</field>
         <field name="model">l10n_do_ncf.dgii.validation</field>
         <field name="arch" type="xml">
-            <form string="ValidaciÃ³n DGII" create="false" edit="false">
+            <form string="Validación DGII" create="false" edit="false">
                 <sheet>
                     <div class="oe_title">
                         <h1>
                             <field name="display_name"/>
                         </h1>
                     </div>
-                    
+
                     <group>
                         <group string="Datos Validados">
                             <field name="validation_type"/>
@@ -32,7 +32,7 @@
                             <field name="activity"/>
                         </group>
                     </group>
-                    
+
                     <group invisible="validation_type != 'ncf'">
                         <group string="Datos NCF">
                             <field name="ncf_type"/>
@@ -41,7 +41,7 @@
                             <field name="expiration_date"/>
                         </group>
                     </group>
-                    
+
                     <group>
                         <group string="Metadata">
                             <field name="validation_date"/>
@@ -53,7 +53,7 @@
                             <field name="registro_unico_id"/>
                         </group>
                     </group>
-                    
+
                     <group string="Respuesta Raw" invisible="not response_raw">
                         <field name="response_raw" nolabel="1"/>
                     </group>
@@ -63,9 +63,9 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- VALIDACIÃ“N DGII - LISTA                      -->
+    <!-- VALIDACIÓN DGII - LISTA                      -->
     <!-- ============================================= -->
-    
+
     <record id="view_dgii_validation_tree" model="ir.ui.view">
         <field name="name">l10n_do_ncf.dgii.validation.tree</field>
         <field name="model">l10n_do_ncf.dgii.validation</field>
@@ -85,9 +85,9 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- VALIDACIÃ“N DGII - BÃšSQUEDA                   -->
+    <!-- VALIDACIÓN DGII - BÚSQUEDA                   -->
     <!-- ============================================= -->
-    
+
     <record id="view_dgii_validation_search" model="ir.ui.view">
         <field name="name">l10n_do_ncf.dgii.validation.search</field>
         <field name="model">l10n_do_ncf.dgii.validation</field>
@@ -100,23 +100,24 @@
                 <filter name="rnc_type" string="RNC" domain="[('validation_type', '=', 'rnc')]"/>
                 <filter name="ncf_type" string="NCF" domain="[('validation_type', '=', 'ncf')]"/>
                 <separator/>
-                <filter name="valid" string="VÃ¡lidos" domain="[('is_valid', '=', True)]"/>
-                <filter name="invalid" string="InvÃ¡lidos" domain="[('is_valid', '=', False)]"/>
+                <filter name="valid" string="Válidos" domain="[('is_valid', '=', True)]"/>
+                <filter name="invalid" string="Inválidos" domain="[('is_valid', '=', False)]"/>
                 <separator/>
                 <filter name="today" string="Hoy" domain="[('validation_date', '&gt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
-                <filter name="last_24h" string="Ãšltimas 24h" domain="[('validation_date', '&gt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'))]"/>
-                
+                <filter name="last_24h" string="Últimas 24h" domain="[('validation_date', '&gt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'))]"/>
+                <group expand="0" string="Agrupar por">
                     <filter name="group_type" string="Tipo" context="{'group_by': 'validation_type'}"/>
-                    <filter name="group_valid" string="VÃ¡lido" context="{'group_by': 'is_valid'}"/>
+                    <filter name="group_valid" string="Válido" context="{'group_by': 'is_valid'}"/>
                     <filter name="group_date" string="Fecha" context="{'group_by': 'validation_date:day'}"/>
-                </search>
+                </group>
+            </search>
         </field>
     </record>
 
     <!-- ============================================= -->
-    <!-- ACCIÃ“N VALIDACIONES                          -->
+    <!-- ACCIÓN VALIDACIONES                          -->
     <!-- ============================================= -->
-    
+
     <record id="action_dgii_validation" model="ir.actions.act_window">
         <field name="name">Cache Validaciones DGII</field>
         <field name="res_model">l10n_do_ncf.dgii.validation</field>
@@ -127,7 +128,7 @@
                 No hay validaciones en cache
             </p>
             <p>
-                Las validaciones de RNC y NCF se almacenan aquÃ­ por 24 horas
+                Las validaciones de RNC y NCF se almacenan aquí por 24 horas
                 para evitar consultas repetidas a DGII.
             </p>
         </field>
@@ -136,7 +137,7 @@
     <!-- ============================================= -->
     <!-- TASA BC - FORMULARIO                         -->
     <!-- ============================================= -->
-    
+
     <record id="view_bc_exchange_rate_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.bc.exchange.rate.form</field>
         <field name="model">l10n_do_ncf.bc.exchange.rate</field>
@@ -164,7 +165,7 @@
     <!-- ============================================= -->
     <!-- TASA BC - LISTA                              -->
     <!-- ============================================= -->
-    
+
     <record id="view_bc_exchange_rate_tree" model="ir.ui.view">
         <field name="name">l10n_do_ncf.bc.exchange.rate.tree</field>
         <field name="model">l10n_do_ncf.bc.exchange.rate</field>
@@ -182,9 +183,9 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- TASA BC - BÃšSQUEDA                           -->
+    <!-- TASA BC - BÚSQUEDA                           -->
     <!-- ============================================= -->
-    
+
     <record id="view_bc_exchange_rate_search" model="ir.ui.view">
         <field name="name">l10n_do_ncf.bc.exchange.rate.search</field>
         <field name="model">l10n_do_ncf.bc.exchange.rate</field>
@@ -198,17 +199,18 @@
                 <separator/>
                 <filter name="bc_api" string="API BC" domain="[('source', '=', 'bc_api')]"/>
                 <filter name="manual" string="Manual" domain="[('source', '=', 'manual')]"/>
-                
+                <group expand="0" string="Agrupar por">
                     <filter name="group_month" string="Mes" context="{'group_by': 'date:month'}"/>
                     <filter name="group_currency" string="Moneda" context="{'group_by': 'currency_id'}"/>
-                </search>
+                </group>
+            </search>
         </field>
     </record>
 
     <!-- ============================================= -->
-    <!-- ACCIÃ“N TASAS BC                              -->
+    <!-- ACCIÓN TASAS BC                              -->
     <!-- ============================================= -->
-    
+
     <record id="action_bc_exchange_rate" model="ir.actions.act_window">
         <field name="name">Tasas Banco Central</field>
         <field name="res_model">l10n_do_ncf.bc.exchange.rate</field>
@@ -226,14 +228,14 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- AUDITORÃA FISCAL - LISTA                     -->
+    <!-- AUDITORÍA FISCAL - LISTA                     -->
     <!-- ============================================= -->
-    
+
     <record id="view_fiscal_audit_tree" model="ir.ui.view">
         <field name="name">l10n_do_ncf.fiscal.audit.tree</field>
         <field name="model">l10n_do_ncf.fiscal.audit</field>
         <field name="arch" type="xml">
-            <list string="AuditorÃ­a Fiscal" create="false" edit="false"
+            <list string="Auditoría Fiscal" create="false" edit="false"
                   decoration-info="event_type == 'ncf_generated'"
                   decoration-danger="event_type in ('ncf_annulled', 'validation_error', 'dgii_rejection')"
                   decoration-success="event_type == 'dgii_accepted'">
@@ -251,14 +253,14 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- AUDITORÃA FISCAL - FORMULARIO                -->
+    <!-- AUDITORÍA FISCAL - FORMULARIO                -->
     <!-- ============================================= -->
-    
+
     <record id="view_fiscal_audit_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.fiscal.audit.form</field>
         <field name="model">l10n_do_ncf.fiscal.audit</field>
         <field name="arch" type="xml">
-            <form string="Detalle AuditorÃ­a" create="false" edit="false">
+            <form string="Detalle Auditoría" create="false" edit="false">
                 <sheet>
                     <group>
                         <group string="Evento">
@@ -284,7 +286,7 @@
                             <field name="ip_address"/>
                         </group>
                     </group>
-                    <group string="DescripciÃ³n">
+                    <group string="Descripción">
                         <field name="description" nolabel="1"/>
                     </group>
                     <group string="Datos Adicionales" invisible="not extra_data">
@@ -296,14 +298,14 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- AUDITORÃA FISCAL - BÃšSQUEDA                  -->
+    <!-- AUDITORÍA FISCAL - BÚSQUEDA                  -->
     <!-- ============================================= -->
-    
+
     <record id="view_fiscal_audit_search" model="ir.ui.view">
         <field name="name">l10n_do_ncf.fiscal.audit.search</field>
         <field name="model">l10n_do_ncf.fiscal.audit</field>
         <field name="arch" type="xml">
-            <search string="Buscar AuditorÃ­a">
+            <search string="Buscar Auditoría">
                 <field name="ncf_number"/>
                 <field name="move_id"/>
                 <field name="user_id"/>
@@ -315,66 +317,67 @@
                 <separator/>
                 <filter name="today" string="Hoy" domain="[('create_date', '&gt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
                 <filter name="this_week" string="Esta Semana" domain="[('create_date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
-                
+                <group expand="0" string="Agrupar por">
                     <filter name="group_type" string="Tipo Evento" context="{'group_by': 'event_type'}"/>
                     <filter name="group_user" string="Usuario" context="{'group_by': 'user_id'}"/>
                     <filter name="group_date" string="Fecha" context="{'group_by': 'create_date:day'}"/>
-                </search>
+                </group>
+            </search>
         </field>
     </record>
 
     <!-- ============================================= -->
-    <!-- ACCIÃ“N AUDITORÃA                             -->
+    <!-- ACCIÓN AUDITORÍA                             -->
     <!-- ============================================= -->
-    
+
     <record id="action_fiscal_audit" model="ir.actions.act_window">
-        <field name="name">AuditorÃ­a Fiscal</field>
+        <field name="name">Auditoría Fiscal</field>
         <field name="res_model">l10n_do_ncf.fiscal.audit</field>
         <field name="view_mode">tree,form</field>
         <field name="context">{'search_default_today': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                No hay registros de auditorÃ­a
+                No hay registros de auditoría
             </p>
             <p>
-                AquÃ­ se registran todos los eventos relacionados con NCF:
-                generaciÃ³n, anulaciÃ³n, cambios de estado, errores, etc.
+                Aquí se registran todos los eventos relacionados con NCF:
+                generación, anulación, cambios de estado, errores, etc.
             </p>
         </field>
     </record>
 
     <!-- ============================================= -->
-    <!-- MENÃšS                                        -->
+    <!-- MENÚS                                        -->
     <!-- ============================================= -->
-    
-    <!-- SubmenÃº DGII en Contabilidad -->
+
+    <!-- Submenú DGII en Contabilidad -->
     <menuitem id="menu_dgii_tools"
               name="Herramientas DGII"
               parent="account.menu_finance_configuration"
               sequence="100"/>
-    
+
     <menuitem id="menu_dgii_validation"
               name="Cache Validaciones"
               parent="menu_dgii_tools"
               action="action_dgii_validation"
               sequence="10"/>
-    
+
     <menuitem id="menu_bc_exchange_rate"
               name="Tasas Banco Central"
               parent="menu_dgii_tools"
               action="action_bc_exchange_rate"
               sequence="20"/>
-    
+
     <menuitem id="menu_fiscal_audit"
-              name="AuditorÃ­a Fiscal"
+              name="Auditoría Fiscal"
               parent="menu_dgii_tools"
               action="action_fiscal_audit"
               sequence="30"/>
 
     <!-- ============================================= -->
-    <!-- EXTENSIÃ“N RES.PARTNER - BOTÃ“N VALIDAR        -->
+    <!-- EXTENSIÓN RES.PARTNER - BOTÓN VALIDAR        -->
     <!-- ============================================= -->
-    
+
     <record id="view_partner_form_dgii" model="ir.ui.view">
         <field name="name">res.partner.form.dgii.validation</field>
         <field name="model">res.partner</field>
@@ -382,14 +385,13 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='vat']" position="after">
                 <field name="l10n_do_dgii_validated" invisible="1"/>
-                <button name="action_validate_dgii" type="object" 
-                        string="ðŸ” Validar DGII" class="btn-link"
+                <button name="action_validate_dgii" type="object"
+                        string="🔍 Validar DGII" class="btn-link"
                         invisible="not vat"/>
-                <span class="badge bg-success ms-2" invisible="not l10n_do_dgii_validated">âœ“ Validado</span>
+                <span class="badge bg-success ms-2" invisible="not l10n_do_dgii_validated">✓ Validado</span>
                 <field name="l10n_do_dgii_status" readonly="1" invisible="not l10n_do_dgii_validated"/>
             </xpath>
         </field>
     </record>
 
 </odoo>
-
