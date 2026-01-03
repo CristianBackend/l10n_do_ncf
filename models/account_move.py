@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # modulo: l10n_do_ncf
 # Archivo: models/account_move.py
-# Versión: 19.0.3.0.0 - CASOS DE USO COMPLETOS
+# Versión: 19.0.3.0.0 - CASOS DE USO COMPLETOS - CORREGIDO
 # Compatibilidad: Odoo 19
 
 from odoo import models, fields, api, _
@@ -18,10 +18,6 @@ _logger = logging.getLogger(__name__)
 NCF_PATTERN = r'^B(01|02|03|04|11|12|13|14|15|16|17)\d{8}$'
 ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
 NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
-
-# Límites
-B11_MONTHLY_LIMIT = 50
-B13_TRANSACTION_LIMIT = 10000  # RD$ por transacción
 
 
 class AccountMove(models.Model):
@@ -362,6 +358,20 @@ class AccountMove(models.Model):
     )
 
     # =========================================
+    # ✅ MÉTODOS AUXILIARES CONFIGURABLES
+    # =========================================
+
+    def _get_b11_monthly_limit(self):
+        """✅ FIX: Límite configurable B11"""
+        param = self.env['ir.config_parameter'].sudo()
+        return int(param.get_param('l10n_do_ncf.b11_monthly_limit', default=50))
+    
+    def _get_b13_transaction_limit(self):
+        """✅ FIX: Límite configurable B13"""
+        param = self.env['ir.config_parameter'].sudo()
+        return float(param.get_param('l10n_do_ncf.b13_transaction_limit', default=10000))
+
+    # =========================================
     # CÓMPUTOS MULTIMONEDA
     # =========================================
 
@@ -381,11 +391,12 @@ class AccountMove(models.Model):
                 move.l10n_do_amount_dop = move.amount_total
 
     # =========================================
-    # CÓMPUTO MONTO ACREDITADO
+    # ✅ FIX 6: CÓMPUTO MONTO ACREDITADO
     # =========================================
 
-    @api.depends('state')
+    @api.depends('state', 'l10n_do_origin_move_id', 'amount_total', 'move_type')
     def _compute_credited_amount(self):
+        """✅ CORREGIDO: Depends completos"""
         for move in self:
             if move.move_type == 'out_invoice':
                 credit_notes = self.search([
@@ -432,14 +443,18 @@ class AccountMove(models.Model):
             move.l10n_do_606_monto_servicios = servicios
 
     # =========================================
-    # CÓMPUTOS 606
+    # ✅ FIX 2: CÓMPUTOS 606
     # =========================================
 
     @api.depends('l10n_do_fiscal_type', 'amount_tax')
     def _compute_606_itbis_costo(self):
+        """✅ CORREGIDO: Siempre asigna valor explícito"""
         for move in self:
             if move.l10n_do_fiscal_type == 'minor_expense':
                 move.l10n_do_itbis_costo = abs(move.amount_tax or 0)
+            else:
+                # ✅ FIX: Valor explícito cuando NO es minor_expense
+                move.l10n_do_itbis_costo = 0
 
     @api.depends('amount_tax', 'l10n_do_itbis_costo', 'l10n_do_itbis_proporcionalidad', 'l10n_do_fiscal_type')
     def _compute_606_itbis(self):
@@ -529,29 +544,45 @@ class AccountMove(models.Model):
             )
 
     # =========================================
-    # CÓMPUTO TIPO NCF
+    # ✅ FIX 3: CÓMPUTO TIPO NCF OPTIMIZADO
     # =========================================
 
     @api.depends('move_type', 'partner_id', 'partner_id.vat', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
     def _compute_l10n_do_ncf_type_id(self):
+        """✅ OPTIMIZADO: Cache de tipos NCF"""
         NcfType = self.env['l10n_do_ncf.type']
+        
+        # ✅ FIX: Pre-cargar todos los tipos en un solo search
+        all_types = NcfType.search([])
+        type_cache = {t.code: t.id for t in all_types}
+        
         for move in self:
-            ncf_type = False
+            ncf_type_id = False
+            
             if move.move_type == 'out_invoice':
                 if move.l10n_do_is_debit_note:
-                    ncf_type = NcfType.search([('code', '=', '03')], limit=1)
+                    ncf_type_id = type_cache.get('03')
                 elif move.partner_id and move.partner_id.vat:
-                    ncf_type = NcfType.search([('code', '=', '01')], limit=1)
+                    ncf_type_id = type_cache.get('01')
                 else:
-                    ncf_type = NcfType.search([('code', '=', '02')], limit=1)
+                    ncf_type_id = type_cache.get('02')
+                    
             elif move.move_type == 'out_refund':
-                ncf_type = NcfType.search([('code', '=', '04')], limit=1)
+                ncf_type_id = type_cache.get('04')
+                
             elif move.move_type in ('in_invoice', 'in_refund'):
-                type_map = {'informal': '11', 'minor_expense': '13', 'exterior': '17', 'special': '14', 'governmental': '15'}
+                type_map = {
+                    'informal': '11',
+                    'minor_expense': '13',
+                    'exterior': '17',
+                    'special': '14',
+                    'governmental': '15'
+                }
                 code = type_map.get(move.l10n_do_fiscal_type)
                 if code:
-                    ncf_type = NcfType.search([('code', '=', code)], limit=1)
-            move.l10n_do_ncf_type_id = ncf_type.id if ncf_type else False
+                    ncf_type_id = type_cache.get(code)
+            
+            move.l10n_do_ncf_type_id = ncf_type_id
 
     # =========================================
     # VALIDACIONES CÉDULA RD
@@ -742,25 +773,52 @@ class AccountMove(models.Model):
         self.l10n_do_informal_rnc_verified = True
         return True
 
+    # =========================================
+    # ✅ FIX 4: B11 MONTHLY LIMIT CON BLOQUEO
+    # =========================================
+
     def _check_b11_monthly_limit(self):
-        """Verificar uso excesivo de B11"""
+        """✅ CORREGIDO: Ahora bloquea si excede límite"""
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'informal':
             return
-
+        
+        limit = self._get_b11_monthly_limit()
         first_day = self.invoice_date.replace(day=1) if self.invoice_date else date.today().replace(day=1)
+        
         count = self.search_count([
             ('company_id', '=', self.company_id.id),
             ('l10n_do_fiscal_type', '=', 'informal'),
             ('state', '=', 'posted'),
             ('invoice_date', '>=', first_day),
+            ('id', '!=', self.id),
         ])
+        
+        if count >= limit:
+            # ✅ FIX: Ahora BLOQUEA en lugar de solo avisar
+            company_config = self.env['ir.config_parameter'].sudo()
+            block_b11 = company_config.get_param('l10n_do_ncf.b11_block_on_limit', default='True') == 'True'
+            
+            if block_b11:
+                raise UserError(_(
+                    '🚫 LÍMITE B11 ALCANZADO\n\n'
+                    'Ya tiene %s comprobantes B11 este mes.\n'
+                    'Límite mensual: %s\n\n'
+                    'No puede emitir más B11 hasta el próximo mes.\n\n'
+                    'Opciones:\n'
+                    '- Use "Compra Fiscal" y solicite NCF\n'
+                    '- Configure límite en Ajustes > Contabilidad > NCF'
+                ) % (count, limit))
+            else:
+                _logger.warning('B11 Alerta: %s - %s/%s B11 este mes', 
+                              self.company_id.name, count, limit)
 
-        if count >= B11_MONTHLY_LIMIT:
-            _logger.warning('B11 Alerta: %s - %s B11 este mes', self.company_id.name, count)
+    # =========================================
+    # ✅ FIX 8: VALIDACIÓN B13 CON LÍMITE CONFIGURABLE
+    # =========================================
 
     def _check_b13_no_itbis(self):
-        """Validar que B13 no tenga ITBIS acreditable"""
+        """✅ MEJORADO: Límite configurable"""
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'minor_expense':
             return True
@@ -774,12 +832,14 @@ class AccountMove(models.Model):
                         'Use impuesto 0%% o quite el impuesto ITBIS.'
                     ) % (line.name, tax.name))
 
-        if self.amount_total > B13_TRANSACTION_LIMIT:
+        # ✅ FIX: Límite configurable
+        limit = self._get_b13_transaction_limit()
+        if self.amount_total > limit:
             raise UserError(_(
                 '⚠️ B13 excede límite de RD$ %s por transacción.\n\n'
                 'Monto: RD$ %s\n\n'
                 'Use "Compra Fiscal" para montos mayores.'
-            ) % (B13_TRANSACTION_LIMIT, self.amount_total))
+            ) % (limit, self.amount_total))
 
         return True
 
@@ -803,10 +863,11 @@ class AccountMove(models.Model):
         return True
 
     # =========================================
-    # GENERADOR NCF
+    # ✅ FIX 7: GENERADOR NCF CORREGIDO
     # =========================================
 
     def _generate_ncf(self):
+        """✅ CORREGIDO: Comparación campo vs campo"""
         self.ensure_one()
         if self.l10n_do_ncf_number:
             return
@@ -815,33 +876,26 @@ class AccountMove(models.Model):
             raise UserError(_('Seleccione tipo de comprobante.'))
 
         ncf_type = self.l10n_do_ncf_type_id
-        sequence = self.env['l10n_do_ncf.sequence'].search([
+        
+        # ✅ FIX: Filtrar correctamente secuencias disponibles
+        sequences = self.env['l10n_do_ncf.sequence'].search([
             ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
             ('state', '=', 'active'),
-        ], limit=1, order='id desc')
-
+        ], order='id desc')
+        
+        sequence = False
+        for seq in sequences:
+            if seq.current_number <= seq.range_to:
+                sequence = seq
+                break
+        
         if not sequence:
-            raise UserError(_('No hay secuencia activa para %s.') % ncf_type.name)
-
-        if sequence.current_number > sequence.range_to:
-            alt_sequence = self.env['l10n_do_ncf.sequence'].search([
-                ('ncf_type_id', '=', ncf_type.id),
-                ('company_id', '=', self.company_id.id),
-                ('state', '=', 'active'),
-                ('current_number', '<=', 'range_to'),
-                ('id', '!=', sequence.id),
-            ], limit=1)
-
-            if alt_sequence:
-                sequence = alt_sequence
-                _logger.info('NCF: Usando secuencia alternativa %s', sequence.name)
-            else:
-                raise UserError(_(
-                    '⚠️ SECUENCIA AGOTADA\n\n'
-                    'La secuencia %s está agotada y no hay alternativas.\n\n'
-                    'Solicite nuevos rangos NCF a DGII.'
-                ) % sequence.name)
+            raise UserError(_(
+                '⚠️ SECUENCIA AGOTADA\n\n'
+                'No hay secuencias activas disponibles para %s.\n\n'
+                'Solicite nuevos rangos NCF a DGII.'
+            ) % ncf_type.name)
 
         if sequence.expiration_date:
             if self.invoice_date and self.invoice_date > sequence.expiration_date:
@@ -976,10 +1030,74 @@ class AccountMove(models.Model):
                 }
 
     # =========================================
-    # ACTION_POST
+    # ✅ FIX 5: SYNC_TAX_RETENTIONS ACTIVADO
+    # =========================================
+
+    def _sync_tax_retentions(self):
+        """✅ ACTIVADO: Sincronizar impuestos negativos con retenciones"""
+        self.ensure_one()
+        if self.move_type not in ('in_invoice', 'in_refund'):
+            return
+        
+        # Solo ejecutar si NO tiene retenciones manuales
+        if self.l10n_do_retention_ids:
+            return
+        
+        RetType = self.env['l10n_do_ncf.retention.type']
+        retentions = []
+        base_amount = abs(self.amount_untaxed or 0)
+        
+        for line in self.line_ids:
+            if line.tax_line_id and line.balance > 0:
+                tax = line.tax_line_id
+                tax_amount = abs(line.balance)
+                tax_name = (tax.name or '').lower()
+                tax_rate = abs(tax.amount)
+                
+                retention_type = False
+                apply_base = base_amount
+                
+                if 'isr' in tax_name or 'renta' in tax_name:
+                    if tax_rate >= 25:
+                        retention_type = RetType.search([('code', '=', 'ISR_EXT')], limit=1)
+                    elif tax_rate >= 8 and tax_rate <= 12:
+                        retention_type = RetType.search([('code', '=', 'ISR_PROF')], limit=1)
+                    elif tax_rate >= 1 and tax_rate <= 5:
+                        retention_type = RetType.search([('code', '=', 'ISR_TEC')], limit=1)
+                    else:
+                        retention_type = RetType.search([('code', '=', 'ISR_PROF')], limit=1)
+                
+                elif 'itbis' in tax_name:
+                    itbis_amount = abs(self.amount_tax or 0)
+                    apply_base = itbis_amount
+                    
+                    if tax_rate >= 90:
+                        retention_type = RetType.search([('code', '=', 'ITBIS_100')], limit=1)
+                    elif tax_rate >= 70:
+                        retention_type = RetType.search([('code', '=', 'ITBIS_75')], limit=1)
+                    elif tax_rate >= 25:
+                        retention_type = RetType.search([('code', '=', 'ITBIS_PROF')], limit=1)
+                
+                if retention_type:
+                    if retention_type.rate > 0:
+                        calculated_base = (tax_amount / retention_type.rate) * 100
+                    else:
+                        calculated_base = apply_base
+                    
+                    retentions.append((0, 0, {
+                        'retention_type_id': retention_type.id,
+                        'base_amount': calculated_base,
+                    }))
+        
+        if retentions:
+            self.l10n_do_retention_ids = retentions
+
+    # =========================================
+    # ✅ FIX 9: ACTION_POST CON SYNC ACTIVADO
     # =========================================
 
     def action_post(self):
+        """✅ MEJORADO: Llama _sync_tax_retentions"""
         for move in self:
             is_do_company = move.company_id.country_id and move.company_id.country_id.code == 'DO'
 
@@ -1045,6 +1163,9 @@ class AccountMove(models.Model):
                 if move.l10n_do_fiscal_type in ('informal', 'minor_expense'):
                     if not move.l10n_do_ncf_number:
                         move._generate_ncf()
+                
+                # ✅ FIX: ACTIVAR sincronización de retenciones
+                move._sync_tax_retentions()
 
         return result
 
@@ -1217,3 +1338,5 @@ class AccountMove(models.Model):
             lines.append(retention_line)
 
         return lines
+
+

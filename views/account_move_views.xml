@@ -11,11 +11,11 @@
         <field name="inherit_id" ref="account.view_move_form"/>
         <field name="arch" type="xml">
 
-            <!-- NCF Banner superior -->
-            <xpath expr="//div[hasclass('oe_title')]" position="before">
+            <!-- NCF Banner superior - Anclaje seguro -->
+            <xpath expr="//sheet" position="before">
                 <!-- Banner NCF Ventas -->
                 <div class="alert alert-success text-center mb-3" role="alert"
-                     invisible="not l10n_do_ncf_number or move_type not in ('out_invoice', 'out_refund')">
+                     attrs="{'invisible': ['|', ('l10n_do_ncf_number', '=', False), ('move_type', 'not in', ('out_invoice', 'out_refund'))]}">
                     <div class="d-flex justify-content-center align-items-center">
                         <span class="me-2">NCF:</span>
                         <span class="fs-3 fw-bold"><field name="l10n_do_ncf_number" readonly="1"/></span>
@@ -29,57 +29,57 @@
 
                 <!-- Banner NCF Proveedor -->
                 <div class="alert alert-info text-center mb-3" role="status"
-                     invisible="not l10n_do_vendor_ncf or move_type not in ('in_invoice', 'in_refund')">
+                     attrs="{'invisible': ['|', ('l10n_do_vendor_ncf', '=', False), ('move_type', 'not in', ('in_invoice', 'in_refund'))]}">
                     <span class="me-2">NCF Proveedor:</span>
                     <span class="fs-4 fw-bold"><field name="l10n_do_vendor_ncf" readonly="1"/></span>
-                    <span class="badge bg-success ms-2" invisible="not l10n_do_vendor_ncf_validated">Ã¢Å“â€œ Validado</span>
+                    <span class="badge bg-success ms-2" attrs="{'invisible': [('l10n_do_vendor_ncf_validated', '=', False)]}">✓ Validado</span>
                 </div>
 
                 <!-- Banner BLOQUEADO si reportado -->
                 <div class="alert alert-danger text-center mb-3" role="alert"
-                     invisible="not l10n_do_reported_606 and not l10n_do_reported_607">
-                    <strong>Ã°Å¸â€â€™ DOCUMENTO BLOQUEADO</strong>
-                    <span class="ms-2">Reportado DGII perÃƒÂ­odo: <field name="l10n_do_report_period" readonly="1"/></span>
+                     attrs="{'invisible': [('l10n_do_reported_606', '=', False), ('l10n_do_reported_607', '=', False)]}">
+                    <strong>🔒 DOCUMENTO BLOQUEADO</strong>
+                    <span class="ms-2">Reportado DGII período: <field name="l10n_do_report_period" readonly="1"/></span>
                 </div>
 
-                <!-- Banner Nota DÃƒÂ©bito -->
+                <!-- Banner Nota Débito -->
                 <div class="alert alert-warning text-center mb-3" role="status"
-                     invisible="not l10n_do_is_debit_note">
-                    <strong>Ã°Å¸â€œÂ NOTA DE DÃƒâ€°BITO (B03)</strong>
+                     attrs="{'invisible': [('l10n_do_is_debit_note', '=', False)]}">
+                    <strong>📝 NOTA DE DÉBITO (B03)</strong>
                     <span class="ms-2">NCF Afectado: <field name="l10n_do_debit_ncf_origin" readonly="1"/></span>
                 </div>
 
                 <!-- Banner ND Proveedor -->
                 <div class="alert alert-primary text-center mb-3" role="status"
-                     invisible="not l10n_do_is_vendor_debit_note">
-                    <strong>Ã°Å¸â€œÂ NOTA DE DÃƒâ€°BITO DE PROVEEDOR</strong>
+                     attrs="{'invisible': [('l10n_do_is_vendor_debit_note', '=', False)]}">
+                    <strong>📝 NOTA DE DÉBITO DE PROVEEDOR</strong>
                     <span class="ms-2">NCF Afectado: <field name="l10n_do_vendor_debit_ncf_origin" readonly="1"/></span>
                 </div>
             </xpath>
 
-            <!-- Campos fiscales despuÃƒÂ©s de partner_id -->
+            <!-- Campos fiscales después de partner_id -->
             <xpath expr="//field[@name='partner_id']" position="after">
                 <!-- Tipo NCF (Ventas) -->
                 <field name="l10n_do_ncf_type_id" 
-                       invisible="move_type not in ('out_invoice', 'out_refund')"
-                       readonly="state == 'posted'"
+                       attrs="{'invisible': [('move_type', 'not in', ('out_invoice', 'out_refund'))],
+                               'readonly': [('state', '=', 'posted')]}"
                        options="{'no_create': True}"/>
 
                 <!-- Tipo Fiscal (Compras) -->
                 <field name="l10n_do_fiscal_type" 
-                       invisible="move_type not in ('in_invoice', 'in_refund')"
-                       readonly="state == 'posted'"/>
+                       attrs="{'invisible': [('move_type', 'not in', ('in_invoice', 'in_refund'))],
+                               'readonly': [('state', '=', 'posted')]}"/>
             </xpath>
 
             <!-- NCF Proveedor -->
             <xpath expr="//field[@name='invoice_date']" position="after">
                 <field name="l10n_do_vendor_ncf" 
-                       invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_fiscal_type in ('informal', 'minor_expense')"
-                       readonly="state == 'posted'"
+                       attrs="{'invisible': ['|', ('move_type', 'not in', ('in_invoice', 'in_refund')), ('l10n_do_fiscal_type', 'in', ('informal', 'minor_expense'))],
+                               'readonly': [('state', '=', 'posted')]}"
                        placeholder="B0100000001"/>
                 <button name="action_validate_vendor_ncf" type="object" string="Validar NCF"
                         class="btn-link" 
-                        invisible="move_type not in ('in_invoice', 'in_refund') or not l10n_do_vendor_ncf or l10n_do_vendor_ncf_validated"/>
+                        attrs="{'invisible': ['|', '|', ('move_type', 'not in', ('in_invoice', 'in_refund')), ('l10n_do_vendor_ncf', '=', False), ('l10n_do_vendor_ncf_validated', '=', True)]}"/>
             </xpath>
 
             <!-- Notebook fiscal -->
@@ -87,63 +87,73 @@
 
                 <!-- TAB DATOS FISCALES VENTAS -->
                 <page string="Datos Fiscales" name="fiscal_data" 
-                      invisible="move_type not in ('out_invoice', 'out_refund')">
+                      attrs="{'invisible': [('move_type', 'not in', ('out_invoice', 'out_refund'))]}">
+                    
                     <group>
                         <group string="Comprobante">
                             <field name="l10n_do_ncf_number" readonly="1"/>
-                            <field name="l10n_do_ncf_type_id" readonly="state == 'posted'"/>
+                            <field name="l10n_do_ncf_type_id" attrs="{'readonly': [('state', '=', 'posted')]}"/>
                             <field name="l10n_do_ncf_seq_id" readonly="1"/>
                             <field name="l10n_do_ncf_expiration" readonly="1"/>
-                            <field name="l10n_do_ncf_required" readonly="state == 'posted'"/>
+                            <field name="l10n_do_ncf_required" attrs="{'readonly': [('state', '=', 'posted')]}"/>
                         </group>
                         <group string="Estado">
                             <field name="l10n_do_fiscal_status" readonly="1"/>
                             <field name="l10n_do_credited_amount" readonly="1"/>
-                            <field name="l10n_do_reported_607"/>
+                            <field name="l10n_do_reported_607" attrs="{'readonly': [('l10n_do_reported_607', '=', True)]}"/>
                             <field name="l10n_do_report_period" readonly="1"/>
                         </group>
                     </group>
 
-                    <!-- Nota DÃƒÂ©bito -->
-                    <group string="Nota de DÃƒÂ©bito" invisible="move_type != 'out_invoice'">
+                    <separator string="Nota de Débito" attrs="{'invisible': [('move_type', '!=', 'out_invoice')]}"/>
+                    <group attrs="{'invisible': [('move_type', '!=', 'out_invoice')]}">
                         <group>
                             <field name="l10n_do_is_debit_note"/>
-                            <field name="l10n_do_debit_note_reason" invisible="not l10n_do_is_debit_note"
-                                   required="l10n_do_is_debit_note"/>
+                            <field name="l10n_do_debit_note_reason" 
+                                   attrs="{'invisible': [('l10n_do_is_debit_note', '=', False)],
+                                           'required': [('l10n_do_is_debit_note', '=', True)]}"/>
                         </group>
                         <group>
-                            <field name="l10n_do_debit_origin_move_id" invisible="not l10n_do_is_debit_note"
-                                   required="l10n_do_is_debit_note"/>
-                            <field name="l10n_do_debit_ncf_origin" readonly="1" invisible="not l10n_do_is_debit_note"/>
+                            <field name="l10n_do_debit_origin_move_id" 
+                                   attrs="{'invisible': [('l10n_do_is_debit_note', '=', False)],
+                                           'required': [('l10n_do_is_debit_note', '=', True)]}"/>
+                            <field name="l10n_do_debit_ncf_origin" readonly="1" 
+                                   attrs="{'invisible': [('l10n_do_is_debit_note', '=', False)]}"/>
                         </group>
                     </group>
 
-                    <!-- Nota CrÃƒÂ©dito -->
-                    <group string="Nota de CrÃƒÂ©dito" invisible="move_type != 'out_refund'">
+                    <separator string="Nota de Crédito" attrs="{'invisible': [('move_type', '!=', 'out_refund')]}"/>
+                    <group attrs="{'invisible': [('move_type', '!=', 'out_refund')]}">
                         <group>
-                            <field name="l10n_do_credit_note_reason" required="move_type == 'out_refund'" readonly="state == 'posted'"/>
+                            <field name="l10n_do_credit_note_reason" 
+                                   attrs="{'required': [('move_type', '=', 'out_refund')],
+                                           'readonly': [('state', '=', 'posted')]}"/>
                         </group>
                         <group>
-                            <field name="l10n_do_origin_move_id" readonly="state == 'posted'"/>
-                            <field name="l10n_do_ncf_origin" readonly="state == 'posted'"/>
+                            <field name="l10n_do_origin_move_id" attrs="{'readonly': [('state', '=', 'posted')]}"/>
+                            <field name="l10n_do_ncf_origin" attrs="{'readonly': [('state', '=', 'posted')]}"/>
                         </group>
                     </group>
 
-                    <!-- Venta a crÃƒÂ©dito con retenciÃƒÂ³n posterior -->
-                    <group string="RetenciÃƒÂ³n por Tercero (607)" invisible="move_type != 'out_invoice'">
+                    <separator string="Retención por Tercero (607)" attrs="{'invisible': [('move_type', '!=', 'out_invoice')]}"/>
+                    <group attrs="{'invisible': [('move_type', '!=', 'out_invoice')]}">
                         <group>
                             <field name="l10n_do_is_credit_sale"/>
-                            <field name="l10n_do_retention_date" invisible="not l10n_do_is_credit_sale"/>
+                            <field name="l10n_do_retention_date" 
+                                   attrs="{'invisible': [('l10n_do_is_credit_sale', '=', False)]}"/>
                         </group>
                         <group>
-                            <field name="l10n_do_third_party_retention_itbis" invisible="not l10n_do_is_credit_sale"/>
-                            <field name="l10n_do_third_party_retention_isr" invisible="not l10n_do_is_credit_sale"/>
-                            <field name="l10n_do_retention_reported" invisible="not l10n_do_is_credit_sale"/>
+                            <field name="l10n_do_third_party_retention_itbis" 
+                                   attrs="{'invisible': [('l10n_do_is_credit_sale', '=', False)]}"/>
+                            <field name="l10n_do_third_party_retention_isr" 
+                                   attrs="{'invisible': [('l10n_do_is_credit_sale', '=', False)]}"/>
+                            <field name="l10n_do_retention_reported" 
+                                   attrs="{'invisible': [('l10n_do_is_credit_sale', '=', False)]}"/>
                         </group>
                     </group>
 
-                    <!-- Forma de pago detallada 607 -->
-                    <group string="Formas de Pago (607)">
+                    <separator string="Formas de Pago (607)"/>
+                    <group>
                         <group>
                             <field name="l10n_do_payment_cash"/>
                             <field name="l10n_do_payment_bank"/>
@@ -161,27 +171,31 @@
 
                 <!-- TAB DATOS FISCALES COMPRAS -->
                 <page string="Datos Fiscales (606)" name="fiscal_606" 
-                      invisible="move_type not in ('in_invoice', 'in_refund')">
+                      attrs="{'invisible': [('move_type', 'not in', ('in_invoice', 'in_refund'))]}">
+                    
                     <group>
-                        <group string="ClasificaciÃƒÂ³n">
+                        <group string="Clasificación">
                             <field name="l10n_do_fiscal_type"/>
                             <field name="l10n_do_purchase_type"/>
                             <field name="l10n_do_expense_type"/>
                         </group>
                         <group string="NCF">
                             <field name="l10n_do_vendor_ncf" 
-                                   invisible="l10n_do_fiscal_type in ('informal', 'minor_expense')"/>
+                                   attrs="{'invisible': [('l10n_do_fiscal_type', 'in', ('informal', 'minor_expense'))]}"/>
                             <field name="l10n_do_ncf_number" readonly="1"
-                                   invisible="l10n_do_fiscal_type not in ('informal', 'minor_expense')"/>
-                            <field name="l10n_do_reported_606"/>
+                                   attrs="{'invisible': [('l10n_do_fiscal_type', 'not in', ('informal', 'minor_expense'))]}"/>
+                            <field name="l10n_do_reported_606" 
+                                   attrs="{'readonly': [('l10n_do_reported_606', '=', True)]}"/>
                             <field name="l10n_do_report_period" readonly="1"/>
                         </group>
                     </group>
 
-                    <!-- B11 Informal -->
-                    <group string="Proveedor Informal (B11)" invisible="l10n_do_fiscal_type != 'informal'">
+                    <separator string="Proveedor Informal (B11)" 
+                               attrs="{'invisible': [('l10n_do_fiscal_type', '!=', 'informal')]}"/>
+                    <group attrs="{'invisible': [('l10n_do_fiscal_type', '!=', 'informal')]}">
                         <group>
-                            <field name="l10n_do_informal_provider_name" required="l10n_do_fiscal_type == 'informal'"/>
+                            <field name="l10n_do_informal_provider_name" 
+                                   attrs="{'required': [('l10n_do_fiscal_type', '=', 'informal')]}"/>
                             <field name="l10n_do_informal_provider_cedula"/>
                             <field name="l10n_do_informal_rnc_verified" readonly="1"/>
                         </group>
@@ -192,8 +206,9 @@
                         </group>
                     </group>
 
-                    <!-- B13 Gasto Menor -->
-                    <group string="Gasto Menor (B13)" invisible="l10n_do_fiscal_type != 'minor_expense'">
+                    <separator string="Gasto Menor (B13)" 
+                               attrs="{'invisible': [('l10n_do_fiscal_type', '!=', 'minor_expense')]}"/>
+                    <group attrs="{'invisible': [('l10n_do_fiscal_type', '!=', 'minor_expense')]}">
                         <group>
                             <field name="l10n_do_minor_expense_type"/>
                             <field name="l10n_do_minor_expense_employee"/>
@@ -203,33 +218,35 @@
                         </group>
                     </group>
 
-                    <!-- B17 Exterior -->
-                    <group string="Pago al Exterior (B17)" invisible="l10n_do_fiscal_type != 'exterior'">
+                    <separator string="Pago al Exterior (B17)" 
+                               attrs="{'invisible': [('l10n_do_fiscal_type', '!=', 'exterior')]}"/>
+                    <group attrs="{'invisible': [('l10n_do_fiscal_type', '!=', 'exterior')]}">
                         <field name="l10n_do_exterior_service_type"/>
                     </group>
 
-                    <!-- ND Proveedor -->
-                    <group string="Nota de DÃƒÂ©bito Proveedor" invisible="move_type != 'in_invoice'">
+                    <separator string="Nota de Débito Proveedor" 
+                               attrs="{'invisible': [('move_type', '!=', 'in_invoice')]}"/>
+                    <group attrs="{'invisible': [('move_type', '!=', 'in_invoice')]}">
                         <group>
                             <field name="l10n_do_is_vendor_debit_note"/>
                         </group>
                         <group>
                             <field name="l10n_do_vendor_debit_ncf_origin" 
-                                   invisible="not l10n_do_is_vendor_debit_note"
-                                   required="l10n_do_is_vendor_debit_note"/>
+                                   attrs="{'invisible': [('l10n_do_is_vendor_debit_note', '=', False)],
+                                           'required': [('l10n_do_is_vendor_debit_note', '=', True)]}"/>
                         </group>
                     </group>
 
-                    <!-- Split bienes/servicios -->
-                    <group string="ClasificaciÃƒÂ³n Bienes/Servicios">
+                    <separator string="Clasificación Bienes/Servicios"/>
+                    <group>
                         <group>
                             <field name="l10n_do_606_monto_bienes"/>
                             <field name="l10n_do_606_monto_servicios"/>
                         </group>
                     </group>
 
-                    <!-- Campos ITBIS 606 -->
-                    <group string="ITBIS (606)">
+                    <separator string="ITBIS (606)"/>
+                    <group>
                         <group>
                             <field name="l10n_do_itbis_facturado" readonly="1"/>
                             <field name="l10n_do_itbis_retenido" readonly="1"/>
@@ -237,13 +254,14 @@
                         </group>
                         <group>
                             <field name="l10n_do_itbis_proporcionalidad"/>
-                            <field name="l10n_do_itbis_costo"/>
+                            <field name="l10n_do_itbis_costo" 
+                                   attrs="{'readonly': [('l10n_do_fiscal_type', '!=', 'minor_expense')]}"/>
                             <field name="l10n_do_itbis_adelantar" readonly="1"/>
                         </group>
                     </group>
 
-                    <!-- Campos ISR 606 -->
-                    <group string="ISR (606)">
+                    <separator string="ISR (606)"/>
+                    <group>
                         <group>
                             <field name="l10n_do_tipo_retencion_isr"/>
                             <field name="l10n_do_isr_retenido" readonly="1"/>
@@ -253,8 +271,8 @@
                         </group>
                     </group>
 
-                    <!-- Otros impuestos -->
-                    <group string="Otros">
+                    <separator string="Otros Impuestos y Propinas"/>
+                    <group>
                         <group>
                             <field name="l10n_do_impuesto_selectivo"/>
                             <field name="l10n_do_otros_impuestos"/>
@@ -265,8 +283,9 @@
                         </group>
                     </group>
 
-                    <!-- Multimoneda -->
-                    <group string="Multimoneda" invisible="currency_id == l10n_do_dop_currency_id">
+                    <separator string="Multimoneda" 
+                               attrs="{'invisible': [('currency_id', '=', l10n_do_dop_currency_id)]}"/>
+                    <group attrs="{'invisible': [('currency_id', '=', l10n_do_dop_currency_id)]}">
                         <group>
                             <field name="l10n_do_exchange_rate"/>
                             <field name="l10n_do_amount_dop" readonly="1"/>
@@ -277,9 +296,9 @@
                     </group>
                 </page>
 
-                <!-- TAB RETENCIONES - Simplificado para evitar error de Odoo 19 -->
+                <!-- TAB RETENCIONES -->
                 <page string="Retenciones" name="retentions" 
-                      invisible="move_type not in ('in_invoice', 'in_refund')">
+                      attrs="{'invisible': [('move_type', 'not in', ('in_invoice', 'in_refund'))]}">
                     <group>
                         <group string="Retenciones Aplicadas">
                             <field name="l10n_do_total_isr_retention" readonly="1"/>
@@ -291,7 +310,7 @@
                     </group>
                     <group>
                         <p class="text-muted">
-                            Las retenciones se gestionan desde el botÃƒÂ³n "Agregar RetenciÃƒÂ³n" en la pestaÃƒÂ±a principal.
+                            Las retenciones se gestionan desde el botón "Agregar Retención" en la pestaña principal.
                         </p>
                     </group>
                 </page>
@@ -302,10 +321,10 @@
             <xpath expr="//header" position="inside">
                 <button name="action_mark_reported_606" type="object" string="Marcar 606"
                         class="btn-secondary"
-                        invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_reported_606 or state != 'posted'"/>
+                        attrs="{'invisible': ['|', '|', ('move_type', 'not in', ('in_invoice', 'in_refund')), ('l10n_do_reported_606', '=', True), ('state', '!=', 'posted')]}"/>
                 <button name="action_mark_reported_607" type="object" string="Marcar 607"
                         class="btn-secondary"
-                        invisible="move_type not in ('out_invoice', 'out_refund') or l10n_do_reported_607 or state != 'posted'"/>
+                        attrs="{'invisible': ['|', '|', ('move_type', 'not in', ('out_invoice', 'out_refund')), ('l10n_do_reported_607', '=', True), ('state', '!=', 'posted')]}"/>
             </xpath>
 
         </field>
@@ -314,8 +333,6 @@
     <!-- ============================================= -->
     <!-- LISTA FACTURAS - COLUMNAS NCF                -->
     <!-- ============================================= -->
-
-    <!-- Vista eliminada - usar la de invoice_report.xml -->
 
     <record id="view_in_invoice_tree_ncf" model="ir.ui.view">
         <field name="name">account.move.tree.vendor.ncf</field>
@@ -330,7 +347,7 @@
     </record>
 
     <!-- ============================================= -->
-    <!-- BÃƒÅ¡SQUEDA                                     -->
+    <!-- BÚSQUEDA                                      -->
     <!-- ============================================= -->
 
     <record id="view_account_move_filter_ncf" model="ir.ui.view">
