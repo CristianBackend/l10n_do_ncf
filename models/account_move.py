@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # modulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # Versión: 19.0.3.0.0 - CASOS DE USO COMPLETOS - CORREGIDO
@@ -1338,5 +1338,6 @@ class AccountMove(models.Model):
             lines.append(retention_line)
 
         return lines
+
 
 
