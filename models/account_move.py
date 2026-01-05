@@ -1126,7 +1126,8 @@ class AccountMove(models.Model):
                 elif move.l10n_do_fiscal_type == 'exterior':
                     move._check_b17_no_itbis()
                 elif move.l10n_do_fiscal_type == 'fiscal':
-                    if not move.l10n_do_vendor_ncf:
+                    # Skip validation for demo data
+                    if not self.env.context.get('install_mode') and not move.l10n_do_vendor_ncf:
                         raise UserError(_('Ingrese NCF del proveedor o cambie Tipo Fiscal.'))
 
         result = super().action_post()
@@ -1338,6 +1339,7 @@ class AccountMove(models.Model):
             lines.append(retention_line)
 
         return lines
+
 
 
 
