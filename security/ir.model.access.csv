@@ -19,3 +19,14 @@ access_dgii_reminder_user,l10n_do_ncf.dgii.reminder.user,model_l10n_do_ncf_dgii_
 access_dgii_reminder_manager,l10n_do_ncf.dgii.reminder.manager,model_l10n_do_ncf_dgii_reminder,group_ncf_manager,1,1,1,1
 access_bc_exchange_rate_user,l10n_do_ncf.bc.exchange.rate.user,model_l10n_do_ncf_bc_exchange_rate,group_ncf_user,1,0,0,0
 access_bc_exchange_rate_manager,l10n_do_ncf.bc.exchange.rate.manager,model_l10n_do_ncf_bc_exchange_rate,group_ncf_manager,1,1,1,1
+access_607_multiperiod_wizard_user,l10n_do_ncf.607.multiperiod.wizard.user,model_l10n_do_ncf_607_multiperiod_wizard,group_ncf_user,1,1,1,1
+access_dgii_txt_validator_user,l10n_do_ncf.dgii.txt.validator.user,model_l10n_do_ncf_dgii_txt_validator,group_ncf_user,1,1,1,1
+access_dgii_validation_user,l10n_do_ncf.dgii.validation.user,model_l10n_do_ncf_dgii_validation,group_ncf_user,1,1,1,1
+access_fiscal_audit_user,l10n_do_ncf.fiscal.audit.user,model_l10n_do_ncf_fiscal_audit,group_ncf_user,1,0,0,0
+access_fiscal_audit_manager,l10n_do_ncf.fiscal.audit.manager,model_l10n_do_ncf_fiscal_audit,group_ncf_manager,1,1,1,1
+access_registro_unico_user,l10n_do_ncf.registro.unico.user,model_l10n_do_ncf_registro_unico,group_ncf_user,1,0,0,0
+access_registro_unico_manager,l10n_do_ncf.registro.unico.manager,model_l10n_do_ncf_registro_unico,group_ncf_manager,1,1,1,1
+access_registro_unico_line_user,l10n_do_ncf.registro.unico.line.user,model_l10n_do_ncf_registro_unico_line,group_ncf_user,1,0,0,0
+access_registro_unico_line_manager,l10n_do_ncf.registro.unico.line.manager,model_l10n_do_ncf_registro_unico_line,group_ncf_manager,1,1,1,1
+access_retention_correction_wizard_user,l10n_do_ncf.retention.correction.wizard.user,model_l10n_do_ncf_retention_correction_wizard,group_ncf_user,1,1,1,1
+access_rnc_correction_wizard_user,l10n_do_ncf.rnc.correction.wizard.user,model_l10n_do_ncf_rnc_correction_wizard,group_ncf_user,1,1,1,1
