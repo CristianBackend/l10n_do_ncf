@@ -342,7 +342,21 @@
     <!-- ============================================= -->
     <!-- LISTA FACTURAS - COLUMNAS NCF                -->
     <!-- ============================================= -->
-
+ <record id="view_out_invoice_tree_ncf" model="ir.ui.view">
+        <field name="name">account.move.tree.customer.ncf</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_out_invoice_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="l10n_do_ncf_number" string="NCF" optional="show"/>
+                <field name="l10n_do_ncf_type_id" string="Tipo NCF" optional="hide"/>
+                <field name="l10n_do_fiscal_status" string="Estado Fiscal" widget="badge" optional="hide"
+                       decoration-success="l10n_do_fiscal_status == 'valid'"
+                       decoration-warning="l10n_do_fiscal_status == 'partial_credit'"
+                       decoration-danger="l10n_do_fiscal_status in ('annulled', 'rejected')"/>
+            </xpath>
+        </field>
+    </record>
     <record id="view_in_invoice_tree_ncf" model="ir.ui.view">
         <field name="name">account.move.tree.vendor.ncf</field>
         <field name="model">account.move</field>
