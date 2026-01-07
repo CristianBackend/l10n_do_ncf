@@ -70,9 +70,9 @@
             <xpath expr="//field[@name='partner_id']" position="after">
                 <!-- Tipo NCF (Ventas) -->
                 <field name="l10n_do_ncf_type_id" 
-                       modifiers="{'invisible': [('move_type', 'not in', ('out_invoice', 'out_refund'))],
-                                   'readonly': [('state', '=', 'posted')]}"
-                       options="{'no_create': True}"/>
+                    modifiers="{'invisible': [('move_type', 'not in', ('out_invoice', 'out_refund'))],
+                                'readonly': ['|', ('state', '=', 'posted'), ('l10n_do_ncf_number', '!=', False)]}"
+                    options="{'no_create': True}"/>
 
                 <!-- Tipo Fiscal (Compras) -->
                 <field name="l10n_do_fiscal_type" 

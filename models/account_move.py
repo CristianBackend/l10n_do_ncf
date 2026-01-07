@@ -939,7 +939,59 @@ class AccountMove(models.Model):
     # =========================================
     # ONCHANGE
     # =========================================
+    @api.onchange('l10n_do_ncf_type_id')
+    def _onchange_check_sequence_exists(self):
+        """Validar que exista secuencia activa para el tipo seleccionado"""
+        if not self.l10n_do_ncf_type_id:
+            return
+        
+        if not self.company_id or not self.company_id.country_id or self.company_id.country_id.code != 'DO':
+            return
+        
+        # Si ya tiene NCF, bloquear cambio
+        if self.l10n_do_ncf_number:
+            return {'warning': {
+                'title': _('⚠️ Cambio no permitido'),
+                'message': _('Este documento ya tiene NCF generado (%s). No puede cambiar el tipo de comprobante.') % self.l10n_do_ncf_number
+            }}
+    
+        # Verificar existencia de secuencia activa
+        if self.move_type in ('out_invoice', 'out_refund') and self.l10n_do_ncf_required:
+            seq = self.env['l10n_do_ncf.sequence'].search([
+                ('company_id', '=', self.company_id.id),
+                ('ncf_type_id', '=', self.l10n_do_ncf_type_id.id),
+                ('state', '=', 'active'),
+            ], limit=1)
+            
+            if not seq:
+                return {'warning': {
+                    'title': _('⚠️ Sin secuencia activa'),
+                    'message': _('No existe secuencia NCF activa para %s.\nDebe configurar una secuencia antes de usar este tipo.') % self.l10n_do_ncf_type_id.name
+                }}
 
+
+    @api.constrains('l10n_do_ncf_type_id')
+    def _lock_ncf_type_after_generation(self):
+        """Bloquear cambio de tipo NCF si ya tiene NCF generado"""
+        for move in self:
+            if not move.company_id or not move.company_id.country_id or move.company_id.country_id.code != 'DO':
+                continue
+            
+            # Si ya tiene NCF, verificar que el tipo coincida con el prefijo
+            if move.l10n_do_ncf_number and move.l10n_do_ncf_type_id:
+                ncf_prefix = move.l10n_do_ncf_number[:3] if move.l10n_do_ncf_number else ''
+                type_prefix = move.l10n_do_ncf_type_id.prefix if move.l10n_do_ncf_type_id else ''
+                
+                if ncf_prefix and type_prefix and ncf_prefix != type_prefix:
+                    raise ValidationError(_(
+                        '🔒 CAMBIO BLOQUEADO\n\n'
+                        'Este documento ya tiene NCF emitido: %s\n'
+                        'No puede cambiar el tipo de comprobante.\n\n'
+                        'Si necesita corregir:\n'
+                        '- Anule este documento\n'
+                        '- Emita una Nota de Crédito (B04)\n'
+                        '- Cree un nuevo documento con el tipo correcto'
+                    ) % move.l10n_do_ncf_number)            
     @api.onchange('l10n_do_fiscal_type')
     def _onchange_fiscal_type(self):
         if self.move_type not in ('in_invoice', 'in_refund'):
