@@ -732,8 +732,17 @@ class AccountMove(models.Model):
         return super().button_cancel()
 
     def button_draft(self):
-        """Override para bloquear volver a borrador post-reporte"""
+        """Override para bloquear volver a borrador en NC con NCF y post-reporte"""
         for move in self:
+            # Bloquear NC con NCF generado
+            if move.move_type == 'out_refund' and move.l10n_do_ncf_number:
+                raise UserError(_(
+                    '🔒 DOCUMENTO BLOQUEADO\n\n'
+                    'Esta Nota de Crédito ya tiene NCF generado: %s\n\n'
+                    'No puede volver a borrador.\n'
+                    'Para corregir errores, anule este documento y cree uno nuevo.'
+                ) % move.l10n_do_ncf_number)
+            # Bloquear documentos reportados DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
         return super().button_draft()

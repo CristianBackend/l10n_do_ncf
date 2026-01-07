@@ -158,6 +158,16 @@ class NcfSequence(models.Model):
     # =====================================================
     # CAMPOS COMPUTADOS
     # =====================================================
+    @api.constrains('range_from')
+    def _check_range_from_not_zero(self):
+        """Validar que el rango no empiece en 0"""
+        for record in self:
+            if record.range_from is not None and record.range_from < 1:
+                raise ValidationError(_(
+                    '⚠️ RANGO INVÁLIDO\n\n'
+                    'El número inicial del rango debe ser mayor o igual a 1.\n'
+                    'No puede empezar en 0.'
+                ))
     @api.depends('ncf_type_id', 'range_from', 'range_to')
     def _compute_name(self):
         for record in self:

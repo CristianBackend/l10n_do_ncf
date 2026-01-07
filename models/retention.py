@@ -75,6 +75,11 @@ class L10nDoRetentionType(models.Model):
         default=False
     )
 
+    is_perceived = fields.Boolean(
+        string='Es Percepción',
+        default=False,
+        help='Marcar si es una percepción (el proveedor nos retiene) en lugar de retención (nosotros retenemos)'
+    )
     description = fields.Text(string='Descripción/Base Legal')
     active = fields.Boolean(default=True)
 
@@ -153,7 +158,11 @@ class AccountMoveRetention(models.Model):
 
     currency_id = fields.Many2one('res.currency', related='move_id.currency_id')
     company_id = fields.Many2one('res.company', related='move_id.company_id')
-
+    is_manual = fields.Boolean(
+        string='Manual',
+        default=False,
+        help='Marcar si esta retención fue ajustada manualmente por el contador'
+    )
     @api.depends('base_amount', 'rate')
     def _compute_retention_amount(self):
         for rec in self:

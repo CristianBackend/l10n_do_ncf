@@ -248,24 +248,7 @@
     <!-- VISTAS DE LISTA                              -->
     <!-- ============================================= -->
 
-    <!-- Lista de facturas cliente - NCF visible -->
-    <record id="view_move_list_ncf" model="ir.ui.view">
-        <field name="name">account.move.list.ncf</field>
-        <field name="model">account.move</field>
-        <field name="inherit_id" ref="account.view_out_invoice_tree"/>
-        <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="l10n_do_ncf_number" string="NCF" optional="show"
-                       decoration-muted="not l10n_do_ncf_number"/>
-                <field name="l10n_do_ncf_type_id" string="Tipo" optional="hide"/>
-                <field name="l10n_do_fiscal_status" string="Estado" optional="hide"
-                       decoration-success="l10n_do_fiscal_status == 'valid'"
-                       decoration-warning="l10n_do_fiscal_status == 'credited'"
-                       decoration-danger="l10n_do_fiscal_status == 'annulled'"/>
-            </field>
-        </field>
-    </record>
-
+ 
     <!-- Lista de facturas proveedor -->
     <record id="view_in_invoice_list_ncf" model="ir.ui.view">
         <field name="name">account.move.list.vendor.ncf</field>
