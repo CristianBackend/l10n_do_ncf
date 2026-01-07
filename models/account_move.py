@@ -32,13 +32,12 @@ class AccountMove(models.Model):
     )
 
 
-# Campo para controlar readonly del tipo NCF
-   
 
-   l10n_do_ncf_type_id = fields.Many2one(
-    'l10n_do_ncf.type', string='Tipo NCF', tracking=True,
-    compute='_compute_l10n_do_ncf_type_id', store=True, readonly=True,
-)
+   
+    l10n_do_ncf_type_id = fields.Many2one(
+        'l10n_do_ncf.type', string='Tipo NCF', tracking=True,
+        compute='_compute_l10n_do_ncf_type_id', store=True, readonly=True,
+    )
 
     l10n_do_ncf_seq_id = fields.Many2one(
         'l10n_do_ncf.sequence', string='Secuencia', readonly=True, copy=False,
@@ -374,8 +373,47 @@ class AccountMove(models.Model):
         """✅ FIX: Límite configurable B13"""
         param = self.env['ir.config_parameter'].sudo()
         return float(param.get_param('l10n_do_ncf.b13_transaction_limit', default=10000))
-
     # =========================================
+    # 🔒 PROTECCIÓN CAMPOS FISCALES EN WRITE
+    # =========================================
+
+    def write(self, vals):
+        """
+        Bloquear cambios en campos fiscales si ya tiene NCF generado.
+        Permite editar líneas, precios, cantidades, etc.
+        """
+        protected_fields = {
+            'l10n_do_ncf_type_id',
+            'l10n_do_ncf_required',
+            'l10n_do_ncf_seq_id',
+            'l10n_do_ncf_number',
+        }
+
+        for move in self:
+            # Solo empresas RD
+            if not move.company_id.country_id or move.company_id.country_id.code != 'DO':
+                continue
+
+            # Si ya tiene NCF generado, bloquear cambios fiscales
+            if move.l10n_do_ncf_number:
+                illegal_changes = protected_fields.intersection(vals.keys())
+                if illegal_changes:
+                    raise UserError(_(
+                        '🔒 CAMBIO FISCAL NO PERMITIDO\n\n'
+                        'Esta factura ya tiene un NCF generado: %s\n\n'
+                        'No se puede modificar:\n'
+                        '- Tipo de comprobante\n'
+                        '- Requiere NCF\n'
+                        '- Secuencia / NCF\n\n'
+                        'Puede:\n'
+                        '✔ Agregar o quitar productos\n'
+                        '✔ Ajustar cantidades y precios\n'
+                        '✔ Corregir impuestos\n\n'
+                        'Si necesita cambiar el comprobante:\n'
+                        '➜ Emita una Nota de Crédito (B04)'
+                    ) % move.l10n_do_ncf_number)
+
+        return super().write(vals)  # ← 8 espacios, al nivel del "for"
     # CÓMPUTOS MULTIMONEDA
     # =========================================
 
