@@ -69,8 +69,10 @@
             <!-- Campos fiscales después de partner_id -->
             <xpath expr="//field[@name='partner_id']" position="after">
                 <!-- Tipo NCF (Ventas) -->
-            <field name="l10n_do_ncf_type_id" readonly="l10n_do_ncf_number or state == 'posted'"/>
-
+            <field name="l10n_do_ncf_type_id" 
+                invisible="move_type not in ('out_invoice', 'out_refund')"
+                readonly="1"
+                options="{'no_create': True}"/>
                 <!-- Tipo Fiscal (Compras) -->
                 <field name="l10n_do_fiscal_type" 
                        modifiers="{'invisible': [('move_type', 'not in', ('in_invoice', 'in_refund'))],

@@ -35,10 +35,10 @@ class AccountMove(models.Model):
 # Campo para controlar readonly del tipo NCF
    
 
-    l10n_do_ncf_type_id = fields.Many2one(
+   l10n_do_ncf_type_id = fields.Many2one(
     'l10n_do_ncf.type', string='Tipo NCF', tracking=True,
-    compute='_compute_l10n_do_ncf_type_id', store=True,
-    )
+    compute='_compute_l10n_do_ncf_type_id', store=True, readonly=True,
+)
 
     l10n_do_ncf_seq_id = fields.Many2one(
         'l10n_do_ncf.sequence', string='Secuencia', readonly=True, copy=False,
