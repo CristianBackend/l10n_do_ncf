@@ -915,24 +915,27 @@ class AccountMove(models.Model):
                 raise UserError(_('Secuencia %s vencida.') % sequence.name)
 
         prefix = ncf_type.prefix
-        if ncf_type.is_electronic:
-            ncf = '%s%010d' % (prefix, sequence.current_number)
+        if sequence.current_number == 0:
+            next_num = sequence.range_from if sequence.range_from >= 1 else 1
         else:
-            ncf = '%s%08d' % (prefix, sequence.current_number)
+            next_num = sequence.current_number + 1
+        
+        if ncf_type.is_electronic:
+            ncf = '%s%010d' % (prefix, next_num)
+        else:
+            ncf = '%s%08d' % (prefix, next_num)
 
         self.write({
             'l10n_do_ncf_number': ncf,
             'l10n_do_ncf_seq_id': sequence.id,
             'l10n_do_fiscal_status': 'valid',
         })
-        sequence.sudo().write({'current_number': sequence.current_number + 1})
-
+        sequence.sudo().write({'current_number': next_num})
         self.env['l10n_do_ncf.fiscal.audit'].log_event(
             'ncf_generated', move=self, description='NCF generado automáticamente'
         )
 
         _logger.info('NCF generado: %s | Doc: %s', ncf, self.name)
-
     # =========================================
     # ONCHANGE
     # =========================================
