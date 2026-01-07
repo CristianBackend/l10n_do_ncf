@@ -420,10 +420,11 @@ class NcfSequence(models.Model):
         current_number, range_from, range_to = result
 
         if current_number == 0:
-            next_num = range_from
+            next_num = range_from if range_from >= 1 else 1
         else:
             next_num = current_number + 1
-
+        if next_num < 1:
+            next_num = 1
         if next_num > range_to:
             raise UserError(_(
                 '[%s] Se ha agotado la secuencia de NCF.\n\n'
