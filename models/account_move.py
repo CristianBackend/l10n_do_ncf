@@ -326,7 +326,7 @@ class AccountMove(models.Model):
             else:
                 move.l10n_do_credited_amount = 0
 
-    @api.depends('invoice_line_ids.product_id.detailed_type', 'invoice_line_ids.price_subtotal')
+    @api.depends('invoice_line_ids.product_id.type', 'invoice_line_ids.price_subtotal')
     def _compute_606_split_bienes_servicios(self):
         for move in self:
             if move.move_type not in ('in_invoice', 'in_refund'):
@@ -335,7 +335,7 @@ class AccountMove(models.Model):
             bienes = servicios = 0.0
             for line in move.invoice_line_ids.filtered(lambda l: not l.display_type):
                 subtotal = line.price_subtotal
-                if line.product_id and line.product_id.detailed_type in ('consu', 'product'):
+                if line.product_id and line.product_id.type in ('consu', 'product'):
                     bienes += subtotal
                 else:
                     servicios += subtotal
@@ -637,7 +637,7 @@ class AccountMove(models.Model):
 
         ncf_type = self.l10n_do_ncf_type_id
 
-        sequences = self.env['l10n_do_ncf.sequence'].sudo().with_for_update().search([
+        sequences = self.env['l10n_do_ncf.sequence'].sudo().search([
             ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
             ('state', '=', 'active'),
@@ -1241,7 +1241,7 @@ class AccountMove(models.Model):
             else:
                 move.l10n_do_credited_amount = 0
 
-    @api.depends('invoice_line_ids.product_id.detailed_type', 'invoice_line_ids.price_subtotal')
+    @api.depends('invoice_line_ids.product_id.type', 'invoice_line_ids.price_subtotal')
     def _compute_606_split_bienes_servicios(self):
         for move in self:
             if move.move_type not in ('in_invoice', 'in_refund'):
@@ -1250,7 +1250,7 @@ class AccountMove(models.Model):
             bienes = servicios = 0.0
             for line in move.invoice_line_ids.filtered(lambda l: not l.display_type):
                 subtotal = line.price_subtotal
-                if line.product_id and line.product_id.detailed_type in ('consu', 'product'):
+                if line.product_id and line.product_id.type in ('consu', 'product'):
                     bienes += subtotal
                 else:
                     servicios += subtotal
@@ -1552,7 +1552,7 @@ class AccountMove(models.Model):
 
         ncf_type = self.l10n_do_ncf_type_id
 
-        sequences = self.env['l10n_do_ncf.sequence'].sudo().with_for_update().search([
+        sequences = self.env['l10n_do_ncf.sequence'].sudo().search([
             ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
             ('state', '=', 'active'),
@@ -1828,3 +1828,22 @@ class AccountMove(models.Model):
             return self.l10n_do_informal_provider_cedula or ''
         return self.partner_id.vat or ''
 
+
+    def action_add_retention(self):
+        """Abrir wizard para agregar retención"""
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Agregar Retención'),
+            'res_model': 'l10n_do_ncf.retention.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_move_id': self.id,
+                'default_base_amount': self.amount_untaxed,
+                'default_itbis_amount': self.amount_tax,
+            }
+        }
+
+    def action_clear_retentions(self):
+        """Limpiar todas las retenciones"""
+        self.l10n_do_retention_ids.unlink()
