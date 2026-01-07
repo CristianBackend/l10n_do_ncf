@@ -31,6 +31,12 @@ class AccountMove(models.Model):
         string='NCF', copy=False, readonly=True, tracking=True, index=True,
     )
 
+
+# Campo para controlar readonly del tipo NCF
+    l10n_do_ncf_type_readonly = fields.Boolean(
+        compute='_compute_ncf_type_readonly', store=False
+    )
+
     l10n_do_ncf_type_id = fields.Many2one(
         'l10n_do_ncf.type', string='Tipo NCF', tracking=True,
         compute='_compute_l10n_do_ncf_type_id', store=True, readonly=False,
@@ -380,7 +386,10 @@ class AccountMove(models.Model):
         dop = self.env.ref('base.DOP', raise_if_not_found=False)
         for move in self:
             move.l10n_do_dop_currency_id = dop.id if dop else move.currency_id.id
-
+    @api.depends('l10n_do_ncf_number', 'state')
+    def _compute_ncf_type_readonly(self):
+        for move in self:
+            move.l10n_do_ncf_type_readonly = bool(move.l10n_do_ncf_number) or move.state == 'posted'
     @api.depends('amount_total', 'l10n_do_exchange_rate', 'currency_id')
     def _compute_amount_dop(self):
         dop = self.env.ref('base.DOP', raise_if_not_found=False)
