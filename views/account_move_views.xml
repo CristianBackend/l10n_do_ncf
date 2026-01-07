@@ -69,11 +69,7 @@
             <!-- Campos fiscales después de partner_id -->
             <xpath expr="//field[@name='partner_id']" position="after">
                 <!-- Tipo NCF (Ventas) -->
-            <field name="l10n_do_ncf_type_readonly" invisible="1"/>
-            <field name="l10n_do_ncf_type_id" 
-                invisible="move_type not in ('out_invoice', 'out_refund')"
-                readonly="l10n_do_ncf_type_readonly"
-                options="{'no_create': True}"/>
+            <field name="l10n_do_ncf_type_id" readonly="l10n_do_ncf_number or state == 'posted'"/>
 
                 <!-- Tipo Fiscal (Compras) -->
                 <field name="l10n_do_fiscal_type" 
@@ -102,7 +98,6 @@
                     <group>
                         <group string="Comprobante">
                             <field name="l10n_do_ncf_number" readonly="1"/>
-                            <field name="l10n_do_ncf_type_id" readonly="l10n_do_ncf_type_readonly"/>                            <field name="l10n_do_ncf_seq_id" readonly="1"/>
                             <field name="l10n_do_ncf_expiration" readonly="1"/>
                             <field name="l10n_do_ncf_required" modifiers="{'readonly': [('state', '=', 'posted')]}"/>
                         </group>
