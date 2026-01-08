@@ -489,11 +489,13 @@ class AccountMove(models.Model):
     def _compute_l10n_do_ncf_type_id(self):
         """Asignar tipo de NCF segun tipo fiscal del cliente/proveedor
         
-        VENTAS (out_invoice):
-        - taxpayer -> B01 (Credito Fiscal)
-        - final_consumer -> B02 (Consumidor Final)
-        - governmental -> B15 (Gubernamental)
-        - special_regime -> B14 (Regimen Especial)
+        VENTAS (out_invoice) - Orden de evaluacion segun DGII:
+        1. Exportacion (cliente extranjero) -> B16
+        2. Gubernamental -> B15
+        3. Regimen Especial -> B14
+        4. Nota de Debito -> B03
+        5. Con RNC (contribuyente) -> B01
+        6. Sin RNC (consumidor final) -> B02
         
         NC VENTAS (out_refund): siempre B04
         COMPRAS (in_invoice): segun l10n_do_fiscal_type del movimiento
@@ -501,15 +503,6 @@ class AccountMove(models.Model):
         NcfType = self.env['l10n_do_ncf.type']
         all_types = NcfType.search([])
         type_cache = {t.code: t for t in all_types}
-        
-        # Mapeo tipo contribuyente cliente -> NCF para ventas
-        client_type_map = {
-            'taxpayer': '01',        # B01 - Credito Fiscal
-            'final_consumer': '02',  # B02 - Consumidor Final
-            'non_taxpayer': '02',    # B02 - Consumidor Final
-            'governmental': '15',    # B15 - Gubernamental
-            'special_regime': '14',  # B14 - Regimen Especial
-        }
         
         # Mapeo tipo fiscal proveedor -> NCF para compras
         supplier_fiscal_map = {
@@ -522,18 +515,36 @@ class AccountMove(models.Model):
         
         for move in self:
             code = False
+            
             if move.move_type == 'out_invoice':
-                if move.l10n_do_is_debit_note:
+                # ORDEN CORRECTO segun normativa DGII
+                partner = move.partner_id
+                partner_country = partner.country_id.code if partner.country_id else 'DO'
+                client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
+                has_rnc = bool(partner.vat and len(partner.vat.strip()) >= 9)
+                
+                # 1. Exportacion: cliente extranjero (pais != DO)
+                if partner_country and partner_country != 'DO':
+                    code = '16'  # B16 - Exportacion
+                # 2. Gubernamental
+                elif client_type == 'governmental':
+                    code = '15'  # B15 - Gubernamental
+                # 3. Regimen Especial
+                elif client_type == 'special_regime':
+                    code = '14'  # B14 - Regimen Especial
+                # 4. Nota de Debito
+                elif move.l10n_do_is_debit_note:
                     code = '03'  # B03 - Nota de Debito
+                # 5. Contribuyente con RNC
+                elif client_type == 'taxpayer' or has_rnc:
+                    code = '01'  # B01 - Credito Fiscal
+                # 6. Consumidor Final (default)
                 else:
-                    # Usar tipo de contribuyente del cliente
-                    client_type = move.partner_id.l10n_do_dgii_tax_payer_type or 'final_consumer'
-                    # Fallback: si tiene RNC pero no esta tipificado, es contribuyente
-                    if client_type == 'final_consumer' and move.partner_id.vat:
-                        client_type = 'taxpayer'
-                    code = client_type_map.get(client_type, '02')
+                    code = '02'  # B02 - Consumidor Final
+                    
             elif move.move_type == 'out_refund':
                 code = '04'  # B04 - Nota de Credito
+                
             elif move.move_type in ('in_invoice', 'in_refund'):
                 code = supplier_fiscal_map.get(move.l10n_do_fiscal_type)
             
