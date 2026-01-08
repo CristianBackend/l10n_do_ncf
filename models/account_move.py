@@ -753,6 +753,11 @@ class AccountMove(models.Model):
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
     # =========================================
     def _generate_ncf(self):
+        """Generar NCF con protección de concurrencia usando FOR UPDATE.
+        
+        Evita que dos usuarios obtengan el mismo NCF al confirmar
+        facturas simultáneamente.
+        """
         self.ensure_one()
         if self.l10n_do_ncf_number:
             return
@@ -761,40 +766,89 @@ class AccountMove(models.Model):
             raise UserError(_('Seleccione tipo de comprobante.'))
 
         ncf_type = self.l10n_do_ncf_type_id
-
+        
+        # Buscar secuencias candidatas
         sequences = self.env['l10n_do_ncf.sequence'].sudo().search([
             ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
             ('state', '=', 'active'),
         ], order='id desc')
 
-        sequence = False
-        for seq in sequences:
-            if seq.current_number <= seq.range_to:
-                sequence = seq
-                break
+        if not sequences:
+            raise UserError(_(
+                'No hay secuencias activas para %s.\n'
+                'Configure una secuencia en Contabilidad > Configuración > Secuencias NCF.'
+            ) % ncf_type.name)
 
-        if not sequence:
-            raise UserError(_('No hay secuencias activas para %s.') % ncf_type.name)
+        # FOR UPDATE NOWAIT: bloquea la fila para evitar duplicados
+        # Si otra transacción tiene el lock, falla inmediatamente
+        try:
+            self.env.cr.execute("""
+                SELECT id, current_number, range_from, range_to, expiration_date
+                FROM l10n_do_ncf_sequence
+                WHERE id IN %s
+                  AND state = 'active'
+                  AND current_number < range_to
+                ORDER BY id DESC
+                LIMIT 1
+                FOR UPDATE NOWAIT
+            """, (tuple(sequences.ids),))
+            
+            row = self.env.cr.fetchone()
+            
+        except Exception as e:
+            if 'could not obtain lock' in str(e) or 'NOWAIT' in str(e):
+                raise UserError(_(
+                    'Otro usuario está generando un NCF en este momento.\n'
+                    'Por favor, intente nuevamente en unos segundos.'
+                ))
+            raise
 
-        if sequence.expiration_date and self.invoice_date and self.invoice_date > sequence.expiration_date:
-            raise UserError(_('Fecha posterior al vencimiento de la secuencia.'))
+        if not row:
+            raise UserError(_(
+                'No hay secuencias disponibles para %s.\n'
+                'Todas las secuencias están agotadas o vencidas.'
+            ) % ncf_type.name)
 
-        if sequence.expiration_date and sequence.expiration_date < date.today():
-            raise UserError(_('Secuencia %s vencida.') % sequence.name)
+        seq_id, current_number, range_from, range_to, expiration_date = row
 
+        # Validar vencimiento
+        if expiration_date:
+            if self.invoice_date and self.invoice_date > expiration_date:
+                raise UserError(_('La fecha de factura es posterior al vencimiento de la secuencia.'))
+            if expiration_date < date.today():
+                raise UserError(_('La secuencia está vencida desde %s.') % expiration_date)
+
+        # Calcular siguiente número
+        next_num = max(range_from or 1, current_number + 1)
+        
+        if next_num > range_to:
+            raise UserError(_(
+                'Secuencia agotada para %s.\n'
+                'Rango: %s - %s\n'
+                'Solicite nuevos NCF a DGII.'
+            ) % (ncf_type.name, range_from, range_to))
+
+        # Generar NCF
         prefix = ncf_type.prefix
-        next_num = max(sequence.range_from or 1, sequence.current_number + 1)
         ncf = f'{prefix}{next_num:0{10 if ncf_type.is_electronic else 8}d}'
 
+        # Actualizar secuencia (atómico dentro del lock)
+        self.env.cr.execute("""
+            UPDATE l10n_do_ncf_sequence 
+            SET current_number = %s, write_date = NOW()
+            WHERE id = %s
+        """, (next_num, seq_id))
+
+        # Asignar NCF a la factura
         self.write({
             'l10n_do_ncf_number': ncf,
-            'l10n_do_ncf_seq_id': sequence.id,
+            'l10n_do_ncf_seq_id': seq_id,
             'l10n_do_fiscal_status': 'valid',
         })
-        sequence.sudo().write({'current_number': next_num})
 
-        _logger.info('NCF generado: %s | Documento: %s', ncf, self.name)
+        _logger.info('NCF generado: %s | Documento: %s | Secuencia: %s', ncf, self.name, seq_id)
+
 
     # =========================================
     # ONCHANGE
