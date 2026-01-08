@@ -472,27 +472,59 @@ class AccountMove(models.Model):
                 (move.l10n_do_third_party_retention_itbis > 0 or move.l10n_do_third_party_retention_isr > 0)
             )
 
-    @api.depends('move_type', 'partner_id.vat', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
+    @api.depends('move_type', 'partner_id.vat', 'partner_id.l10n_do_dgii_tax_payer_type', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
     def _compute_l10n_do_ncf_type_id(self):
+        """Asignar tipo de NCF segun tipo fiscal del cliente/proveedor
+        
+        VENTAS (out_invoice):
+        - taxpayer -> B01 (Credito Fiscal)
+        - final_consumer -> B02 (Consumidor Final)
+        - governmental -> B15 (Gubernamental)
+        - special_regime -> B14 (Regimen Especial)
+        
+        NC VENTAS (out_refund): siempre B04
+        COMPRAS (in_invoice): segun l10n_do_fiscal_type del movimiento
+        """
         NcfType = self.env['l10n_do_ncf.type']
         all_types = NcfType.search([])
         type_cache = {t.code: t for t in all_types}
-
+        
+        # Mapeo tipo contribuyente cliente -> NCF para ventas
+        client_type_map = {
+            'taxpayer': '01',        # B01 - Credito Fiscal
+            'final_consumer': '02',  # B02 - Consumidor Final
+            'non_taxpayer': '02',    # B02 - Consumidor Final
+            'governmental': '15',    # B15 - Gubernamental
+            'special_regime': '14',  # B14 - Regimen Especial
+        }
+        
+        # Mapeo tipo fiscal proveedor -> NCF para compras
+        supplier_fiscal_map = {
+            'informal': '11',
+            'minor_expense': '13',
+            'exterior': '17',
+            'special': '14',
+            'governmental': '15',
+        }
+        
         for move in self:
             code = False
             if move.move_type == 'out_invoice':
-                code = '03' if move.l10n_do_is_debit_note else ('01' if move.partner_id.vat else '02')
+                if move.l10n_do_is_debit_note:
+                    code = '03'  # B03 - Nota de Debito
+                else:
+                    # Usar tipo de contribuyente del cliente
+                    client_type = move.partner_id.l10n_do_dgii_tax_payer_type or 'final_consumer'
+                    # Fallback: si tiene RNC pero no esta tipificado, es contribuyente
+                    if client_type == 'final_consumer' and move.partner_id.vat:
+                        client_type = 'taxpayer'
+                    code = client_type_map.get(client_type, '02')
             elif move.move_type == 'out_refund':
-                code = '04'
+                code = '04'  # B04 - Nota de Credito
             elif move.move_type in ('in_invoice', 'in_refund'):
-                code = {
-                    'informal': '11',
-                    'minor_expense': '13',
-                    'exterior': '17',
-                    'special': '14',
-                    'governmental': '15',
-                }.get(move.l10n_do_fiscal_type)
-            move.l10n_do_ncf_type_id = type_cache.get(code).id if code else False
+                code = supplier_fiscal_map.get(move.l10n_do_fiscal_type)
+            
+            move.l10n_do_ncf_type_id = type_cache.get(code).id if code and code in type_cache else False
 
     # =========================================
     # VALIDACIONES CÉDULA / RNC
@@ -739,6 +771,48 @@ class AccountMove(models.Model):
                 ('state', '=', 'active'),
             ], limit=1):
                 return {'warning': {'title': _('Sin secuencia'), 'message': _('Configure secuencia para este tipo.')}}
+
+    @api.onchange('l10n_do_expense_type', 'invoice_line_ids', 'invoice_line_ids.product_id')
+    def _onchange_validate_expense_vs_product(self):
+        """Warning si hay inconsistencia entre Tipo de Gasto y Producto"""
+        if self.move_type not in ('in_invoice', 'in_refund') or not self.l10n_do_expense_type:
+            return
+        
+        # Detectar si hay productos tipo "bienes" vs "servicios"
+        has_goods = any(
+            line.product_id and line.product_id.type in ('consu', 'product')
+            for line in self.invoice_line_ids
+        )
+        has_services = any(
+            line.product_id and line.product_id.type == 'service'
+            for line in self.invoice_line_ids
+        )
+        
+        # Tipo de gasto 02 = Servicios, 01 = Bienes
+        expense_is_service = self.l10n_do_expense_type == '02'
+        expense_is_goods = self.l10n_do_expense_type == '01'
+        
+        warning_msg = False
+        if expense_is_service and has_goods and not has_services:
+            warning_msg = (
+                "El Tipo de Gasto seleccionado es '02 - Gastos por Trabajos/Servicios', "
+                "pero las lineas contienen productos de tipo Bienes. "
+                "Verifique la clasificacion fiscal antes de confirmar."
+            )
+        elif expense_is_goods and has_services and not has_goods:
+            warning_msg = (
+                "El Tipo de Gasto seleccionado es '01 - Gastos de Personal', "
+                "pero las lineas contienen productos de tipo Servicio. "
+                "Verifique la clasificacion fiscal antes de confirmar."
+            )
+        
+        if warning_msg:
+            return {
+                'warning': {
+                    'title': 'Verificar Clasificacion Fiscal',
+                    'message': warning_msg,
+                }
+            }
 
     @api.onchange('l10n_do_fiscal_type')
     def _onchange_fiscal_type(self):
@@ -1423,27 +1497,59 @@ class AccountMove(models.Model):
                 (move.l10n_do_third_party_retention_itbis > 0 or move.l10n_do_third_party_retention_isr > 0)
             )
 
-    @api.depends('move_type', 'partner_id.vat', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
+    @api.depends('move_type', 'partner_id.vat', 'partner_id.l10n_do_dgii_tax_payer_type', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
     def _compute_l10n_do_ncf_type_id(self):
+        """Asignar tipo de NCF segun tipo fiscal del cliente/proveedor
+        
+        VENTAS (out_invoice):
+        - taxpayer -> B01 (Credito Fiscal)
+        - final_consumer -> B02 (Consumidor Final)
+        - governmental -> B15 (Gubernamental)
+        - special_regime -> B14 (Regimen Especial)
+        
+        NC VENTAS (out_refund): siempre B04
+        COMPRAS (in_invoice): segun l10n_do_fiscal_type del movimiento
+        """
         NcfType = self.env['l10n_do_ncf.type']
         all_types = NcfType.search([])
         type_cache = {t.code: t for t in all_types}
-
+        
+        # Mapeo tipo contribuyente cliente -> NCF para ventas
+        client_type_map = {
+            'taxpayer': '01',        # B01 - Credito Fiscal
+            'final_consumer': '02',  # B02 - Consumidor Final
+            'non_taxpayer': '02',    # B02 - Consumidor Final
+            'governmental': '15',    # B15 - Gubernamental
+            'special_regime': '14',  # B14 - Regimen Especial
+        }
+        
+        # Mapeo tipo fiscal proveedor -> NCF para compras
+        supplier_fiscal_map = {
+            'informal': '11',
+            'minor_expense': '13',
+            'exterior': '17',
+            'special': '14',
+            'governmental': '15',
+        }
+        
         for move in self:
             code = False
             if move.move_type == 'out_invoice':
-                code = '03' if move.l10n_do_is_debit_note else ('01' if move.partner_id.vat else '02')
+                if move.l10n_do_is_debit_note:
+                    code = '03'  # B03 - Nota de Debito
+                else:
+                    # Usar tipo de contribuyente del cliente
+                    client_type = move.partner_id.l10n_do_dgii_tax_payer_type or 'final_consumer'
+                    # Fallback: si tiene RNC pero no esta tipificado, es contribuyente
+                    if client_type == 'final_consumer' and move.partner_id.vat:
+                        client_type = 'taxpayer'
+                    code = client_type_map.get(client_type, '02')
             elif move.move_type == 'out_refund':
-                code = '04'
+                code = '04'  # B04 - Nota de Credito
             elif move.move_type in ('in_invoice', 'in_refund'):
-                code = {
-                    'informal': '11',
-                    'minor_expense': '13',
-                    'exterior': '17',
-                    'special': '14',
-                    'governmental': '15',
-                }.get(move.l10n_do_fiscal_type)
-            move.l10n_do_ncf_type_id = type_cache.get(code).id if code else False
+                code = supplier_fiscal_map.get(move.l10n_do_fiscal_type)
+            
+            move.l10n_do_ncf_type_id = type_cache.get(code).id if code and code in type_cache else False
 
     # =========================================
     # VALIDACIONES CÉDULA / RNC
