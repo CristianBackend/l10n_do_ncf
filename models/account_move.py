@@ -35,6 +35,16 @@ class AccountMove(models.Model):
         compute='_compute_l10n_do_ncf_type_id', store=True, readonly=True,
     )
 
+    l10n_do_ncf_type_display = fields.Char(
+        string='Comprobante',
+        related='l10n_do_ncf_type_id.display_name',
+        readonly=True,
+    )
+    l10n_do_payment_status_display = fields.Char(
+        string='Estado de Pago',
+        compute='_compute_payment_status_display',
+        store=False,
+    )
     l10n_do_ncf_seq_id = fields.Many2one(
         'l10n_do_ncf.sequence', string='Secuencia', readonly=True, copy=False,
     )
@@ -372,6 +382,22 @@ class AccountMove(models.Model):
             move.l10n_do_itbis_percibido = buckets['itbis_percibido']
             move.l10n_do_isr_retenido = buckets['isr_retenido']
             move.l10n_do_isr_percibido = buckets['isr_percibido']
+    @api.depends('payment_state', 'move_type')
+    def _compute_payment_status_display(self):
+        """Mostrar 'Aplicada' en lugar de 'Pagado' para NC"""
+        status_map = {
+            'not_paid': 'Sin pagar',
+            'partial': 'Parcial',
+            'paid': 'Pagado',
+            'in_payment': 'En pago',
+            'reversed': 'Revertido',
+        }
+        for move in self:
+            if move.move_type in ('out_refund', 'in_refund') and move.payment_state == 'paid':
+                move.l10n_do_payment_status_display = 'Aplicada'
+            else:
+                move.l10n_do_payment_status_display = status_map.get(move.payment_state, move.payment_state or '')
+
 
     @api.depends('l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.retention_type_id.retention_type', 'amount_total')
     def _compute_retention_totals(self):
@@ -950,6 +976,16 @@ class AccountMove(models.Model):
         compute='_compute_l10n_do_ncf_type_id', store=True, readonly=True,
     )
 
+    l10n_do_ncf_type_display = fields.Char(
+        string='Comprobante',
+        related='l10n_do_ncf_type_id.display_name',
+        readonly=True,
+    )
+    l10n_do_payment_status_display = fields.Char(
+        string='Estado de Pago',
+        compute='_compute_payment_status_display',
+        store=False,
+    )
     l10n_do_ncf_seq_id = fields.Many2one(
         'l10n_do_ncf.sequence', string='Secuencia', readonly=True, copy=False,
     )

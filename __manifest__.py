@@ -33,6 +33,7 @@
         'views/ncf_sequence_views.xml',
         'views/retention_views.xml',
         'views/account_move_views.xml',
+        'views/account_tax_views.xml',
         'views/res_partner_views.xml',
         'views/res_company_views.xml',
         'views/ncf_dashboard_views.xml',
@@ -59,6 +60,7 @@
         ],
     },
     'installable': True,
+    'post_init_hook': 'post_init_hook',
     'application': True,
     'auto_install': False,
 }

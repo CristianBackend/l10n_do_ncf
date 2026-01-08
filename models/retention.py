@@ -229,3 +229,12 @@ class RetentionWizard(models.TransientModel):
         })
 
         return {'type': 'ir.actions.act_window_close'}
+
+class L10nDoRetentionTypeInherit(models.Model):
+    _inherit = 'l10n_do_ncf.retention.type'
+
+    tax_id = fields.Many2one(
+        'account.tax',
+        string='Impuesto Odoo',
+        help='Impuesto de Odoo asociado a este tipo de retención'
+    )

@@ -16,3 +16,4 @@ from . import bc_exchange_rate
 from . import dgii_validation
 from . import dgii_txt_validator
 from . import fiscal_reconciliation
+from . import account_tax
