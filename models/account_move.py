@@ -414,30 +414,41 @@ class AccountMove(models.Model):
                 move.l10n_do_payment_status_display = status_map.get(move.payment_state, move.payment_state or '')
 
 
-    @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total')
+    @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total', 'l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.retention_type_id')
     def _compute_retention_totals(self):
-        """Calcular retenciones desde impuestos de Odoo (account.tax)
+        """Calcular totales de retenciones desde l10n_do_retention_ids
+        
+        Fuentes de datos (en orden de prioridad):
+        1. l10n_do_retention_ids - retenciones manuales/calculadas del módulo NCF
+        2. line_ids con dgii_retention_type - impuestos de Odoo marcados como retención
         
         Nota: En Odoo, amount_total YA incluye las retenciones (impuestos negativos).
-        Por lo tanto:
-        - amount_total = neto a pagar al proveedor
-        - Total bruto = amount_total + retenciones
-        - amount_to_pay = amount_total (son iguales)
         """
         for move in self:
             isr = itbis = 0
-            for line in move.line_ids:
-                if line.tax_line_id and line.tax_line_id.dgii_retention_type:
-                    amount = abs(line.balance)
-                    if line.tax_line_id.dgii_retention_type == 'isr':
+            
+            # Fuente 1: Retenciones del módulo NCF (l10n_do_retention_ids)
+            for ret in move.l10n_do_retention_ids:
+                if ret.retention_type_id and ret.retention_type_id.retention_type:
+                    amount = ret.retention_amount or 0
+                    if ret.retention_type_id.retention_type == 'isr':
                         isr += amount
-                    elif line.tax_line_id.dgii_retention_type == 'itbis':
+                    elif ret.retention_type_id.retention_type == 'itbis':
                         itbis += amount
+            
+            # Fuente 2: Si no hay retenciones NCF, buscar en impuestos de Odoo
+            if not isr and not itbis:
+                for line in move.line_ids:
+                    if line.tax_line_id and line.tax_line_id.dgii_retention_type:
+                        amount = abs(line.balance)
+                        if line.tax_line_id.dgii_retention_type == 'isr':
+                            isr += amount
+                        elif line.tax_line_id.dgii_retention_type == 'itbis':
+                            itbis += amount
+            
             move.l10n_do_total_isr_retention = isr
             move.l10n_do_total_itbis_retention = itbis
-            # amount_total de Odoo ya es el neto (después de retenciones)
             move.l10n_do_amount_to_pay = move.amount_total
-            # Total bruto = neto + retenciones
             move.l10n_do_gross_total = move.amount_total + isr + itbis
 
     @api.depends('l10n_do_payment_cash', 'l10n_do_payment_bank', 'l10n_do_payment_card',
