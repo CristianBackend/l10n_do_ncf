@@ -64,7 +64,7 @@
                         <span class="text-muted">|</span>
                         <span>
                             <strong>Tipo:</strong>
-                            <field name="l10n_do_ncf_type_id" readonly="1" nolabel="1" class="d-inline"/>
+                            <field name="l10n_do_ncf_type_display" nolabel="1" class="d-inline"/>
                         </span>
                         <!-- Badge de estado fiscal -->
                         <span class="badge bg-success ms-2"
@@ -96,21 +96,16 @@
                        readonly="state == 'posted'"/>
 
                 <!-- Tipo de Comprobante para FACTURAS (B01, B02, B14, B15, B16) -->
-                <field name="l10n_do_ncf_type_id"
+                <field name="l10n_do_ncf_type_id" invisible="1"/>
+                <field name="l10n_do_ncf_type_display"
                        string="Comprobante"
                        invisible="move_type != 'out_invoice' or not l10n_do_ncf_required"
-                       readonly="state == 'posted'"
-                       domain="[('code', 'in', ['01', '02', '14', '15', '16'])]"
-                       options="{'no_create': True, 'no_open': True}"
-                       help="Tipo de comprobante fiscal según DGII"/>
+                       help="Tipo de comprobante fiscal según DGII (automático)"/>
 
                 <!-- Tipo de Comprobante para NOTAS DE CRÉDITO (siempre B04, readonly) -->
-                <field name="l10n_do_ncf_type_id"
+                <field name="l10n_do_ncf_type_display"
                        string="Comprobante"
                        invisible="move_type != 'out_refund' or not l10n_do_ncf_required"
-                       readonly="1"
-                       domain="[('code', '=', '04')]"
-                       options="{'no_create': True, 'no_open': True}"
                        help="Las Notas de Crédito siempre usan B04 según DGII"/>
 
                 <!-- Factura Origen (solo NC) -->
@@ -187,7 +182,7 @@
                             <field name="l10n_do_total_itbis_retention" string="Retención ITBIS" readonly="1"/>
                         </group>
                         <group string="Resumen">
-                            <field name="amount_total" string="Total Factura" readonly="1"/>
+                            <field name="l10n_do_gross_total" string="Total Factura" readonly="1"/>
                             <field name="l10n_do_amount_to_pay" string="Monto a Pagar" readonly="1"
                                    class="fw-bold text-primary"/>
                         </group>

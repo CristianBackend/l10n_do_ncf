@@ -269,6 +269,19 @@ class AccountMove(models.Model):
     l10n_do_retention_ids = fields.One2many('l10n_do_ncf.move.retention', 'move_id', string='Retenciones')
     l10n_do_total_isr_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
     l10n_do_total_itbis_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
+    l10n_do_gross_total = fields.Monetary(
+        string='Total Bruto',
+        compute='_compute_retention_totals', 
+        store=True, 
+        currency_field='currency_id',
+        help='Total antes de retenciones (amount_total + retenciones)'
+    )
+    l10n_do_gross_total = fields.Monetary(
+        string='Total Bruto',
+        compute='_compute_retention_totals', 
+        store=True, 
+        currency_field='currency_id',
+    )
     l10n_do_amount_to_pay = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
 
     # =========================================
@@ -399,18 +412,31 @@ class AccountMove(models.Model):
                 move.l10n_do_payment_status_display = status_map.get(move.payment_state, move.payment_state or '')
 
 
-    @api.depends('l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.retention_type_id.retention_type', 'amount_total')
+    @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total')
     def _compute_retention_totals(self):
+        """Calcular retenciones desde impuestos de Odoo (account.tax)
+        
+        Nota: En Odoo, amount_total YA incluye las retenciones (impuestos negativos).
+        Por lo tanto:
+        - amount_total = neto a pagar al proveedor
+        - Total bruto = amount_total + retenciones
+        - amount_to_pay = amount_total (son iguales)
+        """
         for move in self:
             isr = itbis = 0
-            for ret in move.l10n_do_retention_ids:
-                if ret.retention_type_id.retention_type == 'isr':
-                    isr += ret.retention_amount or 0
-                elif ret.retention_type_id.retention_type == 'itbis':
-                    itbis += ret.retention_amount or 0
+            for line in move.line_ids:
+                if line.tax_line_id and line.tax_line_id.dgii_retention_type:
+                    amount = abs(line.balance)
+                    if line.tax_line_id.dgii_retention_type == 'isr':
+                        isr += amount
+                    elif line.tax_line_id.dgii_retention_type == 'itbis':
+                        itbis += amount
             move.l10n_do_total_isr_retention = isr
             move.l10n_do_total_itbis_retention = itbis
-            move.l10n_do_amount_to_pay = move.amount_total - isr - itbis
+            # amount_total de Odoo ya es el neto (después de retenciones)
+            move.l10n_do_amount_to_pay = move.amount_total
+            # Total bruto = neto + retenciones
+            move.l10n_do_gross_total = move.amount_total + isr + itbis
 
     @api.depends('l10n_do_payment_cash', 'l10n_do_payment_bank', 'l10n_do_payment_card',
                  'l10n_do_payment_credit', 'l10n_do_payment_bond', 'l10n_do_payment_swap',
@@ -1210,6 +1236,19 @@ class AccountMove(models.Model):
     l10n_do_retention_ids = fields.One2many('l10n_do_ncf.move.retention', 'move_id', string='Retenciones')
     l10n_do_total_isr_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
     l10n_do_total_itbis_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
+    l10n_do_gross_total = fields.Monetary(
+        string='Total Bruto',
+        compute='_compute_retention_totals', 
+        store=True, 
+        currency_field='currency_id',
+        help='Total antes de retenciones (amount_total + retenciones)'
+    )
+    l10n_do_gross_total = fields.Monetary(
+        string='Total Bruto',
+        compute='_compute_retention_totals', 
+        store=True, 
+        currency_field='currency_id',
+    )
     l10n_do_amount_to_pay = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
 
     # =========================================
@@ -1324,18 +1363,31 @@ class AccountMove(models.Model):
             move.l10n_do_isr_retenido = buckets['isr_retenido']
             move.l10n_do_isr_percibido = buckets['isr_percibido']
 
-    @api.depends('l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.retention_type_id.retention_type', 'amount_total')
+    @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total')
     def _compute_retention_totals(self):
+        """Calcular retenciones desde impuestos de Odoo (account.tax)
+        
+        Nota: En Odoo, amount_total YA incluye las retenciones (impuestos negativos).
+        Por lo tanto:
+        - amount_total = neto a pagar al proveedor
+        - Total bruto = amount_total + retenciones
+        - amount_to_pay = amount_total (son iguales)
+        """
         for move in self:
             isr = itbis = 0
-            for ret in move.l10n_do_retention_ids:
-                if ret.retention_type_id.retention_type == 'isr':
-                    isr += ret.retention_amount or 0
-                elif ret.retention_type_id.retention_type == 'itbis':
-                    itbis += ret.retention_amount or 0
+            for line in move.line_ids:
+                if line.tax_line_id and line.tax_line_id.dgii_retention_type:
+                    amount = abs(line.balance)
+                    if line.tax_line_id.dgii_retention_type == 'isr':
+                        isr += amount
+                    elif line.tax_line_id.dgii_retention_type == 'itbis':
+                        itbis += amount
             move.l10n_do_total_isr_retention = isr
             move.l10n_do_total_itbis_retention = itbis
-            move.l10n_do_amount_to_pay = move.amount_total - isr - itbis
+            # amount_total de Odoo ya es el neto (después de retenciones)
+            move.l10n_do_amount_to_pay = move.amount_total
+            # Total bruto = neto + retenciones
+            move.l10n_do_gross_total = move.amount_total + isr + itbis
 
     @api.depends('l10n_do_payment_cash', 'l10n_do_payment_bank', 'l10n_do_payment_card',
                  'l10n_do_payment_credit', 'l10n_do_payment_bond', 'l10n_do_payment_swap',
