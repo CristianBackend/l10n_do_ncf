@@ -223,36 +223,6 @@
     <!-- VISTAS DE LISTA                              -->
     <!-- ============================================= -->
 
- 
-    <!-- Lista de facturas proveedor -->
-    <record id="view_in_invoice_list_ncf" model="ir.ui.view">
-        <field name="name">account.move.list.vendor.ncf</field>
-        <field name="model">account.move</field>
-        <field name="inherit_id" ref="account.view_in_invoice_tree"/>
-        <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="l10n_do_vendor_ncf" string="NCF Proveedor" optional="show"/>
-                <field name="l10n_do_vendor_ncf_validated" string="✓" optional="hide"
-                       decoration-success="l10n_do_vendor_ncf_validated"/>
-            </field>
-        </field>
-    </record>
-
-    <!-- ============================================= -->
-    <!-- FILTROS DE BÚSQUEDA                          -->
-    <!-- ============================================= -->
-
-    <record id="view_account_move_search_ncf" model="ir.ui.view">
-        <field name="name">account.move.search.ncf</field>
-        <field name="model">account.move</field>
-        <field name="inherit_id" ref="account.view_account_invoice_filter"/>
-        <field name="arch" type="xml">
-            <!-- Campos de búsqueda -->
-            <xpath expr="//field[@name='name']" position="after">
-                <field name="l10n_do_ncf_number" string="NCF"
-                       filter_domain="[('l10n_do_ncf_number', 'ilike', self)]"/>
-                <field name="l10n_do_vendor_ncf" string="NCF Proveedor"
-                       filter_domain="[('l10n_do_vendor_ncf', 'ilike', self)]"/>
                 <field name="l10n_do_ncf_type_id" string="Tipo NCF"/>
             </xpath>
 
