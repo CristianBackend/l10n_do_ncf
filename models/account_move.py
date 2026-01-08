@@ -644,10 +644,10 @@ class AccountMove(models.Model):
             # Bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
-            # Bloquear cancelacion de facturas confirmadas con NCF
-            if move.state == 'posted' and move.l10n_do_ncf_number:
+            # Bloquear cancelacion de facturas con NCF (posted o draft con NCF)
+            if move.l10n_do_ncf_number:
                 raise UserError(_(
-                    "No se puede cancelar una factura con NCF valido.\n\n"
+                    "No se puede cancelar una factura con NCF asignado.\n\n"
                     "NCF: %s\n\n"
                     "Para reversar esta factura, debe emitir una Nota de Credito (B04).\n"
                     "Esto es requerido por la DGII."
@@ -656,10 +656,11 @@ class AccountMove(models.Model):
 
     def button_draft(self):
         for move in self:
-            if move.move_type == 'out_refund' and move.l10n_do_ncf_number:
-                raise UserError(_('NC con NCF %s no puede volver a borrador.') % move.l10n_do_ncf_number)
+            # Solo bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
+            # Nota: Permitimos restablecer a borrador para editar
+            # El NCF se mantiene asignado (readonly)
         return super().button_draft()
 
     def unlink(self):
@@ -1685,10 +1686,10 @@ class AccountMove(models.Model):
             # Bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
-            # Bloquear cancelacion de facturas confirmadas con NCF
-            if move.state == 'posted' and move.l10n_do_ncf_number:
+            # Bloquear cancelacion de facturas con NCF (posted o draft con NCF)
+            if move.l10n_do_ncf_number:
                 raise UserError(_(
-                    "No se puede cancelar una factura con NCF valido.\n\n"
+                    "No se puede cancelar una factura con NCF asignado.\n\n"
                     "NCF: %s\n\n"
                     "Para reversar esta factura, debe emitir una Nota de Credito (B04).\n"
                     "Esto es requerido por la DGII."
@@ -1697,10 +1698,11 @@ class AccountMove(models.Model):
 
     def button_draft(self):
         for move in self:
-            if move.move_type == 'out_refund' and move.l10n_do_ncf_number:
-                raise UserError(_('NC con NCF %s no puede volver a borrador.') % move.l10n_do_ncf_number)
+            # Solo bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
+            # Nota: Permitimos restablecer a borrador para editar
+            # El NCF se mantiene asignado (readonly)
         return super().button_draft()
 
     def unlink(self):
