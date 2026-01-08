@@ -901,6 +901,75 @@ class AccountMove(models.Model):
             return
         if self.search([('partner_id', '=', self.partner_id.id), ('l10n_do_ncf_number', '=like', 'B02%'), ('state', '=', 'posted')], limit=1):
             return {'warning': {'title': _('Cliente con RNC nuevo'), 'message': _('Tiene facturas B02 previas. Considere emitir NC.')}}
+    @api.onchange('partner_id', 'l10n_do_ncf_type_id')
+    def _onchange_validate_fiscal_coherence(self):
+        """Mostrar warning de coherencia fiscal al seleccionar cliente o tipo NCF"""
+        if not self.l10n_do_ncf_required or self.move_type not in ('out_invoice', 'out_refund'):
+            return
+        if not self.partner_id or not self.l10n_do_ncf_type_id:
+            return
+        if self.company_id.country_id.code != 'DO':
+            return
+        
+        ncf_code = self.l10n_do_ncf_type_id.code
+        partner_vat = (self.partner_id.vat or '').strip()
+        
+        # Validación B15 (Gubernamental) con RNC no gubernamental
+        if ncf_code == '15' and partner_vat:
+            is_gov_pattern = (
+                partner_vat.startswith('4010') or
+                partner_vat.startswith('4020') or
+                partner_vat.startswith('430') or
+                partner_vat.startswith('431')
+            )
+            if not is_gov_pattern:
+                return {'warning': {
+                    'title': _('⚠️ Inconsistencia Fiscal Detectada'),
+                    'message': _(
+                        'El cliente "%s" está marcado como Gubernamental (B15), '
+                        'pero su RNC %s no corresponde a un patrón típico de entidad estatal.\n\n'
+                        'Patrones gubernamentales típicos:\n'
+                        '• 4010XXXXX - Ministerios\n'
+                        '• 4020XXXXX - Instituciones Descentralizadas\n'
+                        '• 430XXXXXX - Ayuntamientos\n\n'
+                        'Verifique si debería usar:\n'
+                        '• B01 (Crédito Fiscal) - contribuyente normal\n'
+                        '• B14 (Régimen Especial) - ONG o zona franca'
+                    ) % (self.partner_id.name, partner_vat)
+                }}
+        
+        # Validación B14 con RNC de empresa normal
+        if ncf_code == '14' and partner_vat:
+            if partner_vat.startswith('1') and len(partner_vat) == 9:
+                return {'warning': {
+                    'title': _('⚠️ Verificar Tipo Fiscal'),
+                    'message': _(
+                        'El cliente "%s" tiene RNC %s que parece empresa normal.\n\n'
+                        'B14 (Régimen Especial) aplica para:\n'
+                        '• Zonas Francas\n'
+                        '• ONGs\n'
+                        '• Organismos internacionales\n\n'
+                        'Si es contribuyente normal, use B01.'
+                    ) % (self.partner_id.name, partner_vat)
+                }}
+        
+        # Validación B01 con RNC gubernamental
+        if ncf_code == '01' and partner_vat:
+            is_gov_pattern = (
+                partner_vat.startswith('4010') or
+                partner_vat.startswith('4020') or
+                partner_vat.startswith('430')
+            )
+            if is_gov_pattern:
+                return {'warning': {
+                    'title': _('⚠️ Verificar Tipo Fiscal'),
+                    'message': _(
+                        'El cliente "%s" tiene RNC %s que parece gubernamental.\n\n'
+                        'Si ES gubernamental, debería usar B15.\n'
+                        'Cambie el tipo de contribuyente a "Gubernamental".'
+                    ) % (self.partner_id.name, partner_vat)
+                }}
+
 
     # =========================================
     # SINCRONIZACIÓN RETENCIONES
@@ -912,7 +981,7 @@ class AccountMove(models.Model):
         retentions = []
         base = abs(self.amount_untaxed or 0)
         for line in self.line_ids:
-            if line.tax_line_id and line.balance > 0:
+            if line.tax_line_id and line.balance < 0:
                 tax = line.tax_line_id
                 tax_amount = abs(line.balance)
                 tax_name = (tax.name or '').lower()
