@@ -20,6 +20,8 @@ ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
 NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
 
 
+
+
 class AccountMove(models.Model):
     _inherit = 'account.move'
 
@@ -639,8 +641,17 @@ class AccountMove(models.Model):
 
     def button_cancel(self):
         for move in self:
+            # Bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
+            # Bloquear cancelacion de facturas confirmadas con NCF
+            if move.state == 'posted' and move.l10n_do_ncf_number:
+                raise UserError(_(
+                    "No se puede cancelar una factura con NCF valido.\n\n"
+                    "NCF: %s\n\n"
+                    "Para reversar esta factura, debe emitir una Nota de Credito (B04).\n"
+                    "Esto es requerido por la DGII."
+                ) % move.l10n_do_ncf_number)
         return super().button_cancel()
 
     def button_draft(self):
@@ -655,6 +666,13 @@ class AccountMove(models.Model):
         for move in self:
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 raise UserError(_('No puede eliminar documento reportado a DGII.'))
+            # Prevenir eliminacion de facturas con NCF
+            if move.l10n_do_ncf_number:
+                raise UserError(_(
+                    "No se puede eliminar una factura con NCF asignado.\n\n"
+                    "NCF: %s\n\n"
+                    "Los NCF son registros fiscales permanentes."
+                ) % move.l10n_do_ncf_number)
         return super().unlink()
 
     # =========================================
@@ -1664,8 +1682,17 @@ class AccountMove(models.Model):
 
     def button_cancel(self):
         for move in self:
+            # Bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
+            # Bloquear cancelacion de facturas confirmadas con NCF
+            if move.state == 'posted' and move.l10n_do_ncf_number:
+                raise UserError(_(
+                    "No se puede cancelar una factura con NCF valido.\n\n"
+                    "NCF: %s\n\n"
+                    "Para reversar esta factura, debe emitir una Nota de Credito (B04).\n"
+                    "Esto es requerido por la DGII."
+                ) % move.l10n_do_ncf_number)
         return super().button_cancel()
 
     def button_draft(self):
@@ -1680,6 +1707,13 @@ class AccountMove(models.Model):
         for move in self:
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 raise UserError(_('No puede eliminar documento reportado a DGII.'))
+            # Prevenir eliminacion de facturas con NCF
+            if move.l10n_do_ncf_number:
+                raise UserError(_(
+                    "No se puede eliminar una factura con NCF asignado.\n\n"
+                    "NCF: %s\n\n"
+                    "Los NCF son registros fiscales permanentes."
+                ) % move.l10n_do_ncf_number)
         return super().unlink()
 
     # =========================================

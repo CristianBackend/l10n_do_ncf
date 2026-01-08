@@ -512,12 +512,11 @@ class DgiiReportWizard(models.TransientModel):
         Generar reporte 608 - Comprobantes Anulados
         3 columnas según especificación DGII
         """
-        # Buscar facturas canceladas o con estado anulado
+        # Buscar SOLO facturas canceladas (no entregadas)
+        # Las facturas revertidas por NC van al 607, no al 608
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            '|',
             ('state', '=', 'cancel'),
-            ('l10n_do_fiscal_status', '=', 'annulled'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
             ('l10n_do_ncf_number', '!=', False),

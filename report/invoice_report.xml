@@ -93,7 +93,7 @@
                 <!-- Checkbox Requiere NCF -->
                 <field name="l10n_do_ncf_required"
                        invisible="move_type not in ('out_invoice', 'out_refund')"
-                       readonly="state == 'posted'"/>
+                       readonly="state == 'posted' or l10n_do_ncf_number"/>
 
                 <!-- Tipo de Comprobante para FACTURAS (B01, B02, B14, B15, B16) -->
                 <field name="l10n_do_ncf_type_id" invisible="1"/>
@@ -113,7 +113,7 @@
                        string="Factura Origen"
                        invisible="move_type != 'out_refund'"
                        required="move_type == 'out_refund' and l10n_do_ncf_required and state != 'posted'"
-                       readonly="state == 'posted'"
+                       readonly="state == 'posted' or l10n_do_ncf_number"
                        options="{'no_create': True}"
                        help="Seleccione la factura original que desea afectar con esta Nota de Crédito"/>
 
@@ -121,7 +121,7 @@
                 <field name="l10n_do_ncf_origin"
                        string="NCF Afectado"
                        invisible="move_type != 'out_refund'"
-                       readonly="state == 'posted'"
+                       readonly="state == 'posted' or l10n_do_ncf_number"
                        placeholder="B0100000001"
                        help="NCF de la factura original. Este NCF NO se reutiliza, la NC genera un nuevo NCF según DGII."/>
 
@@ -130,7 +130,7 @@
                        string="Motivo"
                        invisible="move_type != 'out_refund'"
                        required="move_type == 'out_refund' and l10n_do_ncf_required"
-                       readonly="state == 'posted'"
+                       readonly="state == 'posted' or l10n_do_ncf_number"
                        help="Motivo de la Nota de Crédito según clasificación DGII"/>
             </xpath>
 

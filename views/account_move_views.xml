@@ -64,7 +64,7 @@
                 <!-- Requiere NCF (Ventas) -->
                 <field name="l10n_do_ncf_required" 
                        invisible="move_type not in ('out_invoice', 'out_refund')"
-                       readonly="state == 'posted'"/>
+                       readonly="state == 'posted' or l10n_do_ncf_number"/>
 
                 <!-- Tipo Fiscal (Compras) -->
                 <field name="l10n_do_fiscal_type" 
