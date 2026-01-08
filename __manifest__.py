@@ -43,6 +43,7 @@
         'views/registro_unico_views.xml',
         'views/dgii_validation_views.xml',
         'report/invoice_report.xml',
+        'report/report_invoice_ncf.xml',
         'wizards/dgii_report_wizard_views.xml',
         'wizards/setup_wizard_views.xml',
         'wizards/ncf_correction_wizard_views.xml',
