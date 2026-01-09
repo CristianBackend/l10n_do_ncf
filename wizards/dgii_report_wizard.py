@@ -366,7 +366,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            ('move_type', 'in', ('out_invoice', 'out_refund')),
+            ('move_type', '=', 'out_invoice'),  # Solo facturas, NO notas de crédito (B04)
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
