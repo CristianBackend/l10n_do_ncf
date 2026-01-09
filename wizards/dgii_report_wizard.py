@@ -171,16 +171,23 @@ class DgiiReportWizard(models.TransientModel):
         Generar reporte 606 - Compras de Bienes y Servicios
         23 columnas según especificación DGII
         """
-        invoices = self.env['account.move'].search([
+        # Buscar facturas de compra locales (excluir exterior -> van al 609)
+        all_invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            ('move_type', '=', 'in_invoice'),  # Solo facturas, NO notas de crédito de proveedor
+            ('move_type', '=', 'in_invoice'),  # Solo facturas, NO notas de credito de proveedor
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
+            ('l10n_do_fiscal_type', '!=', 'exterior'),  # Exterior va al 609
         ], order='invoice_date')
+        
+        # Filtrar: solo proveedores dominicanos o sin pais (asume local)
+        invoices = all_invoices.filtered(
+            lambda i: not i.partner_id.country_id or i.partner_id.country_id.code == 'DO'
+        )
 
         if not invoices:
-            raise UserError(_('No hay facturas de compra en el período seleccionado.'))
+            raise UserError(_('No hay facturas de compra locales en el periodo seleccionado. Las compras a proveedores extranjeros van en el reporte 609.'))
 
         lines = []
         total_monto = 0.0
