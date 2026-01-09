@@ -173,7 +173,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            ('move_type', 'in', ('in_invoice', 'in_refund')),
+            ('move_type', '=', 'in_invoice'),  # Solo facturas, NO notas de crédito de proveedor
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
@@ -670,7 +670,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            ('move_type', 'in', ('in_invoice', 'in_refund')),
+            ('move_type', '=', 'in_invoice'),  # Solo facturas, NO notas de crédito de proveedor
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
