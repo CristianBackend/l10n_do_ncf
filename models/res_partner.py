@@ -185,7 +185,7 @@ class ResPartner(models.Model):
             if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
                 self.l10n_do_dgii_tax_payer_type = 'taxpayer'
         elif len(rnc_clean) == 9:
-            if rnc_clean.startswith('4'):
+            if rnc_clean.startswith(('401', '402', '430')):
                 self.l10n_do_dgii_tax_payer_type = 'governmental'
             elif self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
                 self.l10n_do_dgii_tax_payer_type = 'taxpayer'
@@ -243,7 +243,7 @@ class ResPartner(models.Model):
                 if nombre_dgii:
                     vals['name'] = nombre_dgii
 
-                if len(rnc) == 9 and rnc.startswith('4'):
+                if len(rnc) == 9 and rnc.startswith(('401', '402', '430')):
                     vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
                 elif data.get('status') == 'ACTIVO':
                     if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
@@ -325,7 +325,7 @@ class ResPartner(models.Model):
                 if data.get('status') == 'ACTIVO':
                     vals['l10n_do_dgii_tax_payer_type'] = 'taxpayer'
 
-                if len(rnc_clean) == 9 and rnc_clean.startswith('4'):
+                if len(rnc_clean) == 9 and rnc_clean.startswith(('401', '402', '430')):
                     vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
         except Exception:
             pass
