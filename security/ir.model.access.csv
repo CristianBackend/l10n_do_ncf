@@ -30,3 +30,4 @@ access_registro_unico_line_user,l10n_do_ncf.registro.unico.line.user,model_l10n_
 access_registro_unico_line_manager,l10n_do_ncf.registro.unico.line.manager,model_l10n_do_ncf_registro_unico_line,group_ncf_manager,1,1,1,1
 access_retention_correction_wizard_user,l10n_do_ncf.retention.correction.wizard.user,model_l10n_do_ncf_retention_correction_wizard,group_ncf_user,1,1,1,1
 access_rnc_correction_wizard_user,l10n_do_ncf.rnc.correction.wizard.user,model_l10n_do_ncf_rnc_correction_wizard,group_ncf_user,1,1,1,1
+access_invoice_annul_wizard,access_invoice_annul_wizard,model_l10n_do_ncf_invoice_annul_wizard,account.group_account_invoice,1,1,1,1

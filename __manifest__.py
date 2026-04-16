@@ -48,6 +48,7 @@
         'wizards/setup_wizard_views.xml',
         'wizards/ncf_correction_wizard_views.xml',
         'views/menu_views.xml',
+        'wizards/invoice_annul_wizard_views.xml',
     ],
     'assets': {
         'web.assets_backend': [
