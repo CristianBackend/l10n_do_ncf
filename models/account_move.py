@@ -666,14 +666,19 @@ class AccountMove(models.Model):
             # Bloquear si ya fue reportado a DGII
             if move.l10n_do_reported_606 or move.l10n_do_reported_607:
                 move._check_dgii_reported_block()
-            # Bloquear cancelacion de facturas con NCF (posted o draft con NCF)
+            # Si tiene NCF, abrir wizard de anulación
             if move.l10n_do_ncf_number:
-                raise UserError(_(
-                    "No se puede cancelar una factura con NCF asignado.\n\n"
-                    "NCF: %s\n\n"
-                    "Para reversar esta factura, debe emitir una Nota de Credito (B04).\n"
-                    "Esto es requerido por la DGII."
-                ) % move.l10n_do_ncf_number)
+                return {
+                    'name': _('Anular Factura'),
+                    'type': 'ir.actions.act_window',
+                    'res_model': 'l10n_do_ncf.invoice.annul.wizard',
+                    'view_mode': 'form',
+                    'target': 'new',
+                    'context': {
+                        'active_id': move.id,
+                        'active_model': 'account.move',
+                    }
+                }
         return super().button_cancel()
 
     def button_draft(self):
