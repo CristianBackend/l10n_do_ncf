@@ -11,7 +11,9 @@ Validado contra:
 - Especificaciones técnicas DGII
 - Validador oficial DGII
 
-Versión: 19.0.1.9.0
+Versión: 19.0.1.10.0
+- Fix: Conversión automática de montos en moneda extranjera (USD, EUR, etc.) a DOP
+       usando la tasa de cambio de la fecha de la factura. Aplica a reportes 606, 607, 609 e IR-17.
 """
 
 from odoo import models, fields, api, _
@@ -86,6 +88,33 @@ class DgiiReportWizard(models.TransientModel):
     # =========================================
     # MÉTODOS AUXILIARES DE FORMATO
     # =========================================
+
+    def _to_dop(self, invoice, amount):
+        """
+        Convertir un monto de la moneda de la factura a DOP (moneda de la compañía).
+        Si la factura ya está en DOP, retorna el mismo monto.
+        Si está en otra moneda (USD, EUR, etc.), convierte usando la tasa de la fecha de la factura.
+
+        Esto garantiza que TODOS los reportes a DGII salgan en pesos dominicanos,
+        sin importar la moneda original de la factura.
+        """
+        if not amount:
+            return 0.0
+        company_currency = invoice.company_id.currency_id
+        invoice_currency = invoice.currency_id
+
+        # Si ya está en DOP, no convertir
+        if invoice_currency == company_currency:
+            return amount
+
+        # Convertir usando la tasa de la fecha de la factura
+        conversion_date = invoice.invoice_date or invoice.date or fields.Date.today()
+        return invoice_currency._convert(
+            amount,
+            company_currency,
+            invoice.company_id,
+            conversion_date,
+        )
 
     def _format_amount(self, amount):
         """Formatear monto - DGII requiere vacío si es 0"""
@@ -170,6 +199,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         Generar reporte 606 - Compras de Bienes y Servicios
         23 columnas según especificación DGII
+        Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
         """
         # Buscar facturas de compra locales (excluir exterior -> van al 609)
         all_invoices = self.env['account.move'].search([
@@ -250,60 +280,60 @@ class DgiiReportWizard(models.TransientModel):
                 except Exception:
                     fecha_pago = fecha_comprobante
 
-            # Columnas 8-9: Monto bienes y servicios
-            monto_servicios = abs(inv.l10n_do_606_monto_servicios or 0.0)
-            monto_bienes = abs(inv.l10n_do_606_monto_bienes or 0.0)
+            # Columnas 8-9: Monto bienes y servicios (CONVERTIDOS A DOP)
+            monto_servicios = abs(self._to_dop(inv, inv.l10n_do_606_monto_servicios or 0.0))
+            monto_bienes = abs(self._to_dop(inv, inv.l10n_do_606_monto_bienes or 0.0))
             
             # Si no hay split, todo va a servicios por defecto
             if monto_bienes == 0 and monto_servicios == 0:
-                monto_servicios = abs(inv.amount_untaxed or 0.0)
+                monto_servicios = abs(self._to_dop(inv, inv.amount_untaxed or 0.0))
 
             # Columna 10: Monto total (base imponible)
             monto_total = monto_bienes + monto_servicios
 
-            # Columna 11: ITBIS Facturado
-            itbis_facturado = abs(inv.l10n_do_itbis_facturado or inv.amount_tax or 0.0)
+            # Columna 11: ITBIS Facturado (CONVERTIDO A DOP)
+            itbis_facturado = abs(self._to_dop(inv, inv.l10n_do_itbis_facturado or inv.amount_tax or 0.0))
 
-            # Columna 12: ITBIS Retenido
-            itbis_retenido = abs(inv.l10n_do_itbis_retenido or inv.l10n_do_total_itbis_retention or 0.0)
+            # Columna 12: ITBIS Retenido (CONVERTIDO A DOP)
+            itbis_retenido = abs(self._to_dop(inv, inv.l10n_do_itbis_retenido or inv.l10n_do_total_itbis_retention or 0.0))
 
-            # Columna 13: ITBIS sujeto a proporcionalidad
-            itbis_proporcionalidad = abs(inv.l10n_do_itbis_proporcionalidad or 0.0)
+            # Columna 13: ITBIS sujeto a proporcionalidad (CONVERTIDO A DOP)
+            itbis_proporcionalidad = abs(self._to_dop(inv, inv.l10n_do_itbis_proporcionalidad or 0.0))
 
-            # Columna 14: ITBIS llevado al costo
-            itbis_costo = abs(inv.l10n_do_itbis_costo or 0.0)
+            # Columna 14: ITBIS llevado al costo (CONVERTIDO A DOP)
+            itbis_costo = abs(self._to_dop(inv, inv.l10n_do_itbis_costo or 0.0))
             
             # Para B13, todo el ITBIS va al costo
             if inv.l10n_do_fiscal_type == 'minor_expense' and itbis_costo == 0:
                 itbis_costo = itbis_facturado
 
-            # Columna 15: ITBIS a adelantar
-            itbis_adelantar = abs(inv.l10n_do_itbis_adelantar or 0.0)
+            # Columna 15: ITBIS a adelantar (CONVERTIDO A DOP)
+            itbis_adelantar = abs(self._to_dop(inv, inv.l10n_do_itbis_adelantar or 0.0))
             if itbis_adelantar == 0 and inv.l10n_do_fiscal_type not in ('informal', 'minor_expense'):
                 itbis_adelantar = max(itbis_facturado - itbis_costo - itbis_proporcionalidad, 0)
 
-            # Columna 16: ITBIS percibido en compras
-            itbis_percibido = abs(inv.l10n_do_itbis_percibido or 0.0)
+            # Columna 16: ITBIS percibido en compras (CONVERTIDO A DOP)
+            itbis_percibido = abs(self._to_dop(inv, inv.l10n_do_itbis_percibido or 0.0))
 
             # Columna 17: Tipo de retención en ISR
             tipo_retencion_isr = inv.l10n_do_tipo_retencion_isr or ''
             
-            # Columna 18: Monto retención renta (ISR)
-            isr_retenido = abs(inv.l10n_do_isr_retenido or inv.l10n_do_total_isr_retention or 0.0)
+            # Columna 18: Monto retención renta (ISR) (CONVERTIDO A DOP)
+            isr_retenido = abs(self._to_dop(inv, inv.l10n_do_isr_retenido or inv.l10n_do_total_isr_retention or 0.0))
             if isr_retenido > 0 and not tipo_retencion_isr:
                 tipo_retencion_isr = '02'  # Default: Honorarios
 
-            # Columna 19: ISR percibido en compras
-            isr_percibido = abs(inv.l10n_do_isr_percibido or 0.0)
+            # Columna 19: ISR percibido en compras (CONVERTIDO A DOP)
+            isr_percibido = abs(self._to_dop(inv, inv.l10n_do_isr_percibido or 0.0))
 
-            # Columna 20: Impuesto Selectivo al Consumo
-            isc = abs(inv.l10n_do_impuesto_selectivo or 0.0)
+            # Columna 20: Impuesto Selectivo al Consumo (CONVERTIDO A DOP)
+            isc = abs(self._to_dop(inv, inv.l10n_do_impuesto_selectivo or 0.0))
 
-            # Columna 21: Otros impuestos/tasas
-            otros_impuestos = abs(inv.l10n_do_otros_impuestos or 0.0)
+            # Columna 21: Otros impuestos/tasas (CONVERTIDO A DOP)
+            otros_impuestos = abs(self._to_dop(inv, inv.l10n_do_otros_impuestos or 0.0))
 
-            # Columna 22: Monto propina legal
-            propina_legal = abs(inv.l10n_do_propina_legal or 0.0)
+            # Columna 22: Monto propina legal (CONVERTIDO A DOP)
+            propina_legal = abs(self._to_dop(inv, inv.l10n_do_propina_legal or 0.0))
 
             # Columna 23: Forma de pago
             forma_pago = inv.l10n_do_forma_pago or ''
@@ -370,6 +400,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         Generar reporte 607 - Ventas de Bienes y Servicios
         23 columnas según especificación DGII
+        Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
@@ -427,31 +458,31 @@ class DgiiReportWizard(models.TransientModel):
             if inv.l10n_do_is_credit_sale and inv.l10n_do_retention_date:
                 fecha_retencion = self._format_date(inv.l10n_do_retention_date)
 
-            # Columna 8: Monto facturado
-            monto_facturado = abs(inv.amount_untaxed)
+            # Columna 8: Monto facturado (CONVERTIDO A DOP)
+            monto_facturado = abs(self._to_dop(inv, inv.amount_untaxed))
 
-            # Columna 9: ITBIS Facturado
-            itbis_facturado = abs(inv.amount_tax)
+            # Columna 9: ITBIS Facturado (CONVERTIDO A DOP)
+            itbis_facturado = abs(self._to_dop(inv, inv.amount_tax))
 
-            # Columnas 10-16: Retenciones por terceros
-            itbis_retenido_terceros = abs(inv.l10n_do_third_party_retention_itbis or 0.0)
+            # Columnas 10-16: Retenciones por terceros (CONVERTIDAS A DOP)
+            itbis_retenido_terceros = abs(self._to_dop(inv, inv.l10n_do_third_party_retention_itbis or 0.0))
             itbis_percibido = 0.0
-            retencion_renta_terceros = abs(inv.l10n_do_third_party_retention_isr or 0.0)
+            retencion_renta_terceros = abs(self._to_dop(inv, inv.l10n_do_third_party_retention_isr or 0.0))
             isr_percibido = 0.0
             isc = 0.0
             otros_impuestos = 0.0
             propina_legal = 0.0
 
-            # Columnas 17-23: Formas de pago
-            efectivo = abs(inv.l10n_do_payment_cash or 0.0)
-            cheque = abs(inv.l10n_do_payment_bank or 0.0)
-            tarjeta = abs(inv.l10n_do_payment_card or 0.0)
-            credito = abs(inv.l10n_do_payment_credit or 0.0)
-            bonos = abs(inv.l10n_do_payment_bond or 0.0)
-            permuta = abs(inv.l10n_do_payment_swap or 0.0)
-            otras = abs(inv.l10n_do_payment_other or 0.0)
+            # Columnas 17-23: Formas de pago (CONVERTIDAS A DOP)
+            efectivo = abs(self._to_dop(inv, inv.l10n_do_payment_cash or 0.0))
+            cheque = abs(self._to_dop(inv, inv.l10n_do_payment_bank or 0.0))
+            tarjeta = abs(self._to_dop(inv, inv.l10n_do_payment_card or 0.0))
+            credito = abs(self._to_dop(inv, inv.l10n_do_payment_credit or 0.0))
+            bonos = abs(self._to_dop(inv, inv.l10n_do_payment_bond or 0.0))
+            permuta = abs(self._to_dop(inv, inv.l10n_do_payment_swap or 0.0))
+            otras = abs(self._to_dop(inv, inv.l10n_do_payment_other or 0.0))
 
-            monto_total = abs(inv.amount_total)
+            monto_total = abs(self._to_dop(inv, inv.amount_total))
 
             # Si no hay formas de pago específicas, usar default
             total_formas = efectivo + cheque + tarjeta + credito + bonos + permuta + otras
@@ -461,9 +492,9 @@ class DgiiReportWizard(models.TransientModel):
                 elif inv.payment_state == 'not_paid':
                     credito = monto_total
                 elif inv.payment_state == 'partial':
-                    pagado = monto_total - abs(inv.amount_residual)
+                    pagado = monto_total - abs(self._to_dop(inv, inv.amount_residual))
                     cheque = pagado
-                    credito = abs(inv.amount_residual)
+                    credito = abs(self._to_dop(inv, inv.amount_residual))
                 else:
                     credito = monto_total
 
@@ -518,6 +549,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         Generar reporte 608 - Comprobantes Anulados
         3 columnas según especificación DGII
+        (No requiere conversión de moneda - solo NCF y fechas)
         """
         # Buscar SOLO facturas canceladas (no entregadas)
         # Las facturas revertidas por NC van al 607, no al 608
@@ -566,6 +598,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         Generar reporte 609 - Pagos al Exterior
         13 columnas según especificación DGII
+        Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
@@ -620,8 +653,8 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 9: Fecha del documento
             fecha_doc = self._format_date(inv.invoice_date)
 
-            # Columna 10: Monto pagado
-            monto = abs(inv.amount_total)
+            # Columna 10: Monto pagado (CONVERTIDO A DOP)
+            monto = abs(self._to_dop(inv, inv.amount_total))
 
             # Columna 11: Fecha de retención
             fecha_retencion = fecha_doc
@@ -629,10 +662,10 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 12: Renta presunta
             renta_presunta = monto
 
-            # Columna 13: ISR retenido
-            isr_retenido = abs(inv.l10n_do_total_isr_retention or 0.0)
+            # Columna 13: ISR retenido (CONVERTIDO A DOP)
+            isr_retenido = abs(self._to_dop(inv, inv.l10n_do_total_isr_retention or 0.0))
             if isr_retenido == 0:
-                # Por defecto 27% para exterior
+                # Por defecto 27% para exterior (ya convertido)
                 isr_retenido = monto * 0.27
 
             total_monto += monto
@@ -674,6 +707,7 @@ class DgiiReportWizard(models.TransientModel):
         """
         Generar resumen IR-17 de Retenciones
         Formato interno para control (no es archivo DGII oficial)
+        Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
@@ -711,8 +745,11 @@ class DgiiReportWizard(models.TransientModel):
         lines.append('-' * 120)
 
         for inv in invoices_ret:
-            isr = abs(inv.l10n_do_total_isr_retention or inv.l10n_do_isr_retenido or 0)
-            itbis_ret = abs(inv.l10n_do_total_itbis_retention or inv.l10n_do_itbis_retenido or 0)
+            # CONVERTIR A DOP
+            isr = abs(self._to_dop(inv, inv.l10n_do_total_isr_retention or inv.l10n_do_isr_retenido or 0))
+            itbis_ret = abs(self._to_dop(inv, inv.l10n_do_total_itbis_retention or inv.l10n_do_itbis_retenido or 0))
+            base = abs(self._to_dop(inv, inv.amount_untaxed))
+            itbis = abs(self._to_dop(inv, inv.amount_tax))
             total_isr += isr
             total_itbis += itbis_ret
 
@@ -725,7 +762,7 @@ class DgiiReportWizard(models.TransientModel):
 
             ncf = inv.l10n_do_vendor_ncf or inv.l10n_do_ncf_number or ''
 
-            line = f'{rnc_prov:<16} | {inv.partner_id.name[:32]:<32} | {ncf:<13} | {inv.invoice_date} | {inv.amount_untaxed:>10.2f} | {inv.amount_tax:>9.2f} | {isr:>9.2f} | {itbis_ret:>9.2f} | {tipo_ret}'
+            line = f'{rnc_prov:<16} | {inv.partner_id.name[:32]:<32} | {ncf:<13} | {inv.invoice_date} | {base:>10.2f} | {itbis:>9.2f} | {isr:>9.2f} | {itbis_ret:>9.2f} | {tipo_ret}'
             lines.append(line)
 
         # Resumen
