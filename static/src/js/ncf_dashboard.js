@@ -53,6 +53,17 @@ export class NcfDashboard extends Component {
     openTypes() {
         this.action.doAction("l10n_do_ncf.action_ncf_type");
     }
+
+    openDocument(ncf) {
+        // Abrir el documento (factura) asociado al NCF
+        this.action.doAction({
+            type: 'ir.actions.act_window',
+            res_model: 'account.move',
+            res_id: ncf.id,
+            views: [[false, 'form']],
+            target: 'current',
+        });
+    }
 }
 
 NcfDashboard.template = "l10n_do_ncf.Dashboard";

@@ -10,7 +10,7 @@ from odoo.exceptions import UserError, ValidationError
 class L10nDoRetentionType(models.Model):
     """
     Tipos de Retención RD con clasificación DGII 606
-    
+
     IMPORTANTE: El campo dgii_606_bucket determina en qué columna
     del 606 aparece cada retención.
     """
@@ -28,7 +28,7 @@ class L10nDoRetentionType(models.Model):
         ('itbis', 'ITBIS'),
     ], string='Tipo de Impuesto', required=True)
 
-    # NUEVO: Bucket específico para 606
+    # Bucket específico para 606
     dgii_606_bucket = fields.Selection([
         ('itbis_retenido', 'ITBIS Retenido (col 12)'),
         ('itbis_percibido', 'ITBIS Percibido (col 16)'),
@@ -44,7 +44,7 @@ class L10nDoRetentionType(models.Model):
         help='Porcentaje de retención. Ej: 10 para 10%, 100 para 100%'
     )
 
-    # NUEVO: Tasa normalizada para cálculos
+    # Tasa normalizada para cálculos
     rate_decimal = fields.Float(
         string='Tasa Decimal',
         compute='_compute_rate_decimal',
@@ -69,12 +69,17 @@ class L10nDoRetentionType(models.Model):
         string='Para Compra Informal (B11)',
         default=False
     )
-    
+
     for_minor_expense = fields.Boolean(
         string='Para Gasto Menor (B13)',
         default=False
     )
 
+    is_perceived = fields.Boolean(
+        string='Es Percepción',
+        default=False,
+        help='Marcar si es una percepción (el proveedor nos retiene) en lugar de retención (nosotros retenemos)'
+    )
     description = fields.Text(string='Descripción/Base Legal')
     active = fields.Boolean(default=True)
 
@@ -115,7 +120,7 @@ class AccountMoveRetention(models.Model):
         required=True,
         ondelete='cascade'
     )
-    
+
     retention_type_id = fields.Many2one(
         'l10n_do_ncf.retention.type',
         string='Tipo de Retención',
@@ -128,14 +133,14 @@ class AccountMoveRetention(models.Model):
         currency_field='currency_id',
         help='Monto sobre el que se calcula la retención'
     )
-    
+
     # Rate viene del tipo
     rate = fields.Float(
         string='Tasa (%)',
         related='retention_type_id.rate',
         store=True
     )
-    
+
     # Monto retenido calculado
     retention_amount = fields.Monetary(
         string='Monto Retenido',
@@ -153,7 +158,11 @@ class AccountMoveRetention(models.Model):
 
     currency_id = fields.Many2one('res.currency', related='move_id.currency_id')
     company_id = fields.Many2one('res.company', related='move_id.company_id')
-
+    is_manual = fields.Boolean(
+        string='Manual',
+        default=False,
+        help='Marcar si esta retención fue ajustada manualmente por el contador'
+    )
     @api.depends('base_amount', 'rate')
     def _compute_retention_amount(self):
         for rec in self:
@@ -220,3 +229,12 @@ class RetentionWizard(models.TransientModel):
         })
 
         return {'type': 'ir.actions.act_window_close'}
+
+class L10nDoRetentionTypeInherit(models.Model):
+    _inherit = 'l10n_do_ncf.retention.type'
+
+    tax_id = fields.Many2one(
+        'account.tax',
+        string='Impuesto Odoo',
+        help='Impuesto de Odoo asociado a este tipo de retención'
+    )

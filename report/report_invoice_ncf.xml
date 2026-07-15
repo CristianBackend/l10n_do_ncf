@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Extensión del reporte de factura para mostrar NCF -->
+    <template id="report_invoice_ncf_extension" inherit_id="account.report_invoice_document">
+        
+        <!-- Agregar NCF antes del bloque de información -->
+        <xpath expr="//div[@id='informations']" position="before">
+            <div t-if="o.l10n_do_ncf_number" class="row mb-3">
+                <div class="col-12 text-center">
+                    <strong>NCF: </strong>
+                    <span t-field="o.l10n_do_ncf_number"/>
+                    <span class="ms-3">
+                        <strong>Tipo: </strong>
+                        <span t-if="o.l10n_do_ncf_type_id" t-field="o.l10n_do_ncf_type_id.name"/>
+                    </span>
+                    <span t-if="o.l10n_do_ncf_expiration" class="ms-3">
+                        <strong>Válido hasta: </strong>
+                        <span t-field="o.l10n_do_ncf_expiration"/>
+                    </span>
+                </div>
+            </div>
+            <!-- NCF Afectado para Notas de Crédito -->
+            <div t-if="o.l10n_do_ncf_origin and o.move_type == 'out_refund'" class="row mb-2">
+                <div class="col-12 text-center">
+                    <strong>NCF Afectado: </strong>
+                    <span t-field="o.l10n_do_ncf_origin"/>
+                </div>
+            </div>
+        </xpath>
+        
+    </template>
+</odoo>

@@ -2,10 +2,10 @@
 <odoo>
 
     <!-- ============================================= -->
-    <!-- ACCIONES PARA MENÃšS NCF                      -->
+    <!-- ACCIONES PARA MENÚS NCF                      -->
     <!-- ============================================= -->
 
-    <!-- AcciÃ³n: Facturas con NCF -->
+    <!-- Acción: Facturas con NCF -->
     <record id="action_ncf_invoices" model="ir.actions.act_window">
         <field name="name">Facturas con NCF</field>
         <field name="res_model">account.move</field>
@@ -16,11 +16,11 @@
             <p class="o_view_nocontent_smiling_face">
                 No hay facturas con NCF
             </p>
-            <p>Las facturas confirmadas generarÃ¡n NCF automÃ¡ticamente.</p>
+            <p>Las facturas confirmadas generarán NCF automáticamente.</p>
         </field>
     </record>
 
-    <!-- AcciÃ³n: Compras con NCF -->
+    <!-- Acción: Compras con NCF -->
     <record id="action_ncf_bills" model="ir.actions.act_window">
         <field name="name">Compras con NCF</field>
         <field name="res_model">account.move</field>
@@ -64,12 +64,12 @@
                         <span class="text-muted">|</span>
                         <span>
                             <strong>Tipo:</strong>
-                            <field name="l10n_do_ncf_type_id" readonly="1" nolabel="1" class="d-inline"/>
+                            <field name="l10n_do_ncf_type_display" nolabel="1" class="d-inline"/>
                         </span>
                         <!-- Badge de estado fiscal -->
                         <span class="badge bg-success ms-2"
                               invisible="l10n_do_fiscal_status != 'valid'">
-                            VÃ¡lido
+                            Válido
                         </span>
                         <span class="badge bg-warning ms-2"
                               invisible="l10n_do_fiscal_status != 'credited'">
@@ -81,7 +81,7 @@
                         </span>
                     </div>
                 </div>
-                
+
                 <!-- Campo oculto para estado fiscal (usado en badges) -->
                 <field name="l10n_do_fiscal_status" invisible="1"/>
             </xpath>
@@ -93,49 +93,45 @@
                 <!-- Checkbox Requiere NCF -->
                 <field name="l10n_do_ncf_required"
                        invisible="move_type not in ('out_invoice', 'out_refund')"
-                       readonly="state == 'posted'"/>
-                
+                       readonly="state == 'posted' or l10n_do_ncf_number"/>
+
                 <!-- Tipo de Comprobante para FACTURAS (B01, B02, B14, B15, B16) -->
-                <field name="l10n_do_ncf_type_id"
+                <field name="l10n_do_ncf_type_id" invisible="1"/>
+                <field name="l10n_do_ncf_type_display"
                        string="Comprobante"
                        invisible="move_type != 'out_invoice' or not l10n_do_ncf_required"
-                       readonly="state == 'posted'"
-                       domain="[('code', 'in', ['01', '02', '14', '15', '16'])]"
-                       options="{'no_create': True, 'no_open': True}"
-                       help="Tipo de comprobante fiscal segÃºn DGII"/>
-                
-                <!-- Tipo de Comprobante para NOTAS DE CRÃ‰DITO (siempre B04, readonly) -->
-                <field name="l10n_do_ncf_type_id"
+                       help="Tipo de comprobante fiscal según DGII (automático)"/>
+
+                <!-- Tipo de Comprobante para NOTAS DE CRÉDITO (siempre B04, readonly) -->
+                <field name="l10n_do_ncf_type_display"
                        string="Comprobante"
                        invisible="move_type != 'out_refund' or not l10n_do_ncf_required"
-                       readonly="1"
-                       domain="[('code', '=', '04')]"
-                       options="{'no_create': True, 'no_open': True}"
-                       help="Las Notas de CrÃ©dito siempre usan B04 segÃºn DGII"/>
-                
+                       help="Las Notas de Crédito siempre usan B04 según DGII"/>
+
                 <!-- Factura Origen (solo NC) -->
                 <field name="l10n_do_origin_move_id"
                        string="Factura Origen"
                        invisible="move_type != 'out_refund'"
                        required="move_type == 'out_refund' and l10n_do_ncf_required and state != 'posted'"
-                       readonly="state == 'posted'"
+                       readonly="state == 'posted' or l10n_do_ncf_number"
                        options="{'no_create': True}"
-                       help="Seleccione la factura original que desea afectar con esta Nota de CrÃ©dito"/>
-                
+                       help="Seleccione la factura original que desea afectar con esta Nota de Crédito"/>
+
                 <!-- NCF Afectado (solo NC) -->
                 <field name="l10n_do_ncf_origin"
                        string="NCF Afectado"
                        invisible="move_type != 'out_refund'"
-                       readonly="state == 'posted'"
+                       readonly="state == 'posted' or l10n_do_ncf_number"
                        placeholder="B0100000001"
-                       help="NCF de la factura original. Este NCF NO se reutiliza, la NC genera un nuevo NCF segÃºn DGII."/>
-                
+                       help="NCF de la factura original. Este NCF NO se reutiliza, la NC genera un nuevo NCF según DGII."/>
+
                 <!-- Motivo NC (solo NC, obligatorio) -->
                 <field name="l10n_do_credit_note_reason"
                        string="Motivo"
                        invisible="move_type != 'out_refund'"
                        required="move_type == 'out_refund' and l10n_do_ncf_required"
-                       help="Motivo de la Nota de CrÃ©dito segÃºn clasificaciÃ³n DGII"/>
+                       readonly="state == 'posted' or l10n_do_ncf_number"
+                       help="Motivo de la Nota de Crédito según clasificación DGII"/>
             </xpath>
 
             <!-- ========================================= -->
@@ -145,7 +141,7 @@
                 <!-- NCF del Proveedor -->
                 <label for="l10n_do_vendor_ncf" string="NCF Proveedor"
                        invisible="move_type not in ('in_invoice', 'in_refund')"/>
-                <div class="d-flex align-items-center" 
+                <div class="d-flex align-items-center"
                      invisible="move_type not in ('in_invoice', 'in_refund')">
                     <field name="l10n_do_vendor_ncf"
                            placeholder="B0100000001 o E310000000001"
@@ -153,28 +149,28 @@
                            help="NCF tradicional (11 chars) o e-CF (13 chars)"/>
                     <field name="l10n_do_vendor_ncf_validated" invisible="1"/>
                     <field name="l10n_do_vendor_ncf_validation_source" invisible="1"/>
-                    
-                    <!-- BotÃ³n Validar (solo si hay NCF y NO estÃ¡ validado) -->
+
+                    <!-- Botón Validar (solo si hay NCF y NO está validado) -->
                     <button name="action_validate_vendor_ncf" type="object"
                             string="Validar" class="btn-secondary ms-2"
                             invisible="not l10n_do_vendor_ncf or l10n_do_vendor_ncf_validated"/>
-                    
-                    <!-- Badge de validaciÃ³n -->
+
+                    <!-- Badge de validación -->
                     <span class="badge bg-success ms-2"
                           invisible="not l10n_do_vendor_ncf_validated">
-                        âœ“ Validado
+                        ✓ Validado
                     </span>
                 </div>
-                
+
                 <!-- Tipo de Gasto (para reporte 606) -->
                 <field name="l10n_do_expense_type"
                        string="Tipo Gasto"
                        invisible="move_type not in ('in_invoice', 'in_refund')"
-                       help="ClasificaciÃ³n de gasto para reporte 606 DGII"/>
+                       help="Clasificación de gasto para reporte 606 DGII"/>
             </xpath>
 
             <!-- ========================================= -->
-            <!-- PESTAÃ‘A RETENCIONES                      -->
+            <!-- PESTAÑA RETENCIONES                      -->
             <!-- ========================================= -->
             <xpath expr="//page[@name='other_info']" position="before">
                 <page string="Retenciones" name="retentions_page"
@@ -182,46 +178,26 @@
 
                     <group>
                         <group string="Retenciones Aplicadas">
-                            <field name="l10n_do_total_isr_retention" string="RetenciÃ³n ISR" readonly="1"/>
-                            <field name="l10n_do_total_itbis_retention" string="RetenciÃ³n ITBIS" readonly="1"/>
+                            <field name="l10n_do_total_isr_retention" string="Retención ISR" readonly="1"/>
+                            <field name="l10n_do_total_itbis_retention" string="Retención ITBIS" readonly="1"/>
                         </group>
                         <group string="Resumen">
-                            <field name="amount_total" string="Total Factura" readonly="1"/>
+                            <field name="l10n_do_gross_total" string="Total Factura" readonly="1"/>
                             <field name="l10n_do_amount_to_pay" string="Monto a Pagar" readonly="1"
                                    class="fw-bold text-primary"/>
                         </group>
                     </group>
-
-                    <separator string="Detalle de Retenciones"/>
-
-                    <field name="l10n_do_retention_ids" nolabel="1">
-                        <list editable="bottom">
-                            <field name="retention_type_id"/>
-                            <field name="base_amount"/>
-                            <field name="rate" readonly="1"/>
-                            <field name="retention_amount" readonly="1" sum="Total"/>
-                            <field name="currency_id" column_invisible="1"/>
-                        </list>
-                    </field>
-
-                    <group class="mt-3">
-                        <div>
-                            <button name="action_add_retention" type="object"
-                                    string="âž• Agregar RetenciÃ³n" class="btn-secondary"/>
-                            <button name="action_clear_retentions" type="object"
-                                    string="ðŸ—‘ï¸ Limpiar Todo" class="btn-link text-danger ms-3"
-                                    invisible="not l10n_do_retention_ids"
-                                    confirm="Â¿EstÃ¡ seguro de eliminar todas las retenciones?"/>
-                        </div>
-                    </group>
+                    <p class="text-muted mt-3">
+                        Las retenciones se calculan automáticamente desde los impuestos aplicados en las líneas de factura.
+                    </p>
                 </page>
             </xpath>
 
             <!-- ========================================= -->
-            <!-- INFORMACIÃ“N FISCAL EN OTRA INFO          -->
+            <!-- INFORMACIÓN FISCAL EN OTRA INFO          -->
             <!-- ========================================= -->
             <xpath expr="//page[@name='other_info']" position="inside">
-                <group string="InformaciÃ³n Fiscal RD" name="fiscal_rd_group"
+                <group string="Información Fiscal RD" name="fiscal_rd_group"
                        invisible="move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund')">
                     <group>
                         <field name="l10n_do_fiscal_type" string="Tipo Fiscal"/>
@@ -247,40 +223,8 @@
     <!-- VISTAS DE LISTA                              -->
     <!-- ============================================= -->
 
-    <!-- Lista de facturas cliente - NCF visible -->
-    <record id="view_move_list_ncf" model="ir.ui.view">
-        <field name="name">account.move.list.ncf</field>
-        <field name="model">account.move</field>
-        <field name="inherit_id" ref="account.view_out_invoice_tree"/>
-        <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="l10n_do_ncf_number" string="NCF" optional="show"
-                       decoration-muted="not l10n_do_ncf_number"/>
-                <field name="l10n_do_ncf_type_id" string="Tipo" optional="hide"/>
-                <field name="l10n_do_fiscal_status" string="Estado" optional="hide"
-                       decoration-success="l10n_do_fiscal_status == 'valid'"
-                       decoration-warning="l10n_do_fiscal_status == 'credited'"
-                       decoration-danger="l10n_do_fiscal_status == 'annulled'"/>
-            </field>
-        </field>
-    </record>
-
-    <!-- Lista de facturas proveedor -->
-    <record id="view_in_invoice_list_ncf" model="ir.ui.view">
-        <field name="name">account.move.list.vendor.ncf</field>
-        <field name="model">account.move</field>
-        <field name="inherit_id" ref="account.view_in_invoice_tree"/>
-        <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="l10n_do_vendor_ncf" string="NCF Proveedor" optional="show"/>
-                <field name="l10n_do_vendor_ncf_validated" string="âœ“" optional="hide"
-                       decoration-success="l10n_do_vendor_ncf_validated"/>
-            </field>
-        </field>
-    </record>
-
     <!-- ============================================= -->
-    <!-- FILTROS DE BÃšSQUEDA                          -->
+    <!-- FILTROS DE BÚSQUEDA                          -->
     <!-- ============================================= -->
 
     <record id="view_account_move_search_ncf" model="ir.ui.view">
@@ -288,15 +232,15 @@
         <field name="model">account.move</field>
         <field name="inherit_id" ref="account.view_account_invoice_filter"/>
         <field name="arch" type="xml">
-            <!-- Campos de bÃºsqueda -->
+            <!-- Campos de búsqueda -->
             <xpath expr="//field[@name='name']" position="after">
-                <field name="l10n_do_ncf_number" string="NCF" 
+                <field name="l10n_do_ncf_number" string="NCF"
                        filter_domain="[('l10n_do_ncf_number', 'ilike', self)]"/>
                 <field name="l10n_do_vendor_ncf" string="NCF Proveedor"
                        filter_domain="[('l10n_do_vendor_ncf', 'ilike', self)]"/>
                 <field name="l10n_do_ncf_type_id" string="Tipo NCF"/>
             </xpath>
-            
+
             <!-- Filtros predefinidos -->
             <xpath expr="//filter[@name='posted']" position="after">
                 <separator/>
@@ -305,26 +249,26 @@
                 <filter name="no_ncf" string="Sin NCF"
                         domain="[('l10n_do_ncf_number', '=', False), ('move_type', 'in', ('out_invoice', 'out_refund'))]"/>
                 <separator/>
-                <filter name="type_b01" string="CrÃ©dito Fiscal (B01)"
+                <filter name="type_b01" string="Crédito Fiscal (B01)"
                         domain="[('l10n_do_ncf_type_id.code', '=', '01')]"/>
                 <filter name="type_b02" string="Consumo (B02)"
                         domain="[('l10n_do_ncf_type_id.code', '=', '02')]"/>
-                <filter name="type_b04" string="Nota de CrÃ©dito (B04)"
+                <filter name="type_b04" string="Nota de Crédito (B04)"
                         domain="[('l10n_do_ncf_type_id.code', '=', '04')]"/>
                 <separator/>
-                <filter name="fiscal_valid" string="Estado: VÃ¡lido"
+                <filter name="fiscal_valid" string="Estado: Válido"
                         domain="[('l10n_do_fiscal_status', '=', 'valid')]"/>
                 <filter name="fiscal_credited" string="Estado: Con NC"
                         domain="[('l10n_do_fiscal_status', '=', 'credited')]"/>
                 <filter name="fiscal_annulled" string="Estado: Anulado"
                         domain="[('l10n_do_fiscal_status', '=', 'annulled')]"/>
             </xpath>
-            
+
             <!-- Agrupadores -->
             <xpath expr="//group" position="inside">
-                <filter name="group_ncf_type" string="Tipo NCF" 
+                <filter name="group_ncf_type" string="Tipo NCF"
                         context="{'group_by': 'l10n_do_ncf_type_id'}"/>
-                <filter name="group_fiscal_status" string="Estado Fiscal" 
+                <filter name="group_fiscal_status" string="Estado Fiscal"
                         context="{'group_by': 'l10n_do_fiscal_status'}"/>
             </xpath>
         </field>

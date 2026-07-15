@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Republica Dominicana - Comprobantes Fiscales (NCF)',
-    'version': '19.0.3.0.0',
+    'version': '19.0.3.0.26',
     'summary': 'Gestion completa de NCF para Republica Dominicana segun normativa DGII',
     'description': 'Modulo de Comprobantes Fiscales para Republica Dominicana. Compatible con Odoo 19.',
     'author': 'NewPlain',
@@ -31,21 +31,24 @@
         'views/license_config_views.xml',
         'views/ncf_type_views.xml',
         'views/ncf_sequence_views.xml',
+        'views/retention_views.xml',
         'views/account_move_views.xml',
+        'views/account_tax_views.xml',
         'views/res_partner_views.xml',
         'views/res_company_views.xml',
         'views/ncf_dashboard_views.xml',
         'views/ncf_alert_views.xml',
-        'views/retention_views.xml',
         'views/pos_config_views.xml',
         'views/pos_order_views.xml',
         'views/registro_unico_views.xml',
         'views/dgii_validation_views.xml',
         'report/invoice_report.xml',
+        'report/report_invoice_ncf.xml',
         'wizards/dgii_report_wizard_views.xml',
         'wizards/setup_wizard_views.xml',
         'wizards/ncf_correction_wizard_views.xml',
         'views/menu_views.xml',
+        'wizards/invoice_annul_wizard_views.xml',
     ],
     'assets': {
         'web.assets_backend': [
@@ -59,6 +62,7 @@
         ],
     },
     'installable': True,
+    'post_init_hook': 'post_init_hook',
     'application': True,
     'auto_install': False,
 }

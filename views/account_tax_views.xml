@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_tax_form_dgii" model="ir.ui.view">
+        <field name="name">account.tax.form.dgii</field>
+        <field name="model">account.tax</field>
+        <field name="inherit_id" ref="account.view_tax_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <group string="DGII República Dominicana" name="dgii_rd">
+                    <group>
+                        <field name="dgii_retention_type"/>
+                        <field name="dgii_606_bucket"/>
+                    </group>
+                    <group>
+                        <field name="is_dgii_retention" readonly="1"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

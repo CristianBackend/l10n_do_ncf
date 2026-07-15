@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="0">
+    <!-- Configurar impuestos ITBIS de retención -->
+    <function model="account.tax" name="write">
+        <value eval="obj().env['account.tax'].search([('name', 'ilike', 'ITBIS'), ('amount', '&lt;', 0)]).ids"/>
+        <value eval="{'dgii_retention_type': 'itbis', 'dgii_606_bucket': 'itbis_retenido'}"/>
+    </function>
+    
+    <!-- Configurar impuestos ISR de retención -->
+    <function model="account.tax" name="write">
+        <value eval="obj().env['account.tax'].search([('name', 'ilike', 'ISR'), ('amount', '&lt;', 0)]).ids"/>
+        <value eval="{'dgii_retention_type': 'isr', 'dgii_606_bucket': 'isr_retenido'}"/>
+    </function>
+</odoo>
