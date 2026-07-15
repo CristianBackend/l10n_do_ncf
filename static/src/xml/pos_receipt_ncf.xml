@@ -1,24 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates id="template" xml:space="preserve">
-
-    <!-- Extender el recibo del POS para mostrar NCF -->
+    <!-- Extender el recibo del POS para mostrar NCF (Odoo 19) -->
     <t t-name="point_of_sale.OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
-        
-        <!-- Agregar NCF después de la información del cliente -->
-        <xpath expr="//div[hasclass('pos-receipt-contact')]" position="after">
+
+        <!--
+            En Odoo 19 el recibo expone un ancla estable para contenido custom:
+            <div class="before-footer"/>. Anclamos aquí en lugar de a clases del
+            header (pos-receipt-contact vive en el subcomponente ReceiptHeader y
+            NO es alcanzable por xpath desde OrderReceipt).
+        -->
+        <xpath expr="//div[hasclass('before-footer')]" position="before">
             <t t-if="order.l10n_do_ncf_number">
                 <div class="pos-receipt-ncf" style="text-align: center; margin: 10px 0; padding: 10px; border: 2px dashed #000;">
                     <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">
                         *** COMPROBANTE FISCAL ***
                     </div>
-                    <t t-if="order.partner">
+                    <t t-if="order.partner_id">
                         <div style="margin-bottom: 4px;">
                             <span style="font-weight: bold;">RNC/Cédula: </span>
-                            <span t-esc="order.partner.vat or 'N/A'"/>
+                            <span t-esc="order.partner_id.vat or 'N/A'"/>
                         </div>
                         <div style="margin-bottom: 4px;">
                             <span style="font-weight: bold;">Cliente: </span>
-                            <span t-esc="order.partner.name"/>
+                            <span t-esc="order.partner_id.name"/>
                         </div>
                     </t>
                     <t t-else="">
@@ -40,22 +44,11 @@
                             <t t-else=""><t t-esc="order.l10n_do_ncf_type"/></t>
                         </div>
                     </t>
-                </div>
-            </t>
-        </xpath>
-
-        <!-- También agregar al final del recibo -->
-        <xpath expr="//div[hasclass('pos-receipt-order-data')]" position="after">
-            <t t-if="order.l10n_do_ncf_number">
-                <div style="text-align: center; margin-top: 10px; font-size: 11px;">
-                    <div>Válido para fines fiscales</div>
-                    <div style="font-weight: bold;">
-                        NCF: <t t-esc="order.l10n_do_ncf_number"/>
+                    <div style="font-size: 11px; margin-top: 6px;">
+                        Válido para fines fiscales
                     </div>
                 </div>
             </t>
         </xpath>
-
     </t>
-
 </templates>
