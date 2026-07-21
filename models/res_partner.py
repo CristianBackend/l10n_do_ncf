@@ -178,14 +178,20 @@ class ResPartner(models.Model):
         self._auto_set_taxpayer_type(rnc)
 
     def _auto_set_taxpayer_type(self, rnc):
-        """Asignar tipo de contribuyente automaticamente segun el RNC"""
+        """Asignar tipo de contribuyente automaticamente segun el RNC
+
+        NOTA: El prefijo 430 NO se clasifica automaticamente como gubernamental.
+        Segun la DGII, el prefijo 430 es compartido: lo usan tanto ayuntamientos
+        (gubernamental) como condominios y asociaciones sin fines de lucro
+        (contribuyente normal). La clasificacion final la decide el usuario.
+        """
         rnc_clean = re.sub(r'[^0-9]', '', rnc)
 
         if len(rnc_clean) == 11:
             if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
                 self.l10n_do_dgii_tax_payer_type = 'taxpayer'
         elif len(rnc_clean) == 9:
-            if rnc_clean.startswith(('401', '402', '430')):
+            if rnc_clean.startswith(('401', '402')):
                 self.l10n_do_dgii_tax_payer_type = 'governmental'
             elif self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
                 self.l10n_do_dgii_tax_payer_type = 'taxpayer'
@@ -243,7 +249,7 @@ class ResPartner(models.Model):
                 if nombre_dgii:
                     vals['name'] = nombre_dgii
 
-                if len(rnc) == 9 and rnc.startswith(('401', '402', '430')):
+                if len(rnc) == 9 and rnc.startswith(('401', '402')):
                     vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
                 elif data.get('status') == 'ACTIVO':
                     if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
@@ -325,7 +331,7 @@ class ResPartner(models.Model):
                 if data.get('status') == 'ACTIVO':
                     vals['l10n_do_dgii_tax_payer_type'] = 'taxpayer'
 
-                if len(rnc_clean) == 9 and rnc_clean.startswith(('401', '402', '430')):
+                if len(rnc_clean) == 9 and rnc_clean.startswith(('401', '402')):
                     vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
         except Exception:
             pass
