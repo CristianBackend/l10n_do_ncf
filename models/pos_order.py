@@ -178,6 +178,47 @@ class PosOrder(models.Model):
     # esos tres campos y rompe el POS.
 
     # =========================================
+    # ENLACE ORDEN POS -> FACTURA
+    # =========================================
+    def _prepare_invoice_vals(self):
+        """Pasar el NCF de la orden POS a la factura.
+
+        La factura NO debe generar su propio NCF: debe heredar el mismo que
+        ya consumio la orden POS. De lo contrario se queman dos NCF por venta
+        y la secuencia queda descuadrada.
+
+        Funciona porque account.move._generate_ncf() empieza con
+        'if self.l10n_do_ncf_number: return', asi que al llegar la factura
+        con el NCF ya asignado no genera otro.
+        """
+        vals = super()._prepare_invoice_vals()
+
+        if self.l10n_do_ncf_number:
+            vals['l10n_do_ncf_number'] = self.l10n_do_ncf_number
+
+            if self.l10n_do_ncf_seq_id:
+                vals['l10n_do_ncf_seq_id'] = self.l10n_do_ncf_seq_id.id
+
+            # En pos.order el tipo es el prefijo ('B02');
+            # en account.move es un many2one a l10n_do_ncf.type.
+            # Deben asignarse juntos: el constrain
+            # _lock_ncf_type_after_generation exige que el prefijo del NCF
+            # coincida con el prefijo del tipo.
+            if self.l10n_do_ncf_type:
+                ncf_type = self.env['l10n_do_ncf.type'].search(
+                    [('prefix', '=', self.l10n_do_ncf_type)], limit=1
+                )
+                if ncf_type:
+                    vals['l10n_do_ncf_type_id'] = ncf_type.id
+
+            _logger.info(
+                'POS NCF: Pasando %s a la factura de la orden %s',
+                self.l10n_do_ncf_number, self.name
+            )
+
+        return vals
+
+    # =========================================
     # MÉTODOS DE GENERACIÓN NCF
     # =========================================
     def _get_ncf_type_from_partner(self):
