@@ -53,16 +53,36 @@ class PosConfig(models.Model):
         help='Secuencia NCF para ventas gubernamentales (B15)'
     )
 
+    # =========================================
+    # CLIENTE POR DEFECTO (opcional, por POS)
+    # =========================================
+    l10n_do_pos_default_partner_id = fields.Many2one(
+        'res.partner',
+        string='Cliente por Defecto',
+        help='Cliente que se asigna automaticamente al abrir una nueva orden.\n'
+             'Dejar vacio para no asignar ninguno (comportamiento estandar).\n'
+             'Si el contacto tiene marcado "Es una empresa", Odoo activara '
+             'automaticamente la opcion de Factura al asignarlo.'
+    )
+
+    @api.model
+    def _load_pos_data_fields(self, config):
+        """Exponer configuración NCF al frontend del POS (Odoo 19)."""
+        return super()._load_pos_data_fields(config) + [
+            'l10n_do_ncf_enabled',
+            'l10n_do_pos_default_partner_id',
+        ]
+
     def _get_ncf_sequence_for_partner(self, partner):
         """Obtener la secuencia NCF correcta según el tipo de cliente"""
         self.ensure_one()
-        
+
         if not partner or not partner.l10n_do_dgii_tax_payer_type:
             # Sin cliente o sin tipo = Consumidor Final (B02)
             return self.l10n_do_ncf_sequence_id
-        
+
         taxpayer_type = partner.l10n_do_dgii_tax_payer_type
-        
+
         if taxpayer_type == 'taxpayer':
             return self.l10n_do_ncf_fiscal_sequence_id or self.l10n_do_ncf_sequence_id
         elif taxpayer_type == 'special_regime':
@@ -77,7 +97,7 @@ class PosConfig(models.Model):
         """Obtener nombre del tipo de NCF para mensajes de error"""
         if not partner or not partner.l10n_do_dgii_tax_payer_type:
             return 'Consumidor Final (B02)'
-        
+
         mapping = {
             'taxpayer': 'Crédito Fiscal (B01)',
             'final_consumer': 'Consumidor Final (B02)',
@@ -88,25 +108,22 @@ class PosConfig(models.Model):
         return mapping.get(partner.l10n_do_dgii_tax_payer_type, 'Consumidor Final (B02)')
 
 
-class PosSession(models.Model):
-    """Extensión de sesión POS para cargar datos NCF"""
-    _inherit = 'pos.session'
+class ResPartner(models.Model):
+    """Exponer campos NCF del contacto al frontend del POS.
 
-    def _loader_params_res_partner(self):
-        """Agregar campos NCF a los parámetros de carga de partners"""
-        result = super()._loader_params_res_partner()
-        result['search_params']['fields'].extend([
+    NOTA (Odoo 19): reemplaza al antiguo PosSession._loader_params_res_partner,
+    que fue eliminado en Odoo 18+. Sin esto, el POS no recibe el tipo de
+    contribuyente y no puede determinar el NCF correcto en el frontend.
+    """
+    _inherit = 'res.partner'
+
+    @api.model
+    def _load_pos_data_fields(self, config):
+        return super()._load_pos_data_fields(config) + [
             'l10n_do_dgii_tax_payer_type',
             'l10n_do_rnc_validated',
             'l10n_do_dgii_status',
-        ])
-        return result
-
-    @api.model
-    def _pos_ui_models_to_load(self):
-        """Agregar modelos NCF a cargar en el POS"""
-        result = super()._pos_ui_models_to_load()
-        return result
+        ]
 
 
 class PosOrder(models.Model):
@@ -151,16 +168,29 @@ class PosOrder(models.Model):
         for order in self:
             order.l10n_do_partner_vat = order.partner_id.vat if order.partner_id else ''
 
+    @api.model
+    def _load_pos_data_fields(self, config):
+        """Exponer campos NCF al frontend del POS (Odoo 19).
+
+        Sin esto, el template del recibo (pos_receipt_ncf.xml) no recibe
+        order.l10n_do_ncf_number y el bloque fiscal sale vacio.
+        """
+        return super()._load_pos_data_fields(config) + [
+            'l10n_do_ncf_number',
+            'l10n_do_ncf_type',
+            'l10n_do_partner_vat',
+        ]
+
     # =========================================
     # MÉTODOS DE GENERACIÓN NCF
     # =========================================
     def _get_ncf_type_from_partner(self):
         """Determinar tipo de NCF según el cliente"""
         self.ensure_one()
-        
+
         if not self.partner_id or not self.partner_id.l10n_do_dgii_tax_payer_type:
             return 'B02'
-        
+
         mapping = {
             'taxpayer': 'B01',
             'final_consumer': 'B02',
@@ -168,19 +198,19 @@ class PosOrder(models.Model):
             'special_regime': 'B14',
             'governmental': 'B15',
         }
-        
+
         return mapping.get(self.partner_id.l10n_do_dgii_tax_payer_type, 'B02')
 
     def _validate_ncf_sequence_available(self):
         """Validar que existe secuencia NCF antes de procesar el pago"""
         self.ensure_one()
-        
+
         if not self.config_id.l10n_do_ncf_enabled:
             return True
-        
+
         sequence = self.config_id._get_ncf_sequence_for_partner(self.partner_id)
         ncf_type_name = self.config_id._get_ncf_type_name(self.partner_id)
-        
+
         if not sequence:
             raise ValidationError(_(
                 'No se puede procesar la venta.\n\n'
@@ -188,7 +218,7 @@ class PosOrder(models.Model):
                 'Configure la secuencia en:\n'
                 'Punto de Venta → Configuración → %s → Pestaña NCF'
             ) % (ncf_type_name, self.config_id.name))
-        
+
         # Verificar que la secuencia tiene NCF disponibles
         if sequence.available_qty <= 0:
             raise ValidationError(_(
@@ -197,7 +227,7 @@ class PosOrder(models.Model):
                 'Disponibles: %s\n\n'
                 'Solicite una nueva secuencia a la DGII.'
             ) % (sequence.display_name, sequence.available_qty))
-        
+
         # Verificar vencimiento
         if sequence.expiration_date and sequence.aplica_vencimiento:
             from datetime import date
@@ -208,37 +238,37 @@ class PosOrder(models.Model):
                     'Fecha de vencimiento: %s\n\n'
                     'Solicite una nueva secuencia a la DGII.'
                 ) % (sequence.display_name, sequence.expiration_date))
-        
+
         return True
 
     def _generate_ncf(self):
         """Generar NCF para la orden POS"""
         self.ensure_one()
-        
+
         if not self.config_id.l10n_do_ncf_enabled:
             return False
-        
+
         if self.l10n_do_ncf_number:
             return self.l10n_do_ncf_number
-        
+
         # Validar secuencia disponible
         self._validate_ncf_sequence_available()
-        
+
         ncf_type = self._get_ncf_type_from_partner()
         sequence = self.config_id._get_ncf_sequence_for_partner(self.partner_id)
-        
+
         try:
             ncf = sequence.get_next_ncf()
-            
+
             self.write({
                 'l10n_do_ncf_number': ncf,
                 'l10n_do_ncf_type': ncf_type,
                 'l10n_do_ncf_seq_id': sequence.id,
             })
-            
+
             _logger.info('POS NCF: Generado %s para orden %s', ncf, self.name)
             return ncf
-            
+
         except Exception as e:
             _logger.error('POS NCF: Error generando NCF - %s', str(e))
             raise UserError(_('Error generando NCF: %s') % str(e))
@@ -249,15 +279,15 @@ class PosOrder(models.Model):
         for order in self:
             if order.config_id.l10n_do_ncf_enabled:
                 order._validate_ncf_sequence_available()
-        
+
         # Procesar pago
         res = super().action_pos_order_paid()
-        
+
         # Generar NCF después del pago exitoso
         for order in self:
             if order.config_id.l10n_do_ncf_enabled and not order.l10n_do_ncf_number:
                 order._generate_ncf()
-        
+
         return res
 
     # =========================================
@@ -267,16 +297,16 @@ class PosOrder(models.Model):
     def search_partner_by_vat(self, vat):
         """Buscar cliente por RNC/Cédula desde el POS"""
         vat_clean = re.sub(r'[^0-9]', '', vat or '')
-        
+
         if not vat_clean:
             return False
-        
+
         partner = self.env['res.partner'].search([
             '|',
             ('vat', '=', vat_clean),
             ('vat', '=', vat),
         ], limit=1)
-        
+
         if partner:
             return {
                 'id': partner.id,
@@ -285,17 +315,17 @@ class PosOrder(models.Model):
                 'l10n_do_dgii_tax_payer_type': partner.l10n_do_dgii_tax_payer_type,
                 'l10n_do_rnc_validated': partner.l10n_do_rnc_validated,
             }
-        
+
         return False
 
     @api.model
     def create_partner_from_pos(self, vat, name=None):
         """Crear cliente desde el POS con validación DGII"""
         partner = self.env['res.partner'].create_quick_from_rnc(
-            vat, 
+            vat,
             name=name or None
         )
-        
+
         return {
             'id': partner.id,
             'name': partner.name,
@@ -303,13 +333,3 @@ class PosOrder(models.Model):
             'l10n_do_dgii_tax_payer_type': partner.l10n_do_dgii_tax_payer_type,
             'l10n_do_rnc_validated': partner.l10n_do_rnc_validated,
         }
-
-    def _export_for_ui(self, order):
-        """Agregar campos NCF al exportar orden para la UI del POS"""
-        result = super()._export_for_ui(order)
-        result.update({
-            'l10n_do_ncf_number': order.l10n_do_ncf_number,
-            'l10n_do_ncf_type': order.l10n_do_ncf_type,
-            'l10n_do_partner_vat': order.l10n_do_partner_vat,
-        })
-        return result

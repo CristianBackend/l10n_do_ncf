@@ -17,6 +17,9 @@
                 <group string="NCF - Comprobantes Fiscales" name="ncf_config">
                     <group>
                         <field name="l10n_do_ncf_enabled"/>
+                        <field name="l10n_do_pos_default_partner_id"
+                               options="{'no_create': True}"
+                               placeholder="Ej: Cliente al Contado"/>
                     </group>
                 </group>
                 

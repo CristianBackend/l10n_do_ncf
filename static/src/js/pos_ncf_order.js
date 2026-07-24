@@ -1,88 +1,71 @@
 /** @odoo-module */
 /**
- * Módulo NCF para Punto de Venta
- * Extiende el modelo Order para incluir campos NCF
- * y mostrarlos en el recibo
+ * Modulo NCF para Punto de Venta - Odoo 19
+ *
+ * Portado desde la API antigua (Odoo 16/17):
+ *  - El modelo ahora es PosOrder en @point_of_sale/app/models/pos_order
+ *    (antes: Order en @point_of_sale/app/models/order, que ya no existe).
+ *  - init_from_JSON / export_as_JSON fueron eliminados en Odoo 18+.
+ *  - get_partner() -> getPartner()
+ *
+ * Ademas asigna el cliente por defecto configurado en el POS
+ * (l10n_do_pos_default_partner_id en pos.config).
  */
-
-import { Order } from "@point_of_sale/app/models/order";
+import { PosOrder } from "@point_of_sale/app/models/pos_order";
 import { patch } from "@web/core/utils/patch";
 
-// Extender el modelo Order para incluir campos NCF
-patch(Order.prototype, {
-    
-    setup(options) {
+patch(PosOrder.prototype, {
+    setup(vals) {
         super.setup(...arguments);
-        // Inicializar campos NCF
+
+        // Campos NCF (los llena el backend al generar el comprobante)
         this.l10n_do_ncf_number = this.l10n_do_ncf_number || "";
         this.l10n_do_ncf_type = this.l10n_do_ncf_type || "";
-        this.l10n_do_partner_vat = this.l10n_do_partner_vat || "";
+
+        // Cliente por defecto: solo si la orden aun no tiene uno.
+        // Nota: setPartner() de Odoo 19 marca automaticamente "Factura"
+        // cuando el partner tiene is_company = true.
+        try {
+            const config = this.config || this.session?.config;
+            const defaultPartner = config?.l10n_do_pos_default_partner_id;
+            if (defaultPartner && !this.getPartner()) {
+                this.setPartner(defaultPartner);
+            }
+        } catch (e) {
+            console.warn("NCF: no se pudo asignar el cliente por defecto", e);
+        }
     },
 
     /**
-     * Inicializar desde JSON (cuando se carga una orden guardada)
-     */
-    init_from_JSON(json) {
-        super.init_from_JSON(...arguments);
-        this.l10n_do_ncf_number = json.l10n_do_ncf_number || "";
-        this.l10n_do_ncf_type = json.l10n_do_ncf_type || "";
-        this.l10n_do_partner_vat = json.l10n_do_partner_vat || "";
-    },
-
-    /**
-     * Exportar a JSON (cuando se guarda la orden)
-     */
-    export_as_JSON() {
-        const json = super.export_as_JSON(...arguments);
-        json.l10n_do_ncf_number = this.l10n_do_ncf_number || "";
-        json.l10n_do_ncf_type = this.l10n_do_ncf_type || "";
-        json.l10n_do_partner_vat = this.l10n_do_partner_vat || "";
-        return json;
-    },
-
-    /**
-     * Exportar para impresión del recibo
+     * Datos que se pasan a la plantilla del recibo.
+     * El template pos_receipt_ncf.xml lee order.l10n_do_ncf_number
+     * y order.l10n_do_ncf_type desde aqui.
      */
     export_for_printing() {
         const result = super.export_for_printing(...arguments);
-        
-        // Agregar datos NCF para el recibo
         result.l10n_do_ncf_number = this.l10n_do_ncf_number || "";
         result.l10n_do_ncf_type = this.l10n_do_ncf_type || "";
-        
-        // Obtener VAT del cliente
-        const partner = this.get_partner();
-        result.l10n_do_partner_vat = partner ? (partner.vat || "") : "";
-        
+        const partner = this.getPartner();
+        result.l10n_do_partner_vat = partner ? partner.vat || "" : "";
         return result;
     },
 
-    /**
-     * Método para establecer el NCF desde el servidor
-     * Se llama después de que el servidor genera el NCF
-     */
-    set_ncf_data(ncf_number, ncf_type) {
-        this.l10n_do_ncf_number = ncf_number || "";
-        this.l10n_do_ncf_type = ncf_type || "";
+    setNcfData(ncfNumber, ncfType) {
+        this.l10n_do_ncf_number = ncfNumber || "";
+        this.l10n_do_ncf_type = ncfType || "";
     },
 
-    /**
-     * Obtener el tipo de NCF en formato legible
-     */
-    get_ncf_type_name() {
+    getNcfTypeName() {
         const types = {
-            'B01': 'Crédito Fiscal',
-            'B02': 'Consumidor Final',
-            'B14': 'Régimen Especial',
-            'B15': 'Gubernamental'
+            B01: "Credito Fiscal",
+            B02: "Consumidor Final",
+            B14: "Regimen Especial",
+            B15: "Gubernamental",
         };
-        return types[this.l10n_do_ncf_type] || this.l10n_do_ncf_type || '';
+        return types[this.l10n_do_ncf_type] || this.l10n_do_ncf_type || "";
     },
 
-    /**
-     * Verificar si la orden tiene NCF
-     */
-    has_ncf() {
+    hasNcf() {
         return !!this.l10n_do_ncf_number;
     },
 });
