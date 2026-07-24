@@ -65,13 +65,12 @@ class PosConfig(models.Model):
              'automaticamente la opcion de Factura al asignarlo.'
     )
 
-    @api.model
-    def _load_pos_data_fields(self, config):
-        """Exponer configuración NCF al frontend del POS (Odoo 19)."""
-        return super()._load_pos_data_fields(config) + [
-            'l10n_do_ncf_enabled',
-            'l10n_do_pos_default_partner_id',
-        ]
+    # NOTA (Odoo 19): NO sobreescribir _load_pos_data_fields aqui.
+    # pos.config hereda la implementacion de pos.load.mixin, que devuelve
+    # una lista vacia; en Odoo, read([]) significa "leer TODOS los campos".
+    # Por eso l10n_do_pos_default_partner_id ya viaja al frontend sin hacer
+    # nada. Si se sobreescribe devolviendo solo nuestros campos, el POS deja
+    # de recibir el resto (use_pricelist, etc.) y falla al abrir la sesion.
 
     def _get_ncf_sequence_for_partner(self, partner):
         """Obtener la secuencia NCF correcta según el tipo de cliente"""
@@ -112,8 +111,11 @@ class ResPartner(models.Model):
     """Exponer campos NCF del contacto al frontend del POS.
 
     NOTA (Odoo 19): reemplaza al antiguo PosSession._loader_params_res_partner,
-    que fue eliminado en Odoo 18+. Sin esto, el POS no recibe el tipo de
-    contribuyente y no puede determinar el NCF correcto en el frontend.
+    que fue eliminado en Odoo 18+.
+
+    A diferencia de pos.config y pos.order, res.partner SI declara una lista
+    explicita de campos en su _load_pos_data_fields, por lo que aqui si es
+    necesario (y correcto) extenderla con super() + [...].
     """
     _inherit = 'res.partner'
 
@@ -168,18 +170,12 @@ class PosOrder(models.Model):
         for order in self:
             order.l10n_do_partner_vat = order.partner_id.vat if order.partner_id else ''
 
-    @api.model
-    def _load_pos_data_fields(self, config):
-        """Exponer campos NCF al frontend del POS (Odoo 19).
-
-        Sin esto, el template del recibo (pos_receipt_ncf.xml) no recibe
-        order.l10n_do_ncf_number y el bloque fiscal sale vacio.
-        """
-        return super()._load_pos_data_fields(config) + [
-            'l10n_do_ncf_number',
-            'l10n_do_ncf_type',
-            'l10n_do_partner_vat',
-        ]
+    # NOTA (Odoo 19): NO sobreescribir _load_pos_data_fields aqui.
+    # Igual que pos.config, pos.order hereda la implementacion vacia de
+    # pos.load.mixin, que carga TODOS los campos. Los campos NCF
+    # (l10n_do_ncf_number, l10n_do_ncf_type, l10n_do_partner_vat) ya llegan
+    # al frontend sin declararlos. Sobreescribir aqui limitaria la orden a
+    # esos tres campos y rompe el POS.
 
     # =========================================
     # MÉTODOS DE GENERACIÓN NCF
