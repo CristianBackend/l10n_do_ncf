@@ -145,6 +145,8 @@ class PosOrder(models.Model):
     l10n_do_ncf_type = fields.Selection([
         ('B01', 'B01 - Crédito Fiscal'),
         ('B02', 'B02 - Consumidor Final'),
+        ('B03', 'B03 - Nota de Débito'),
+        ('B04', 'B04 - Nota de Crédito'),
         ('B14', 'B14 - Régimen Especial'),
         ('B15', 'B15 - Gubernamental'),
     ], string='Tipo NCF',
@@ -178,20 +180,74 @@ class PosOrder(models.Model):
     # esos tres campos y rompe el POS.
 
     # =========================================
+    # DEVOLUCIONES / REEMBOLSOS
+    # =========================================
+    def _l10n_do_is_refund(self):
+        """La orden es una devolucion / reembolso.
+
+        Usa la MISMA condicion que Odoo aplica para decidir
+        move_type='out_refund' en _prepare_invoice_vals:
+            order.is_refund or order.amount_total < 0.0
+
+        Las devoluciones NO consumen NCF de las secuencias de venta del POS:
+        el comprobante que corresponde es una Nota de Credito (B04), y esa la
+        genera account.move (_compute_l10n_do_ncf_type_id asigna codigo '04'
+        para move_type='out_refund').
+        """
+        self.ensure_one()
+        return bool(self.is_refund) or (self.amount_total or 0.0) < 0.0
+
+    # =========================================
     # ENLACE ORDEN POS -> FACTURA
     # =========================================
     def _prepare_invoice_vals(self):
         """Pasar el NCF de la orden POS a la factura.
 
-        La factura NO debe generar su propio NCF: debe heredar el mismo que
-        ya consumio la orden POS. De lo contrario se queman dos NCF por venta
-        y la secuencia queda descuadrada.
+        VENTAS: la factura NO debe generar su propio NCF, debe heredar el
+        mismo que ya consumio la orden POS. De lo contrario se queman dos NCF
+        por venta y la secuencia queda descuadrada. Funciona porque
+        account.move._generate_ncf() empieza con
+        'if self.l10n_do_ncf_number: return'.
 
-        Funciona porque account.move._generate_ncf() empieza con
-        'if self.l10n_do_ncf_number: return', asi que al llegar la factura
-        con el NCF ya asignado no genera otro.
+        DEVOLUCIONES: no se pasa NCF. La nota de credito debe llevar su propio
+        B04; si se le pasara un B02 de la orden, el constrain
+        _lock_ncf_type_after_generation fallaria (prefijo B02 != tipo B04).
+        Si se pasa el NCF de origen para referenciar el comprobante corregido
+        (requisito DGII).
         """
         vals = super()._prepare_invoice_vals()
+
+        if self._l10n_do_is_refund():
+            # Odoo ya calculo las facturas originales en
+            # pos_refunded_invoice_ids. De ahi sale el NCF que la NC corrige.
+            refunded = vals.get('pos_refunded_invoice_ids') or []
+            ids = []
+            for item in refunded:
+                if isinstance(item, (list, tuple)):
+                    # formato comando: (6, 0, [ids]) / (4, id)
+                    if len(item) == 3 and isinstance(item[2], (list, tuple)):
+                        ids.extend(item[2])
+                    elif len(item) >= 2 and isinstance(item[1], int):
+                        ids.append(item[1])
+                elif isinstance(item, int):
+                    ids.append(item)
+
+            ncf_origen = False
+            if ids:
+                originales = self.env['account.move'].browse(ids).exists()
+                ncf_origen = next(
+                    (m.l10n_do_ncf_number for m in originales if m.l10n_do_ncf_number),
+                    False
+                )
+
+            if ncf_origen:
+                vals['l10n_do_ncf_origin'] = ncf_origen
+
+            _logger.info(
+                'POS NCF: %s es devolucion; la NC generara su propio B04 (origen: %s)',
+                self.name, ncf_origen or 'sin NCF de origen'
+            )
+            return vals
 
         if self.l10n_do_ncf_number:
             vals['l10n_do_ncf_number'] = self.l10n_do_ncf_number
@@ -242,6 +298,11 @@ class PosOrder(models.Model):
         """Validar que existe secuencia NCF antes de procesar el pago"""
         self.ensure_one()
 
+        # Devoluciones: la secuencia que aplica es la B04 de account.move,
+        # no las secuencias de venta del POS. No validar aqui.
+        if self._l10n_do_is_refund():
+            return True
+
         if not self.config_id.l10n_do_ncf_enabled:
             return True
 
@@ -282,6 +343,17 @@ class PosOrder(models.Model):
         """Generar NCF para la orden POS"""
         self.ensure_one()
 
+        # Las devoluciones NO consumen NCF en el POS. La nota de credito se
+        # genera en account.move, que ya asigna B04 para out_refund. Si el POS
+        # le pusiera un B02, el constrain _lock_ncf_type_after_generation
+        # fallaria al crear la NC (prefijo B02 != tipo B04).
+        if self._l10n_do_is_refund():
+            _logger.info(
+                'POS NCF: %s es devolucion, no genera NCF (usara B04 en la NC)',
+                self.name
+            )
+            return False
+
         if not self.config_id.l10n_do_ncf_enabled:
             return False
 
@@ -313,6 +385,7 @@ class PosOrder(models.Model):
     def action_pos_order_paid(self):
         """Override: Generar NCF al marcar como pagado"""
         # Validar ANTES de procesar el pago
+        # (las devoluciones se saltan la validacion dentro del metodo)
         for order in self:
             if order.config_id.l10n_do_ncf_enabled:
                 order._validate_ncf_sequence_available()
