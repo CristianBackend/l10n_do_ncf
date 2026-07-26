@@ -215,11 +215,8 @@ class PosOrder(models.Model):
         Si se pasa el NCF de origen para referenciar el comprobante corregido
         (requisito DGII).
 
-        IMPORTANTE: en ambos casos se marca l10n_do_ncf_required = True.
-        account.move solo genera NCF cuando ese flag esta activo
-        (ver account_move.py: 'if is_do and move.move_type in (...) and
-        move.l10n_do_ncf_required and not move.l10n_do_ncf_number:
-        move._generate_ncf()'). Sin el flag, la NC se posteaba sin NCF.
+        En ambos casos se marca l10n_do_ncf_required = True, que es la
+        condicion que account.move exige para generar NCF.
         """
         vals = super()._prepare_invoice_vals()
 
@@ -251,8 +248,6 @@ class PosOrder(models.Model):
             if ncf_origen:
                 vals['l10n_do_ncf_origin'] = ncf_origen
 
-            # Sin este flag la NC se postea sin NCF (no entra en la
-            # condicion que dispara _generate_ncf en account.move).
             if ncf_activo:
                 vals['l10n_do_ncf_required'] = True
 
@@ -289,6 +284,52 @@ class PosOrder(models.Model):
             )
 
         return vals
+
+    def _generate_pos_order_invoice(self):
+        """Asegurar que la factura / nota de credito tenga su NCF.
+
+        MOTIVO: el POS postea los documentos con invoice._post()
+        (point_of_sale/models/pos_order.py, ~linea 1178), NO con
+        action_post(). El hook del modulo que dispara _generate_ncf()
+        engancha action_post(), por lo que NUNCA se ejecuta para documentos
+        creados desde el POS.
+
+        Consecuencia observada: las notas de credito de devoluciones se
+        posteaban con tipo B04 y l10n_do_ncf_required=True, pero sin numero
+        de NCF, y la secuencia B04 nunca avanzaba.
+
+        Aqui se llama a _generate_ncf() explicitamente despues de crear el
+        documento. Es idempotente: account.move._generate_ncf() retorna de
+        inmediato si el movimiento ya tiene NCF (caso de las ventas, que lo
+        reciben desde la orden POS en _prepare_invoice_vals).
+        """
+        res = super()._generate_pos_order_invoice()
+
+        for order in self:
+            move = order.account_move
+            if not move or not order.config_id.l10n_do_ncf_enabled:
+                continue
+            if move.l10n_do_ncf_number:
+                continue
+            if move.company_id.country_id.code != 'DO':
+                continue
+            if move.move_type not in ('out_invoice', 'out_refund'):
+                continue
+
+            try:
+                move.sudo()._generate_ncf()
+                _logger.info(
+                    'POS NCF: NCF generado post-factura para %s -> %s',
+                    move.name, move.l10n_do_ncf_number
+                )
+            except Exception as e:
+                _logger.error(
+                    'POS NCF: no se pudo generar NCF para %s: %s',
+                    move.name, str(e)
+                )
+                raise
+
+        return res
 
     # =========================================
     # MÉTODOS DE GENERACIÓN NCF
