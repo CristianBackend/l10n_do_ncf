@@ -214,8 +214,16 @@ class PosOrder(models.Model):
         _lock_ncf_type_after_generation fallaria (prefijo B02 != tipo B04).
         Si se pasa el NCF de origen para referenciar el comprobante corregido
         (requisito DGII).
+
+        IMPORTANTE: en ambos casos se marca l10n_do_ncf_required = True.
+        account.move solo genera NCF cuando ese flag esta activo
+        (ver account_move.py: 'if is_do and move.move_type in (...) and
+        move.l10n_do_ncf_required and not move.l10n_do_ncf_number:
+        move._generate_ncf()'). Sin el flag, la NC se posteaba sin NCF.
         """
         vals = super()._prepare_invoice_vals()
+
+        ncf_activo = bool(self.config_id.l10n_do_ncf_enabled)
 
         if self._l10n_do_is_refund():
             # Odoo ya calculo las facturas originales en
@@ -243,6 +251,11 @@ class PosOrder(models.Model):
             if ncf_origen:
                 vals['l10n_do_ncf_origin'] = ncf_origen
 
+            # Sin este flag la NC se postea sin NCF (no entra en la
+            # condicion que dispara _generate_ncf en account.move).
+            if ncf_activo:
+                vals['l10n_do_ncf_required'] = True
+
             _logger.info(
                 'POS NCF: %s es devolucion; la NC generara su propio B04 (origen: %s)',
                 self.name, ncf_origen or 'sin NCF de origen'
@@ -251,6 +264,9 @@ class PosOrder(models.Model):
 
         if self.l10n_do_ncf_number:
             vals['l10n_do_ncf_number'] = self.l10n_do_ncf_number
+
+            if ncf_activo:
+                vals['l10n_do_ncf_required'] = True
 
             if self.l10n_do_ncf_seq_id:
                 vals['l10n_do_ncf_seq_id'] = self.l10n_do_ncf_seq_id.id
