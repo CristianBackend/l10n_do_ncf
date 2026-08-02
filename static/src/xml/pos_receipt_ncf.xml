@@ -13,7 +13,9 @@
             <t t-if="order.l10n_do_ncf_number">
                 <div class="pos-receipt-ncf" style="text-align: center; margin: 10px 0; padding: 10px; border: 2px dashed #000;">
                     <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">
-                        *** COMPROBANTE FISCAL ***
+                        <t t-if="order.l10n_do_ncf_type === 'B04'">*** NOTA DE CRÉDITO ***</t>
+                        <t t-elif="order.l10n_do_ncf_type === 'B03'">*** NOTA DE DÉBITO ***</t>
+                        <t t-else="">*** COMPROBANTE FISCAL ***</t>
                     </div>
                     <t t-if="order.partner_id">
                         <div style="margin-bottom: 4px;">
@@ -39,6 +41,8 @@
                             <span>Tipo: </span>
                             <t t-if="order.l10n_do_ncf_type === 'B01'">Crédito Fiscal</t>
                             <t t-elif="order.l10n_do_ncf_type === 'B02'">Consumidor Final</t>
+                            <t t-elif="order.l10n_do_ncf_type === 'B03'">Nota de Débito</t>
+                            <t t-elif="order.l10n_do_ncf_type === 'B04'">Nota de Crédito</t>
                             <t t-elif="order.l10n_do_ncf_type === 'B14'">Régimen Especial</t>
                             <t t-elif="order.l10n_do_ncf_type === 'B15'">Gubernamental</t>
                             <t t-else=""><t t-esc="order.l10n_do_ncf_type"/></t>
