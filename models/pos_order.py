@@ -286,22 +286,21 @@ class PosOrder(models.Model):
         return vals
 
     def _generate_pos_order_invoice(self):
-        """Asegurar que la factura / nota de credito tenga su NCF.
+        """Asegurar que la factura / nota de credito tenga su NCF, y
+        reflejar el NCF de la nota de credito en la orden POS.
 
-        MOTIVO: el POS postea los documentos con invoice._post()
-        (point_of_sale/models/pos_order.py, ~linea 1178), NO con
-        action_post(). El hook del modulo que dispara _generate_ncf()
+        MOTIVO (generacion): el POS postea los documentos con
+        invoice._post() (point_of_sale/models/pos_order.py, ~linea 1178), NO
+        con action_post(). El hook del modulo que dispara _generate_ncf()
         engancha action_post(), por lo que NUNCA se ejecuta para documentos
-        creados desde el POS.
+        creados desde el POS. Sin esto, las notas de credito se posteaban con
+        tipo B04 pero sin numero, y la secuencia B04 nunca avanzaba.
 
-        Consecuencia observada: las notas de credito de devoluciones se
-        posteaban con tipo B04 y l10n_do_ncf_required=True, pero sin numero
-        de NCF, y la secuencia B04 nunca avanzaba.
-
-        Aqui se llama a _generate_ncf() explicitamente despues de crear el
-        documento. Es idempotente: account.move._generate_ncf() retorna de
-        inmediato si el movimiento ya tiene NCF (caso de las ventas, que lo
-        reciben desde la orden POS en _prepare_invoice_vals).
+        MOTIVO (reflejo): en devoluciones la orden POS queda sin NCF a
+        proposito (el comprobante es la NC). Pero el recibo termico lee
+        order.l10n_do_ncf_number, asi que el ticket de devolucion salia sin
+        el bloque fiscal. Copiamos el B04 ya generado a la orden: NO consume
+        secuencia, solo refleja el numero para poder imprimirlo.
         """
         res = super()._generate_pos_order_invoice()
 
@@ -309,25 +308,41 @@ class PosOrder(models.Model):
             move = order.account_move
             if not move or not order.config_id.l10n_do_ncf_enabled:
                 continue
-            if move.l10n_do_ncf_number:
-                continue
             if move.company_id.country_id.code != 'DO':
                 continue
             if move.move_type not in ('out_invoice', 'out_refund'):
                 continue
 
-            try:
-                move.sudo()._generate_ncf()
+            # 1. Generar el NCF si el documento aun no lo tiene.
+            #    (las ventas ya lo reciben en _prepare_invoice_vals)
+            if not move.l10n_do_ncf_number:
+                try:
+                    move.sudo()._generate_ncf()
+                    _logger.info(
+                        'POS NCF: NCF generado post-factura para %s -> %s',
+                        move.name, move.l10n_do_ncf_number
+                    )
+                except Exception as e:
+                    _logger.error(
+                        'POS NCF: no se pudo generar NCF para %s: %s',
+                        move.name, str(e)
+                    )
+                    raise
+
+            # 2. Reflejar el B04 de la NC en la orden POS para el recibo.
+            if order._l10n_do_is_refund() and move.l10n_do_ncf_number:
+                order.sudo().write({
+                    'l10n_do_ncf_number': move.l10n_do_ncf_number,
+                    'l10n_do_ncf_type': move.l10n_do_ncf_type_id.prefix or 'B04',
+                    'l10n_do_ncf_seq_id': (
+                        move.l10n_do_ncf_seq_id.id
+                        if move.l10n_do_ncf_seq_id else False
+                    ),
+                })
                 _logger.info(
-                    'POS NCF: NCF generado post-factura para %s -> %s',
-                    move.name, move.l10n_do_ncf_number
+                    'POS NCF: NCF %s reflejado en la orden %s para el recibo',
+                    move.l10n_do_ncf_number, order.name
                 )
-            except Exception as e:
-                _logger.error(
-                    'POS NCF: no se pudo generar NCF para %s: %s',
-                    move.name, str(e)
-                )
-                raise
 
         return res
 
