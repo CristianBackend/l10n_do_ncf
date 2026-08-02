@@ -69,14 +69,14 @@
                 <!-- Tipo Fiscal (Compras) -->
                 <field name="l10n_do_fiscal_type" 
                        invisible="move_type not in ('in_invoice', 'in_refund')"
-                       modifiers="{'readonly': [('state', '=', 'posted')]}"/>
+                       readonly="state == 'posted'"/>
             </xpath>
 
             <!-- NCF Proveedor -->
             <xpath expr="//field[@name='invoice_date']" position="after">
                 <field name="l10n_do_vendor_ncf" 
                        invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_fiscal_type in ('informal', 'minor_expense')"
-                       modifiers="{'readonly': [('state', '=', 'posted')]}"
+                       readonly="state == 'posted'"
                        placeholder="B0100000001"/>
                 <button name="action_validate_vendor_ncf" type="object" string="Validar NCF"
                         class="btn-link" 
@@ -97,7 +97,7 @@
                             <field name="l10n_do_ncf_type_display"/>
                             <field name="l10n_do_ncf_seq_id" readonly="1"/>
                             <field name="l10n_do_ncf_expiration" readonly="1"/>
-                            <field name="l10n_do_ncf_required" modifiers="{'readonly': [('state', '=', 'posted')]}"/>
+                            <field name="l10n_do_ncf_required" readonly="state == 'posted'"/>
                         </group>
                         <group string="Estado">
                             <field name="l10n_do_fiscal_status" readonly="1"/>
@@ -127,12 +127,17 @@
                     <separator string="Nota de Crédito" invisible="move_type != 'out_refund'"/>
                     <group invisible="move_type != 'out_refund'">
                         <group>
+                            <!-- El motivo solo se exige mientras el documento
+                                 es editable. Si se pide tambien en 'posted',
+                                 el campo queda readonly y obligatorio a la vez,
+                                 lo que bloquea guardar/imprimir la NC. -->
                             <field name="l10n_do_credit_note_reason" 
-                                   modifiers="{'required': [('move_type', '=', 'out_refund')], 'readonly': [('state', '=', 'posted')]}"/>
+                                   required="move_type == 'out_refund' and state == 'draft'"
+                                   readonly="state == 'posted'"/>
                         </group>
                         <group>
-                            <field name="l10n_do_origin_move_id" modifiers="{'readonly': [('state', '=', 'posted')]}"/>
-                            <field name="l10n_do_ncf_origin" modifiers="{'readonly': [('state', '=', 'posted')]}"/>
+                            <field name="l10n_do_origin_move_id" readonly="state == 'posted'"/>
+                            <field name="l10n_do_ncf_origin" readonly="state == 'posted'"/>
                         </group>
                     </group>
 
@@ -255,7 +260,7 @@
                         <group>
                             <field name="l10n_do_itbis_proporcionalidad"/>
                             <field name="l10n_do_itbis_costo" 
-                                   modifiers="{'readonly': [('l10n_do_fiscal_type', '!=', 'minor_expense')]}"/>
+                                   readonly="l10n_do_fiscal_type != 'minor_expense'"/>
                             <field name="l10n_do_itbis_adelantar" readonly="1"/>
                         </group>
                     </group>

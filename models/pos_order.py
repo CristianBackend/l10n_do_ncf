@@ -213,7 +213,7 @@ class PosOrder(models.Model):
         B04; si se le pasara un B02 de la orden, el constrain
         _lock_ncf_type_after_generation fallaria (prefijo B02 != tipo B04).
         Si se pasa el NCF de origen para referenciar el comprobante corregido
-        (requisito DGII).
+        (requisito DGII), y el motivo de la NC.
 
         En ambos casos se marca l10n_do_ncf_required = True, que es la
         condicion que account.move exige para generar NCF.
@@ -247,6 +247,11 @@ class PosOrder(models.Model):
 
             if ncf_origen:
                 vals['l10n_do_ncf_origin'] = ncf_origen
+
+            # Motivo DGII de la nota de credito. En devoluciones del POS es
+            # siempre devolucion de bienes (codigo 03). Editable en borrador
+            # por si el caso real fuera otro (anulacion total, correccion...).
+            vals.setdefault('l10n_do_credit_note_reason', '03')
 
             if ncf_activo:
                 vals['l10n_do_ncf_required'] = True
