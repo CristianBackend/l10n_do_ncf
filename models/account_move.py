@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # módulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
@@ -514,8 +514,20 @@ class AccountMove(models.Model):
         2. Gubernamental -> B15
         3. Regimen Especial -> B14
         4. Nota de Debito -> B03
-        5. Con RNC (contribuyente) -> B01
-        6. Sin RNC (consumidor final) -> B02
+        5. Contribuyente (tipo 'taxpayer') -> B01
+        6. Todos los demas (consumidor final) -> B02
+
+        CRITERIO B01 vs B02 (normativa DGII):
+        Lo que determina el tipo NO es que el cliente tenga documento, sino
+        si SOLICITA credito fiscal. En ventas al detalle se emite B02 por
+        defecto; el B01 solo cuando el cliente pide factura con credito
+        fiscal y esta registrado como contribuyente.
+
+        Por eso NO se usa la sola presencia de vat: una cedula de 11 digitos
+        identifica a una persona, pero no implica que este registrada como
+        Persona Fisica con Actividad Empresarial. El campo que manda es
+        partner.l10n_do_dgii_tax_payer_type: si es 'taxpayer' -> B01,
+        cualquier otro valor -> B02.
 
         NC VENTAS (out_refund): siempre B04
         COMPRAS (in_invoice): segun l10n_do_fiscal_type del movimiento
@@ -541,7 +553,6 @@ class AccountMove(models.Model):
                 partner = move.partner_id
                 partner_country = partner.country_id.code if partner.country_id else 'DO'
                 client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
-                has_rnc = bool(partner.vat and len(partner.vat.strip()) >= 9)
 
                 # 1. Exportacion: cliente extranjero (pais != DO)
                 if partner_country and partner_country != 'DO':
@@ -555,8 +566,8 @@ class AccountMove(models.Model):
                 # 4. Nota de Debito
                 elif move.l10n_do_is_debit_note:
                     code = '03'  # B03 - Nota de Debito
-                # 5. Contribuyente con RNC
-                elif client_type == 'taxpayer' or has_rnc:
+                # 5. Contribuyente registrado que solicita credito fiscal
+                elif client_type == 'taxpayer':
                     code = '01'  # B01 - Credito Fiscal
                 # 6. Consumidor Final (default)
                 else:
@@ -1122,7 +1133,7 @@ class AccountMove(models.Model):
         Reglas:
         - País != RD → debe ser B16 (Exportación)
         - B01 (Fiscal) → RNC obligatorio, país RD
-        - B02 (Consumidor) → RNC prohibido, país RD
+        - B02 (Consumidor) → admite cédula; warning si es RNC de empresa
         - B14 (Especial) → RNC obligatorio, país RD, warning si parece normal
         - B15 (Gubernamental) → RNC obligatorio, país RD, warning si RNC no parece gubernamental
         - B16 (Exportación) → País != RD, RNC dominicano prohibido
@@ -1181,20 +1192,27 @@ class AccountMove(models.Model):
             ) % partner.name)
 
         # =====================
-        # REGLA 3: B02 (Consumidor Final) - RNC PROHIBIDO
+        # REGLA 3: B02 (Consumidor Final)
         # =====================
+        # NOTA (normativa DGII): el B02 SI admite documento del comprador.
+        # De hecho, los B02 que superan RD$250,000 DEBEN incluir nombre y
+        # cedula del comprador. Por eso aqui NO se bloquea la presencia de
+        # documento: solo se advierte cuando parece un RNC de empresa
+        # (9 digitos), porque una empresa que compra para su operacion
+        # normalmente necesita B01 para acreditar el ITBIS.
         if ncf_code == '02':
-            if partner_vat and len(partner_vat) >= 9:
-                raise UserError(_(
-                    "❌ ERROR FISCAL: B02 con RNC\n\n"
-                    "El cliente '%s' tiene RNC: %s\n\n"
-                    "B02 (Consumidor Final) NO permite RNC.\n"
-                    "Un cliente con RNC debe usar B01 (Crédito Fiscal).\n\n"
-                    "Opciones:\n"
-                    "1. Cambiar tipo de contribuyente a 'Contribuyente' → usará B01\n"
-                    "2. Eliminar el RNC del cliente si es consumidor final"
+            if partner_vat and len(partner_vat) == 9:
+                warnings.append(_(
+                    "⚠️ ADVERTENCIA: B02 a cliente con RNC de empresa\n\n"
+                    "Cliente: %s\n"
+                    "RNC: %s\n"
+                    "Tipo: Consumidor Final (B02)\n\n"
+                    "El documento parece un RNC de empresa. Un B02 no permite "
+                    "al comprador acreditar el ITBIS.\n\n"
+                    "Si el cliente necesita credito fiscal, cambie su tipo de "
+                    "contribuyente a 'Contribuyente' para que se emita B01."
                 ) % (partner.name, partner_vat))
-            return {}  # B02 sin RNC = OK
+            return {'warnings': warnings}
 
         # =====================
         # REGLA 4: B01, B14, B15 - RNC OBLIGATORIO
