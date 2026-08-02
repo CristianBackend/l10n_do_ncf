@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # módulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
@@ -18,8 +18,6 @@ _logger = logging.getLogger(__name__)
 NCF_PATTERN = r'^B(01|02|03|04|11|12|13|14|15|16|17)\d{8}$'
 ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
 NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
-
-
 
 
 class AccountMove(models.Model):
@@ -53,7 +51,35 @@ class AccountMove(models.Model):
 
     l10n_do_ncf_expiration = fields.Date(related='l10n_do_ncf_seq_id.expiration_date', store=True)
 
-    l10n_do_ncf_required = fields.Boolean(string='Requiere NCF', default=False)
+    l10n_do_ncf_required = fields.Boolean(
+        string='Requiere NCF',
+        compute='_compute_l10n_do_ncf_required',
+        store=True,
+        readonly=False,
+        help='Se activa automaticamente en facturas y notas de credito de '
+             'venta de companias dominicanas. Puede desmarcarse a mano en '
+             'casos excepcionales, antes de postear.',
+    )
+
+    @api.depends('move_type', 'company_id')
+    def _compute_l10n_do_ncf_required(self):
+        """Toda factura / nota de credito de venta de una compania
+        dominicana requiere NCF.
+
+        MOTIVO: antes era un Boolean manual con default=False y SOLO el POS
+        lo activaba (pos_order.py::_prepare_invoice_vals). Por eso las
+        facturas creadas desde e-commerce, Ventas, CRM o Contabilidad
+        nacian sin NCF: no entraban en las condiciones de action_post ni de
+        _generate_ncf, que dependen de este flag.
+
+        readonly=False mantiene el valor editable: la decision fiscal final
+        sigue siendo del usuario.
+        """
+        for move in self:
+            move.l10n_do_ncf_required = (
+                move.company_id.country_id.code == 'DO'
+                and move.move_type in ('out_invoice', 'out_refund')
+            )
 
     # =========================================
     # ESTADO FISCAL Y REPORTE DGII
@@ -273,16 +299,10 @@ class AccountMove(models.Model):
     l10n_do_total_itbis_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
     l10n_do_gross_total = fields.Monetary(
         string='Total Bruto',
-        compute='_compute_retention_totals', 
-        store=True, 
+        compute='_compute_retention_totals',
+        store=True,
         currency_field='currency_id',
         help='Total antes de retenciones (amount_total + retenciones)'
-    )
-    l10n_do_gross_total = fields.Monetary(
-        string='Total Bruto',
-        compute='_compute_retention_totals', 
-        store=True, 
-        currency_field='currency_id',
     )
     l10n_do_amount_to_pay = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
 
@@ -397,6 +417,7 @@ class AccountMove(models.Model):
             move.l10n_do_itbis_percibido = buckets['itbis_percibido']
             move.l10n_do_isr_retenido = buckets['isr_retenido']
             move.l10n_do_isr_percibido = buckets['isr_percibido']
+
     @api.depends('payment_state', 'move_type')
     def _compute_payment_status_display(self):
         """Mostrar 'Aplicada' en lugar de 'Pagado' para NC"""
@@ -413,20 +434,19 @@ class AccountMove(models.Model):
             else:
                 move.l10n_do_payment_status_display = status_map.get(move.payment_state, move.payment_state or '')
 
-
     @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total', 'l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.retention_type_id')
     def _compute_retention_totals(self):
         """Calcular totales de retenciones desde l10n_do_retention_ids
-        
+
         Fuentes de datos (en orden de prioridad):
         1. l10n_do_retention_ids - retenciones manuales/calculadas del módulo NCF
         2. line_ids con dgii_retention_type - impuestos de Odoo marcados como retención
-        
+
         Nota: En Odoo, amount_total YA incluye las retenciones (impuestos negativos).
         """
         for move in self:
             isr = itbis = 0
-            
+
             # Fuente 1: Retenciones del módulo NCF (l10n_do_retention_ids)
             for ret in move.l10n_do_retention_ids:
                 if ret.retention_type_id and ret.retention_type_id.retention_type:
@@ -435,7 +455,7 @@ class AccountMove(models.Model):
                         isr += amount
                     elif ret.retention_type_id.retention_type == 'itbis':
                         itbis += amount
-            
+
             # Fuente 2: Si no hay retenciones NCF, buscar en impuestos de Odoo
             if not isr and not itbis:
                 for line in move.line_ids:
@@ -445,7 +465,7 @@ class AccountMove(models.Model):
                             isr += amount
                         elif line.tax_line_id.dgii_retention_type == 'itbis':
                             itbis += amount
-            
+
             move.l10n_do_total_isr_retention = isr
             move.l10n_do_total_itbis_retention = itbis
             move.l10n_do_amount_to_pay = move.amount_total
@@ -488,7 +508,7 @@ class AccountMove(models.Model):
     @api.depends('move_type', 'partner_id.vat', 'partner_id.l10n_do_dgii_tax_payer_type', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
     def _compute_l10n_do_ncf_type_id(self):
         """Asignar tipo de NCF segun tipo fiscal del cliente/proveedor
-        
+
         VENTAS (out_invoice) - Orden de evaluacion segun DGII:
         1. Exportacion (cliente extranjero) -> B16
         2. Gubernamental -> B15
@@ -496,14 +516,14 @@ class AccountMove(models.Model):
         4. Nota de Debito -> B03
         5. Con RNC (contribuyente) -> B01
         6. Sin RNC (consumidor final) -> B02
-        
+
         NC VENTAS (out_refund): siempre B04
         COMPRAS (in_invoice): segun l10n_do_fiscal_type del movimiento
         """
         NcfType = self.env['l10n_do_ncf.type']
         all_types = NcfType.search([])
         type_cache = {t.code: t for t in all_types}
-        
+
         # Mapeo tipo fiscal proveedor -> NCF para compras
         supplier_fiscal_map = {
             'informal': '11',
@@ -512,17 +532,17 @@ class AccountMove(models.Model):
             'special': '14',
             'governmental': '15',
         }
-        
+
         for move in self:
             code = False
-            
+
             if move.move_type == 'out_invoice':
                 # ORDEN CORRECTO segun normativa DGII
                 partner = move.partner_id
                 partner_country = partner.country_id.code if partner.country_id else 'DO'
                 client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
                 has_rnc = bool(partner.vat and len(partner.vat.strip()) >= 9)
-                
+
                 # 1. Exportacion: cliente extranjero (pais != DO)
                 if partner_country and partner_country != 'DO':
                     code = '16'  # B16 - Exportacion
@@ -541,13 +561,13 @@ class AccountMove(models.Model):
                 # 6. Consumidor Final (default)
                 else:
                     code = '02'  # B02 - Consumidor Final
-                    
+
             elif move.move_type == 'out_refund':
                 code = '04'  # B04 - Nota de Credito
-                
+
             elif move.move_type in ('in_invoice', 'in_refund'):
                 code = supplier_fiscal_map.get(move.l10n_do_fiscal_type)
-            
+
             move.l10n_do_ncf_type_id = type_cache.get(code).id if code and code in type_cache else False
 
     # =========================================
@@ -759,7 +779,7 @@ class AccountMove(models.Model):
     # =========================================
     def _generate_ncf(self):
         """Generar NCF con protección de concurrencia usando FOR UPDATE.
-        
+
         Evita que dos usuarios obtengan el mismo NCF al confirmar
         facturas simultáneamente.
         """
@@ -771,7 +791,7 @@ class AccountMove(models.Model):
             raise UserError(_('Seleccione tipo de comprobante.'))
 
         ncf_type = self.l10n_do_ncf_type_id
-        
+
         # Buscar secuencias candidatas
         sequences = self.env['l10n_do_ncf.sequence'].sudo().search([
             ('ncf_type_id', '=', ncf_type.id),
@@ -798,9 +818,9 @@ class AccountMove(models.Model):
                 LIMIT 1
                 FOR UPDATE NOWAIT
             """, (tuple(sequences.ids),))
-            
+
             row = self.env.cr.fetchone()
-            
+
         except Exception as e:
             if 'could not obtain lock' in str(e) or 'NOWAIT' in str(e):
                 raise UserError(_(
@@ -826,7 +846,7 @@ class AccountMove(models.Model):
 
         # Calcular siguiente número
         next_num = max(range_from or 1, current_number + 1)
-        
+
         if next_num > range_to:
             raise UserError(_(
                 'Secuencia agotada para %s.\n'
@@ -840,7 +860,7 @@ class AccountMove(models.Model):
 
         # Actualizar secuencia (atómico dentro del lock)
         self.env.cr.execute("""
-            UPDATE l10n_do_ncf_sequence 
+            UPDATE l10n_do_ncf_sequence
             SET current_number = %s, write_date = NOW()
             WHERE id = %s
         """, (next_num, seq_id))
@@ -853,7 +873,6 @@ class AccountMove(models.Model):
         })
 
         _logger.info('NCF generado: %s | Documento: %s | Secuencia: %s', ncf, self.name, seq_id)
-
 
     # =========================================
     # ONCHANGE
@@ -877,7 +896,7 @@ class AccountMove(models.Model):
         """Warning si hay inconsistencia entre Tipo de Gasto y Producto"""
         if self.move_type not in ('in_invoice', 'in_refund') or not self.l10n_do_expense_type:
             return
-        
+
         # Detectar si hay productos tipo "bienes" vs "servicios"
         has_goods = any(
             line.product_id and line.product_id.type in ('consu', 'product')
@@ -887,11 +906,11 @@ class AccountMove(models.Model):
             line.product_id and line.product_id.type == 'service'
             for line in self.invoice_line_ids
         )
-        
+
         # Tipo de gasto 02 = Servicios, 01 = Bienes
         expense_is_service = self.l10n_do_expense_type == '02'
         expense_is_goods = self.l10n_do_expense_type == '01'
-        
+
         warning_msg = False
         if expense_is_service and has_goods and not has_services:
             warning_msg = (
@@ -905,7 +924,7 @@ class AccountMove(models.Model):
                 "pero las lineas contienen productos de tipo Servicio. "
                 "Verifique la clasificacion fiscal antes de confirmar."
             )
-        
+
         if warning_msg:
             return {
                 'warning': {
@@ -982,6 +1001,7 @@ class AccountMove(models.Model):
             return
         if self.search([('partner_id', '=', self.partner_id.id), ('l10n_do_ncf_number', '=like', 'B02%'), ('state', '=', 'posted')], limit=1):
             return {'warning': {'title': _('Cliente con RNC nuevo'), 'message': _('Tiene facturas B02 previas. Considere emitir NC.')}}
+
     @api.onchange('partner_id', 'l10n_do_ncf_type_id')
     def _onchange_validate_fiscal_coherence(self):
         """Mostrar warning de coherencia fiscal al seleccionar cliente o tipo NCF"""
@@ -991,10 +1011,10 @@ class AccountMove(models.Model):
             return
         if self.company_id.country_id.code != 'DO':
             return
-        
+
         ncf_code = self.l10n_do_ncf_type_id.code
         partner_vat = (self.partner_id.vat or '').strip()
-        
+
         # Validación B15 (Gubernamental) con RNC no gubernamental
         if ncf_code == '15' and partner_vat:
             is_gov_pattern = (
@@ -1018,7 +1038,7 @@ class AccountMove(models.Model):
                         '• B14 (Régimen Especial) - ONG o zona franca'
                     ) % (self.partner_id.name, partner_vat)
                 }}
-        
+
         # Validación B14 con RNC de empresa normal
         if ncf_code == '14' and partner_vat:
             if partner_vat.startswith('1') and len(partner_vat) == 9:
@@ -1033,7 +1053,7 @@ class AccountMove(models.Model):
                         'Si es contribuyente normal, use B01.'
                     ) % (self.partner_id.name, partner_vat)
                 }}
-        
+
         # Validación B01 con RNC gubernamental
         if ncf_code == '01' and partner_vat:
             is_gov_pattern = (
@@ -1050,7 +1070,6 @@ class AccountMove(models.Model):
                         'Cambie el tipo de contribuyente a "Gubernamental".'
                     ) % (self.partner_id.name, partner_vat)
                 }}
-
 
     # =========================================
     # SINCRONIZACIÓN RETENCIONES
@@ -1095,12 +1114,11 @@ class AccountMove(models.Model):
             self.l10n_do_retention_ids = retentions
 
     # =========================================
-    # =========================================
     # VALIDACIÓN FISCAL INTELIGENTE
     # =========================================
     def _validate_fiscal_coherence(self):
         """Validación fiscal según algoritmo unificado.
-        
+
         Reglas:
         - País != RD → debe ser B16 (Exportación)
         - B01 (Fiscal) → RNC obligatorio, país RD
@@ -1108,32 +1126,32 @@ class AccountMove(models.Model):
         - B14 (Especial) → RNC obligatorio, país RD, warning si parece normal
         - B15 (Gubernamental) → RNC obligatorio, país RD, warning si RNC no parece gubernamental
         - B16 (Exportación) → País != RD, RNC dominicano prohibido
-        
+
         Returns: dict con warnings (no bloquea) o raises UserError (bloquea)
         """
         self.ensure_one()
-        
+
         if not self.l10n_do_ncf_required:
             return {}
-        
+
         if self.company_id.country_id.code != 'DO':
             return {}
-        
+
         if self.move_type not in ('out_invoice', 'out_refund'):
             return {}
-        
+
         warnings = []
         partner = self.partner_id
         ncf_type = self.l10n_do_ncf_type_id
-        
+
         if not ncf_type:
             return {}
-        
+
         ncf_code = ncf_type.code  # '01', '02', '14', '15', '16', etc.
         partner_country = partner.country_id.code if partner.country_id else 'DO'
         partner_vat = (partner.vat or '').strip()
         client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
-        
+
         # =====================
         # REGLA 1: Exportación (B16)
         # =====================
@@ -1148,9 +1166,9 @@ class AccountMove(models.Model):
                     "Corrija el tipo de comprobante o el país del cliente."
                 ) % (partner.name, partner_country, ncf_type.name))
             return {}  # B16 con extranjero = OK
-        
+
         # De aquí en adelante: País = RD
-        
+
         # =====================
         # REGLA 2: B16 solo para extranjeros
         # =====================
@@ -1161,7 +1179,7 @@ class AccountMove(models.Model):
                 "B16 (Exportación) solo aplica para clientes extranjeros.\n\n"
                 "Use B01, B02, B14 o B15 según corresponda."
             ) % partner.name)
-        
+
         # =====================
         # REGLA 3: B02 (Consumidor Final) - RNC PROHIBIDO
         # =====================
@@ -1177,7 +1195,7 @@ class AccountMove(models.Model):
                     "2. Eliminar el RNC del cliente si es consumidor final"
                 ) % (partner.name, partner_vat))
             return {}  # B02 sin RNC = OK
-        
+
         # =====================
         # REGLA 4: B01, B14, B15 - RNC OBLIGATORIO
         # =====================
@@ -1191,7 +1209,7 @@ class AccountMove(models.Model):
                     "1. Agregar el RNC al cliente\n"
                     "2. Cambiar tipo de contribuyente a 'Consumidor Final' → usará B02"
                 ) % (ncf_type.name, partner.name, ncf_type.name))
-        
+
         # =====================
         # REGLA 5: B15 (Gubernamental) - Validar patrón RNC
         # =====================
@@ -1203,7 +1221,7 @@ class AccountMove(models.Model):
                 partner_vat.startswith('430') or  # Ayuntamientos
                 partner_vat.startswith('431')     # Otros organismos
             )
-            
+
             if not is_gov_pattern:
                 warnings.append(_(
                     "⚠️ ADVERTENCIA: RNC no parece Gubernamental\n\n"
@@ -1221,7 +1239,7 @@ class AccountMove(models.Model):
                     "- 'Contribuyente' para B01\n"
                     "- 'Régimen Especial' para B14"
                 ) % (partner.name, partner_vat))
-        
+
         # =====================
         # REGLA 6: B14 (Régimen Especial) - Warning informativo
         # =====================
@@ -1242,7 +1260,7 @@ class AccountMove(models.Model):
                     "- Exentos por ley\n\n"
                     "Si el cliente es contribuyente normal, use B01."
                 ) % (partner.name, partner_vat))
-        
+
         # =====================
         # REGLA 7: B01 con RNC gubernamental
         # =====================
@@ -1263,9 +1281,10 @@ class AccountMove(models.Model):
                     "Si el cliente ES gubernamental, debería usar B15.\n"
                     "Cambie el tipo de contribuyente a 'Gubernamental'."
                 ) % (partner.name, partner_vat))
-        
+
         return {'warnings': warnings}
-    
+
+    # =========================================
     # ACTION_POST
     # =========================================
     def action_post(self):
@@ -1385,20 +1404,3 @@ class AccountMove(models.Model):
         if self.l10n_do_fiscal_type == 'informal':
             return self.l10n_do_informal_provider_cedula or ''
         return self.partner_id.vat or ''
-
-# -*- coding: utf-8 -*-
-# módulo: l10n_do_ncf
-# Archivo: models/account_move.py
-# Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
-# Compatibilidad: Odoo 19 (100% compatible, upgrade-friendly)
-
-from odoo import models, fields, api, _
-from odoo.exceptions import ValidationError, UserError
-from datetime import date
-import re
-import logging
-
-_logger = logging.getLogger(__name__)
-
-# =========================================
-# PATRONES Y CONSTANTES
