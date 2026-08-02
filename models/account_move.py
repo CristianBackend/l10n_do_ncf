@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # módulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
