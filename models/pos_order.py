@@ -161,6 +161,15 @@ class PosOrder(models.Model):
         copy=False
     )
 
+    l10n_do_ncf_origin = fields.Char(
+        string='NCF Afectado',
+        readonly=True,
+        copy=False,
+        help='NCF del comprobante que corrige esta nota de credito. '
+             'Se refleja desde la NC (account.move) para poder imprimirlo '
+             'en el recibo termico del POS.'
+    )
+
     l10n_do_partner_vat = fields.Char(
         string='RNC/Cédula',
         compute='_compute_partner_vat',
@@ -292,7 +301,7 @@ class PosOrder(models.Model):
 
     def _generate_pos_order_invoice(self):
         """Asegurar que la factura / nota de credito tenga su NCF, y
-        reflejar el NCF de la nota de credito en la orden POS.
+        reflejar los datos fiscales de la NC en la orden POS.
 
         MOTIVO (generacion): el POS postea los documentos con
         invoice._post() (point_of_sale/models/pos_order.py, ~linea 1178), NO
@@ -303,9 +312,11 @@ class PosOrder(models.Model):
 
         MOTIVO (reflejo): en devoluciones la orden POS queda sin NCF a
         proposito (el comprobante es la NC). Pero el recibo termico lee
-        order.l10n_do_ncf_number, asi que el ticket de devolucion salia sin
-        el bloque fiscal. Copiamos el B04 ya generado a la orden: NO consume
-        secuencia, solo refleja el numero para poder imprimirlo.
+        order.l10n_do_ncf_number y order.l10n_do_ncf_origin, asi que el
+        ticket de devolucion salia sin el bloque fiscal y sin indicar que
+        comprobante estaba afectando. Copiamos el B04 y el NCF afectado ya
+        generados: NO consume secuencia, solo refleja los datos para
+        poder imprimirlos.
         """
         res = super()._generate_pos_order_invoice()
 
@@ -334,19 +345,23 @@ class PosOrder(models.Model):
                     )
                     raise
 
-            # 2. Reflejar el B04 de la NC en la orden POS para el recibo.
+            # 2. Reflejar el B04 y el NCF afectado en la orden POS,
+            #    para que el recibo termico los pueda mostrar.
             if order._l10n_do_is_refund() and move.l10n_do_ncf_number:
                 order.sudo().write({
                     'l10n_do_ncf_number': move.l10n_do_ncf_number,
                     'l10n_do_ncf_type': move.l10n_do_ncf_type_id.prefix or 'B04',
+                    'l10n_do_ncf_origin': move.l10n_do_ncf_origin or False,
                     'l10n_do_ncf_seq_id': (
                         move.l10n_do_ncf_seq_id.id
                         if move.l10n_do_ncf_seq_id else False
                     ),
                 })
                 _logger.info(
-                    'POS NCF: NCF %s reflejado en la orden %s para el recibo',
-                    move.l10n_do_ncf_number, order.name
+                    'POS NCF: NCF %s (afecta %s) reflejado en la orden %s',
+                    move.l10n_do_ncf_number,
+                    move.l10n_do_ncf_origin or 'sin origen',
+                    order.name
                 )
 
         return res

@@ -48,6 +48,18 @@
                             <t t-else=""><t t-esc="order.l10n_do_ncf_type"/></t>
                         </div>
                     </t>
+                    <!--
+                        NCF Afectado: obligatorio en notas de credito / debito
+                        para identificar el comprobante que se esta corrigiendo.
+                        El valor se refleja desde account.move a la orden POS en
+                        pos_order.py::_generate_pos_order_invoice.
+                    -->
+                    <t t-if="order.l10n_do_ncf_origin">
+                        <div style="font-size: 12px; margin-top: 6px; font-weight: bold;">
+                            <span>NCF Afectado: </span>
+                            <span t-esc="order.l10n_do_ncf_origin"/>
+                        </div>
+                    </t>
                     <div style="font-size: 11px; margin-top: 6px;">
                         Válido para fines fiscales
                     </div>
