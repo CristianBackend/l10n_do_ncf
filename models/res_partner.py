@@ -56,20 +56,20 @@ class ResPartner(models.Model):
         )
         if api_url:
             return api_url
-        
+
         try:
             test_response = requests.get('http://localhost:5000/api/v1/rnc/101000783', timeout=2)
             if test_response.status_code == 200:
                 return 'http://localhost:5000/api/v1/rnc'
         except:
             pass
-        
+
         return 'https://api.indexa.do/api/rnc'
 
     def _consultar_dgii(self, rnc):
         """Consultar RNC en DGII - intenta múltiples APIs"""
         rnc_clean = re.sub(r'[^0-9]', '', rnc)
-        
+
         apis = [
             {
                 'url': f'http://localhost:5000/api/v1/rnc/{rnc_clean}',
@@ -83,21 +83,21 @@ class ResPartner(models.Model):
                 'data': {'rnc': rnc_clean}
             },
         ]
-        
+
         for api in apis:
             try:
                 _logger.info(f"NCF: Intentando consultar RNC {rnc_clean} en {api['url']}")
-                
+
                 if api.get('method') == 'POST':
                     response = requests.post(
-                        api['url'], 
+                        api['url'],
                         json=api.get('data', {}),
                         timeout=10,
                         headers={'Content-Type': 'application/json'}
                     )
                 else:
                     response = requests.get(api['url'], timeout=10)
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     result = api['parser'](data)
@@ -107,7 +107,7 @@ class ResPartner(models.Model):
             except Exception as e:
                 _logger.warning(f"NCF: Error consultando {api['url']}: {str(e)}")
                 continue
-        
+
         return {'found': False}
 
     def _parse_local_api(self, data):
@@ -144,6 +144,56 @@ class ResPartner(models.Model):
                 res['country_id'] = do_country.id
         return res
 
+    # =========================================
+    # CLASIFICACION AUTOMATICA AL CREAR / EDITAR
+    # =========================================
+    def _l10n_do_should_auto_classify(self):
+        """La clasificacion automatica solo aplica a contactos dominicanos.
+
+        Si el pais no esta definido se asume RD (es el default del modulo).
+        """
+        self.ensure_one()
+        if not self.vat:
+            return False
+        if self.country_id and self.country_id.code != 'DO':
+            return False
+        return True
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Clasificar el tipo de contribuyente al crear el contacto.
+
+        MOTIVO: _auto_set_taxpayer_type solo se invocaba desde el onchange
+        del VAT, que no se dispara al crear contactos desde el checkout web,
+        el POS o cualquier creacion por codigo. Resultado: todo contacto
+        nuevo quedaba como 'final_consumer' aunque tuviera RNC de empresa,
+        y por lo tanto recibia B02 en vez de B01.
+        """
+        partners = super().create(vals_list)
+        for partner in partners:
+            if partner._l10n_do_should_auto_classify():
+                partner.with_context(
+                    l10n_do_skip_auto_type=True
+                )._auto_set_taxpayer_type(partner.vat)
+        return partners
+
+    def write(self, vals):
+        """Reclasificar si cambia el documento fiscal.
+
+        El contexto l10n_do_skip_auto_type evita la recursion, porque
+        _auto_set_taxpayer_type escribe sobre el propio registro.
+        """
+        res = super().write(vals)
+
+        if 'vat' in vals and not self.env.context.get('l10n_do_skip_auto_type'):
+            for partner in self:
+                if partner._l10n_do_should_auto_classify():
+                    partner.with_context(
+                        l10n_do_skip_auto_type=True
+                    )._auto_set_taxpayer_type(partner.vat)
+
+        return res
+
     def _limpiar_datos_dgii(self):
         """Limpiar todos los datos de DGII del partner"""
         self.name = False
@@ -160,40 +210,60 @@ class ResPartner(models.Model):
         if not self.vat:
             self._limpiar_datos_dgii()
             return
-        
+
         rnc = re.sub(r'[^0-9]', '', self.vat)
-        
+
         # Validar longitud
         if len(rnc) != 9 and len(rnc) != 11:
             return
-        
+
         # SIEMPRE limpiar datos anteriores antes de consultar nuevo RNC
         self.l10n_do_dgii_status = False
         self.l10n_do_dgii_activity = False
         self.l10n_do_rnc_validated = False
         self.l10n_do_rnc_validation_date = False
-        
+
         # Consultar nuevo RNC
         self._consultar_rnc_dgii(rnc)
         self._auto_set_taxpayer_type(rnc)
 
     def _auto_set_taxpayer_type(self, rnc):
-        """Asignar tipo de contribuyente automaticamente segun el RNC
+        """Asignar tipo de contribuyente automaticamente segun el documento.
 
-        NOTA: El prefijo 430 NO se clasifica automaticamente como gubernamental.
-        Segun la DGII, el prefijo 430 es compartido: lo usan tanto ayuntamientos
-        (gubernamental) como condominios y asociaciones sin fines de lucro
-        (contribuyente normal). La clasificacion final la decide el usuario.
+        CRITERIO (aprobado con el cliente, coherente con la norma DGII):
+        - 9 digitos  = RNC de empresa  -> 'taxpayer'      -> B01 Credito Fiscal
+        - 11 digitos = cedula personal -> 'final_consumer' -> B02 Consumo
+
+        La DGII establece que se emite comprobante de consumo salvo que el
+        cliente solicite factura con su RNC. Aportar un RNC de 9 digitos ES
+        esa solicitud; una cedula solo identifica a la persona y no implica
+        que este registrada como Persona Fisica con Actividad Empresarial.
+
+        EXCEPCIONES que NO se pisan:
+        - 'special_regime' y 'governmental' asignados a mano se respetan.
+        - Prefijos 401 y 402 (ministerios e instituciones descentralizadas)
+          se clasifican como gubernamentales.
+
+        NOTA sobre el prefijo 430: NO se clasifica como gubernamental. Segun
+        la DGII, el 430 es compartido: lo usan tanto ayuntamientos como
+        condominios y asociaciones sin fines de lucro. La clasificacion final
+        la decide el usuario.
         """
-        rnc_clean = re.sub(r'[^0-9]', '', rnc)
+        rnc_clean = re.sub(r'[^0-9]', '', rnc or '')
+
+        # No pisar clasificaciones especiales puestas manualmente
+        if self.l10n_do_dgii_tax_payer_type in ('special_regime', 'governmental'):
+            return
 
         if len(rnc_clean) == 11:
-            if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
-                self.l10n_do_dgii_tax_payer_type = 'taxpayer'
+            # Cedula: persona fisica -> consumidor final (B02)
+            self.l10n_do_dgii_tax_payer_type = 'final_consumer'
+
         elif len(rnc_clean) == 9:
             if rnc_clean.startswith(('401', '402')):
                 self.l10n_do_dgii_tax_payer_type = 'governmental'
-            elif self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
+            else:
+                # RNC de empresa -> contribuyente (B01)
                 self.l10n_do_dgii_tax_payer_type = 'taxpayer'
 
     def _consultar_rnc_dgii(self, rnc):
@@ -236,7 +306,7 @@ class ResPartner(models.Model):
 
         try:
             data = self._consultar_dgii(rnc)
-            
+
             if data.get('found'):
                 vals = {
                     'l10n_do_dgii_status': data.get('status', ''),
@@ -249,13 +319,15 @@ class ResPartner(models.Model):
                 if nombre_dgii:
                     vals['name'] = nombre_dgii
 
-                if len(rnc) == 9 and rnc.startswith(('401', '402')):
-                    vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
-                elif data.get('status') == 'ACTIVO':
-                    if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
+                if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
+                    if len(rnc) == 9 and rnc.startswith(('401', '402')):
+                        vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
+                    elif len(rnc) == 9:
                         vals['l10n_do_dgii_tax_payer_type'] = 'taxpayer'
+                    elif len(rnc) == 11:
+                        vals['l10n_do_dgii_tax_payer_type'] = 'final_consumer'
 
-                self.write(vals)
+                self.with_context(l10n_do_skip_auto_type=True).write(vals)
 
                 return {
                     'type': 'ir.actions.client',
@@ -272,7 +344,7 @@ class ResPartner(models.Model):
                 }
             else:
                 # Limpiar validación si no se encuentra
-                self.write({
+                self.with_context(l10n_do_skip_auto_type=True).write({
                     'l10n_do_rnc_validated': False,
                     'l10n_do_dgii_status': '',
                     'l10n_do_dgii_activity': '',
@@ -313,7 +385,6 @@ class ResPartner(models.Model):
             'vat': rnc_clean,
             'name': name or f'Cliente {rnc_clean}',
             'is_company': len(rnc_clean) == 9,
-            'l10n_do_dgii_tax_payer_type': 'final_consumer',
         }
 
         if email:
@@ -327,12 +398,6 @@ class ResPartner(models.Model):
                 vals['l10n_do_dgii_activity'] = data.get('activity', '')
                 vals['l10n_do_rnc_validated'] = True
                 vals['l10n_do_rnc_validation_date'] = datetime.now()
-
-                if data.get('status') == 'ACTIVO':
-                    vals['l10n_do_dgii_tax_payer_type'] = 'taxpayer'
-
-                if len(rnc_clean) == 9 and rnc_clean.startswith(('401', '402')):
-                    vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
         except Exception:
             pass
 
@@ -341,4 +406,6 @@ class ResPartner(models.Model):
         elif len(rnc_clean) == 11:
             vals['is_company'] = False
 
+        # El tipo de contribuyente lo asigna create() via
+        # _auto_set_taxpayer_type, segun la longitud del documento.
         return self.create(vals)
