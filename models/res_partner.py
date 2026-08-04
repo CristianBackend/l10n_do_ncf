@@ -231,7 +231,7 @@ class ResPartner(models.Model):
         """Asignar tipo de contribuyente automaticamente segun el documento.
 
         CRITERIO (aprobado con el cliente, coherente con la norma DGII):
-        - 9 digitos  = RNC de empresa  -> 'taxpayer'      -> B01 Credito Fiscal
+        - 9 digitos  = RNC de empresa  -> 'taxpayer'       -> B01 Credito Fiscal
         - 11 digitos = cedula personal -> 'final_consumer' -> B02 Consumo
 
         La DGII establece que se emite comprobante de consumo salvo que el
@@ -239,15 +239,29 @@ class ResPartner(models.Model):
         esa solicitud; una cedula solo identifica a la persona y no implica
         que este registrada como Persona Fisica con Actividad Empresarial.
 
-        EXCEPCIONES que NO se pisan:
+        EXCEPCIONES:
         - 'special_regime' y 'governmental' asignados a mano se respetan.
         - Prefijos 401 y 402 (ministerios e instituciones descentralizadas)
           se clasifican como gubernamentales.
+        - Prefijo 430: NO se clasifica (ver nota abajo).
 
-        NOTA sobre el prefijo 430: NO se clasifica como gubernamental. Segun
-        la DGII, el 430 es compartido: lo usan tanto ayuntamientos como
-        condominios y asociaciones sin fines de lucro. La clasificacion final
-        la decide el usuario.
+        NOTA SOBRE EL PREFIJO 430 - por que NO se auto-clasifica:
+        Segun la DGII, el 430 es un prefijo COMPARTIDO: lo usan tanto
+        ayuntamientos (que requieren B15 Gubernamental) como condominios y
+        asociaciones sin fines de lucro (que facturan normal, B02).
+
+        En datos reales de produccion la division es practicamente mitad y
+        mitad: sobre 13 contactos con prefijo 430 habia 7 entidades estatales
+        (hospitales, INTRANT, areas de salud) y 5 no estatales (condominios,
+        asociaciones). Cualquier automatismo acertaria solo la mitad de los
+        casos, y ambos errores cuestan lo mismo de corregir: nota de credito
+        mas reemision del comprobante.
+
+        Por eso se deja el valor que el registro ya tenga (para contactos
+        nuevos es 'final_consumer' por defecto, que es la opcion fiscalmente
+        conservadora) y la decision final la toma el usuario. Si aun asi se
+        factura un 430 con B01, account_move.py::_validate_fiscal_coherence
+        (regla 7) muestra una advertencia al postear.
         """
         rnc_clean = re.sub(r'[^0-9]', '', rnc or '')
 
@@ -262,6 +276,14 @@ class ResPartner(models.Model):
         elif len(rnc_clean) == 9:
             if rnc_clean.startswith(('401', '402')):
                 self.l10n_do_dgii_tax_payer_type = 'governmental'
+            elif rnc_clean.startswith('430'):
+                # Prefijo ambiguo: no se toca el valor actual.
+                _logger.info(
+                    'NCF: RNC %s tiene prefijo 430 (ambiguo: ayuntamiento o '
+                    'condominio/asociacion). No se auto-clasifica; queda como '
+                    '"%s". Verifique el tipo de contribuyente manualmente.',
+                    rnc_clean, self.l10n_do_dgii_tax_payer_type
+                )
             else:
                 # RNC de empresa -> contribuyente (B01)
                 self.l10n_do_dgii_tax_payer_type = 'taxpayer'
@@ -319,9 +341,13 @@ class ResPartner(models.Model):
                 if nombre_dgii:
                     vals['name'] = nombre_dgii
 
+                # Mismo criterio que _auto_set_taxpayer_type:
+                # el prefijo 430 no se auto-clasifica.
                 if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
                     if len(rnc) == 9 and rnc.startswith(('401', '402')):
                         vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
+                    elif len(rnc) == 9 and rnc.startswith('430'):
+                        pass  # ambiguo, lo decide el usuario
                     elif len(rnc) == 9:
                         vals['l10n_do_dgii_tax_payer_type'] = 'taxpayer'
                     elif len(rnc) == 11:
