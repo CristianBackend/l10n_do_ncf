@@ -3,6 +3,7 @@ from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 import requests
 import re
+import unicodedata
 from datetime import datetime
 import logging
 
@@ -10,6 +11,61 @@ _logger = logging.getLogger(__name__)
 
 # URL de la API pública de DGII
 DGII_API_PUBLIC = "https://rnc.megaplus.com.do/api/consulta"
+
+# =========================================================================
+# CLASIFICACION POR ACTIVIDAD ECONOMICA (DGII)
+# =========================================================================
+# El prefijo 430 del RNC es AMBIGUO: lo usan ayuntamientos, hospitales
+# publicos, fundaciones, condominios y hasta empresas normales. No se puede
+# decidir el tipo de contribuyente solo por el numero.
+#
+# La API de DGII devuelve la ACTIVIDAD ECONOMICA registrada, y esa si
+# distingue los casos. Estas listas son los DEFAULTS; se pueden ampliar sin
+# tocar codigo desde:
+#   Ajustes > Tecnico > Parametros del sistema
+#     l10n_do_ncf.activity_governmental
+#     l10n_do_ncf.activity_special_regime
+#     l10n_do_ncf.activity_final_consumer
+# (valores separados por coma, sin acentos, en mayusculas)
+#
+# Muestras reales que originaron cada lista:
+#   ADMINISTRACION PUBLICA EN GENERAL  -> Area VIII de Salud, Ayto. Villa Fundacion
+#   ACTIVIDADES DE HOSPITALES          -> 4 hospitales publicos
+#   REGULACION DE ACTIVIDADES DE ORGANISMOS -> INTRANT
+#   SERVICIOS SOCIALES SIN ALOJAMIENTO -> Fundacion Hilos de Amor, Asoc. Rehabilitacion
+#   CONDOMINIOS                        -> Condominio Torre GM V
+#   ALQUILER DE INMUEBLES              -> Catalonia Met, Torre Ray Rub VII
+#   SERVICIOS DE PUBLICIDAD            -> 1B Advertising (empresa normal con 430)
+# =========================================================================
+
+ACTIVITY_GOVERNMENTAL_DEFAULT = [
+    'ADMINISTRACION PUBLICA',
+    'ACTIVIDADES DE HOSPITALES',
+    'REGULACION DE ACTIVIDADES',
+    'AYUNTAMIENTO',
+    'MINISTERIO',
+    'ORGANISMOS',
+    'DEFENSA',
+    'SEGURIDAD SOCIAL OBLIGATORIA',
+    'MEJORAMIENTO DE CONDICIONES AGROPECUARIAS',
+]
+
+ACTIVITY_SPECIAL_REGIME_DEFAULT = [
+    'SERVICIOS SOCIALES',
+    'SIN ALOJAMIENTO',
+    'REHABILITACION',
+    'ZONA FRANCA',
+    'SIN FINES DE LUCRO',
+    'ASOCIACIONES',
+    'FUNDACION',
+    'ORGANIZACIONES RELIGIOSAS',
+    'ORGANIZACIONES POLITICAS',
+]
+
+ACTIVITY_FINAL_CONSUMER_DEFAULT = [
+    'CONDOMINIO',
+    'ALQUILER DE INMUEBLES',
+]
 
 
 class ResPartner(models.Model):
@@ -45,9 +101,14 @@ class ResPartner(models.Model):
     l10n_do_dgii_activity = fields.Char(
         string='Actividad Economica',
         readonly=True,
-        help='Actividad economica registrada en DGII'
+        help='Actividad economica registrada en DGII. Se usa para clasificar '
+             'automaticamente el tipo de contribuyente cuando el RNC tiene '
+             'prefijo ambiguo (430).'
     )
 
+    # =========================================
+    # CONSULTA A LA API DE DGII
+    # =========================================
     def _get_dgii_api_url(self):
         """Obtener URL de la API DGII desde configuración o usar default"""
         api_url = self.env['ir.config_parameter'].sudo().get_param(
@@ -145,6 +206,102 @@ class ResPartner(models.Model):
         return res
 
     # =========================================
+    # CLASIFICACION POR ACTIVIDAD ECONOMICA
+    # =========================================
+    @api.model
+    def _l10n_do_normalize(self, texto):
+        """Normalizar texto para comparar: sin acentos, mayusculas, sin espacios extra."""
+        if not texto:
+            return ''
+        texto = unicodedata.normalize('NFKD', str(texto))
+        texto = ''.join(c for c in texto if not unicodedata.combining(c))
+        return re.sub(r'\s+', ' ', texto).strip().upper()
+
+    @api.model
+    def _l10n_do_get_activity_keywords(self, tipo):
+        """Palabras clave por tipo de contribuyente.
+
+        Se leen de parametros del sistema para poder ampliarlas SIN tocar
+        codigo ni desplegar. Si el parametro no existe, se usan los defaults
+        definidos arriba en este archivo.
+
+        Parametro: l10n_do_ncf.activity_<tipo>   (valores separados por coma)
+        """
+        defaults = {
+            'governmental': ACTIVITY_GOVERNMENTAL_DEFAULT,
+            'special_regime': ACTIVITY_SPECIAL_REGIME_DEFAULT,
+            'final_consumer': ACTIVITY_FINAL_CONSUMER_DEFAULT,
+        }
+        param = self.env['ir.config_parameter'].sudo().get_param(
+            f'l10n_do_ncf.activity_{tipo}', default=''
+        )
+        if param:
+            return [self._l10n_do_normalize(k) for k in param.split(',') if k.strip()]
+        return [self._l10n_do_normalize(k) for k in defaults.get(tipo, [])]
+
+    @api.model
+    def _l10n_do_classify_by_activity(self, actividad):
+        """Deducir el tipo de contribuyente a partir de la actividad economica.
+
+        Devuelve el tipo, o False si la actividad no coincide con ninguna
+        lista conocida (en cuyo caso NO se debe clasificar automaticamente).
+
+        El orden importa: gubernamental primero, luego regimen especial,
+        luego consumidor final. Asi 'SERVICIOS SOCIALES' de una fundacion no
+        se confunde con nada gubernamental.
+        """
+        act = self._l10n_do_normalize(actividad)
+        if not act:
+            return False
+
+        for tipo in ('governmental', 'special_regime', 'final_consumer'):
+            for palabra in self._l10n_do_get_activity_keywords(tipo):
+                if palabra and palabra in act:
+                    return tipo
+
+        return False
+
+    def _l10n_do_fetch_activity(self, rnc_clean):
+        """Obtener la actividad economica del contacto.
+
+        1. Si ya esta guardada en el contacto, se reutiliza (sin llamada externa).
+        2. Si no, se consulta la API y se guarda para futuras clasificaciones.
+
+        Devuelve la actividad o cadena vacia si no se pudo obtener.
+        Nunca lanza excepcion: si la API falla, se devuelve '' y el llamador
+        decide (que sera: NO clasificar).
+        """
+        self.ensure_one()
+
+        if self.l10n_do_dgii_activity:
+            return self.l10n_do_dgii_activity
+
+        # Permite desactivar la consulta externa si hiciera falta
+        # (ej. importaciones masivas, API caida, rate limiting)
+        consultar = self.env['ir.config_parameter'].sudo().get_param(
+            'l10n_do_ncf.classify_query_api', default='True'
+        )
+        if consultar not in ('True', 'true', '1'):
+            return ''
+
+        try:
+            data = self._consultar_dgii(rnc_clean)
+            if data.get('found'):
+                actividad = data.get('activity') or ''
+                vals = {'l10n_do_dgii_activity': actividad}
+                if data.get('status'):
+                    vals['l10n_do_dgii_status'] = data['status']
+                self.with_context(l10n_do_skip_auto_type=True).write(vals)
+                return actividad
+        except Exception as e:
+            _logger.warning(
+                'NCF: no se pudo obtener actividad economica de %s: %s',
+                rnc_clean, str(e)
+            )
+
+        return ''
+
+    # =========================================
     # CLASIFICACION AUTOMATICA AL CREAR / EDITAR
     # =========================================
     def _l10n_do_should_auto_classify(self):
@@ -166,15 +323,23 @@ class ResPartner(models.Model):
         MOTIVO: _auto_set_taxpayer_type solo se invocaba desde el onchange
         del VAT, que no se dispara al crear contactos desde el checkout web,
         el POS o cualquier creacion por codigo. Resultado: todo contacto
-        nuevo quedaba como 'final_consumer' aunque tuviera RNC de empresa,
-        y por lo tanto recibia B02 en vez de B01.
+        nuevo quedaba como 'final_consumer' aunque tuviera RNC de empresa.
+
+        La clasificacion nunca interrumpe la creacion: si algo falla, se
+        registra en el log y el contacto queda con su valor por defecto.
         """
         partners = super().create(vals_list)
         for partner in partners:
-            if partner._l10n_do_should_auto_classify():
-                partner.with_context(
-                    l10n_do_skip_auto_type=True
-                )._auto_set_taxpayer_type(partner.vat)
+            try:
+                if partner._l10n_do_should_auto_classify():
+                    partner.with_context(
+                        l10n_do_skip_auto_type=True
+                    )._auto_set_taxpayer_type(partner.vat)
+            except Exception as e:
+                _logger.warning(
+                    'NCF: no se pudo clasificar el contacto %s: %s',
+                    partner.display_name, str(e)
+                )
         return partners
 
     def write(self, vals):
@@ -187,10 +352,20 @@ class ResPartner(models.Model):
 
         if 'vat' in vals and not self.env.context.get('l10n_do_skip_auto_type'):
             for partner in self:
-                if partner._l10n_do_should_auto_classify():
-                    partner.with_context(
-                        l10n_do_skip_auto_type=True
-                    )._auto_set_taxpayer_type(partner.vat)
+                try:
+                    if partner._l10n_do_should_auto_classify():
+                        # El VAT cambio: la actividad guardada ya no sirve
+                        partner.with_context(
+                            l10n_do_skip_auto_type=True
+                        ).l10n_do_dgii_activity = False
+                        partner.with_context(
+                            l10n_do_skip_auto_type=True
+                        )._auto_set_taxpayer_type(partner.vat)
+                except Exception as e:
+                    _logger.warning(
+                        'NCF: no se pudo reclasificar el contacto %s: %s',
+                        partner.display_name, str(e)
+                    )
 
         return res
 
@@ -228,40 +403,47 @@ class ResPartner(models.Model):
         self._auto_set_taxpayer_type(rnc)
 
     def _auto_set_taxpayer_type(self, rnc):
-        """Asignar tipo de contribuyente automaticamente segun el documento.
+        """Asignar tipo de contribuyente automaticamente.
 
         CRITERIO (aprobado con el cliente, coherente con la norma DGII):
-        - 9 digitos  = RNC de empresa  -> 'taxpayer'       -> B01 Credito Fiscal
         - 11 digitos = cedula personal -> 'final_consumer' -> B02 Consumo
+        - 9 digitos  = RNC             -> segun prefijo y actividad economica
 
         La DGII establece que se emite comprobante de consumo salvo que el
         cliente solicite factura con su RNC. Aportar un RNC de 9 digitos ES
-        esa solicitud; una cedula solo identifica a la persona y no implica
-        que este registrada como Persona Fisica con Actividad Empresarial.
+        esa solicitud; una cedula solo identifica a la persona.
 
-        EXCEPCIONES:
-        - 'special_regime' y 'governmental' asignados a mano se respetan.
-        - Prefijos 401 y 402 (ministerios e instituciones descentralizadas)
-          se clasifican como gubernamentales.
-        - Prefijo 430: NO se clasifica (ver nota abajo).
+        DETALLE DE LOS RNC DE 9 DIGITOS:
 
-        NOTA SOBRE EL PREFIJO 430 - por que NO se auto-clasifica:
-        Segun la DGII, el 430 es un prefijo COMPARTIDO: lo usan tanto
-        ayuntamientos (que requieren B15 Gubernamental) como condominios y
-        asociaciones sin fines de lucro (que facturan normal, B02).
+        a) Prefijos 401 y 402 -> 'governmental' (B15).
+           Ministerios e instituciones descentralizadas. Fiable por prefijo.
 
-        En datos reales de produccion la division es practicamente mitad y
-        mitad: sobre 13 contactos con prefijo 430 habia 7 entidades estatales
-        (hospitales, INTRANT, areas de salud) y 5 no estatales (condominios,
-        asociaciones). Cualquier automatismo acertaria solo la mitad de los
-        casos, y ambos errores cuestan lo mismo de corregir: nota de credito
-        mas reemision del comprobante.
+        b) Prefijo 430 -> AMBIGUO, se resuelve por ACTIVIDAD ECONOMICA.
+           Este prefijo lo comparten al menos cuatro tipos de entidad, con
+           destinos fiscales distintos (casos reales verificados en DGII):
+             ADMINISTRACION PUBLICA EN GENERAL   -> B15  (Ayto. Villa Fundacion)
+             ACTIVIDADES DE HOSPITALES           -> B15  (hospitales publicos)
+             REGULACION DE ACTIVIDADES ORGANISMOS-> B15  (INTRANT)
+             SERVICIOS SOCIALES SIN ALOJAMIENTO  -> B14  (Fundacion Hilos de Amor)
+             CONDOMINIOS / ALQUILER DE INMUEBLES -> B02  (Condominio Torre GM V)
+             SERVICIOS DE PUBLICIDAD             -> B01  (1B Advertising)
+           Si la actividad no se puede obtener o no coincide con ninguna
+           lista conocida, NO se clasifica: queda 'final_consumer' (B02), que
+           es la opcion conservadora porque no otorga credito fiscal indebido.
 
-        Por eso se deja el valor que el registro ya tenga (para contactos
-        nuevos es 'final_consumer' por defecto, que es la opcion fiscalmente
-        conservadora) y la decision final la toma el usuario. Si aun asi se
-        factura un 430 con B01, account_move.py::_validate_fiscal_coherence
-        (regla 7) muestra una advertencia al postear.
+        c) Resto de prefijos -> 'taxpayer' (B01). Empresas normales.
+           No se consulta la API en este caso: evita latencia y rate limiting.
+
+        EXCEPCIONES: 'special_regime' y 'governmental' puestos a mano se
+        respetan siempre; la clasificacion automatica no los pisa.
+
+        AMPLIAR LAS LISTAS SIN TOCAR CODIGO:
+        Ajustes > Tecnico > Parametros del sistema
+            l10n_do_ncf.activity_governmental
+            l10n_do_ncf.activity_special_regime
+            l10n_do_ncf.activity_final_consumer
+        Para desactivar la consulta a la API:
+            l10n_do_ncf.classify_query_api = False
         """
         rnc_clean = re.sub(r'[^0-9]', '', rnc or '')
 
@@ -269,24 +451,57 @@ class ResPartner(models.Model):
         if self.l10n_do_dgii_tax_payer_type in ('special_regime', 'governmental'):
             return
 
+        # --- Cedula: persona fisica -> consumidor final (B02)
         if len(rnc_clean) == 11:
-            # Cedula: persona fisica -> consumidor final (B02)
             self.l10n_do_dgii_tax_payer_type = 'final_consumer'
+            return
 
-        elif len(rnc_clean) == 9:
-            if rnc_clean.startswith(('401', '402')):
-                self.l10n_do_dgii_tax_payer_type = 'governmental'
-            elif rnc_clean.startswith('430'):
-                # Prefijo ambiguo: no se toca el valor actual.
+        if len(rnc_clean) != 9:
+            return
+
+        # --- Prefijos gubernamentales fiables
+        if rnc_clean.startswith(('401', '402')):
+            self.l10n_do_dgii_tax_payer_type = 'governmental'
+            _logger.info(
+                'NCF: RNC %s clasificado como gubernamental por prefijo', rnc_clean
+            )
+            return
+
+        # --- Prefijo ambiguo: decidir por actividad economica
+        if rnc_clean.startswith('430'):
+            actividad = self._l10n_do_fetch_activity(rnc_clean)
+            tipo = self._l10n_do_classify_by_activity(actividad)
+
+            if tipo:
+                self.l10n_do_dgii_tax_payer_type = tipo
                 _logger.info(
-                    'NCF: RNC %s tiene prefijo 430 (ambiguo: ayuntamiento o '
-                    'condominio/asociacion). No se auto-clasifica; queda como '
-                    '"%s". Verifique el tipo de contribuyente manualmente.',
-                    rnc_clean, self.l10n_do_dgii_tax_payer_type
+                    'NCF: RNC %s (prefijo 430) clasificado como "%s" por '
+                    'actividad economica "%s"',
+                    rnc_clean, tipo, actividad
+                )
+            elif actividad:
+                # Hay actividad pero no coincide con ninguna lista conocida:
+                # se trata como empresa normal (ej. 1B Advertising).
+                self.l10n_do_dgii_tax_payer_type = 'taxpayer'
+                _logger.info(
+                    'NCF: RNC %s (prefijo 430) con actividad "%s" no listada; '
+                    'se clasifica como contribuyente. Si no corresponde, '
+                    'agregue la actividad al parametro correspondiente.',
+                    rnc_clean, actividad
                 )
             else:
-                # RNC de empresa -> contribuyente (B01)
-                self.l10n_do_dgii_tax_payer_type = 'taxpayer'
+                # Sin actividad (API caida, RNC no encontrado, consulta
+                # desactivada): NO clasificar. Queda el valor por defecto.
+                _logger.warning(
+                    'NCF: RNC %s (prefijo 430) sin actividad economica '
+                    'disponible. No se clasifica automaticamente; verifique '
+                    'el tipo de contribuyente manualmente.',
+                    rnc_clean
+                )
+            return
+
+        # --- Resto: empresa normal -> contribuyente (B01)
+        self.l10n_do_dgii_tax_payer_type = 'taxpayer'
 
     def _consultar_rnc_dgii(self, rnc):
         """Consultar RNC en la API de DGII"""
@@ -310,7 +525,11 @@ class ResPartner(models.Model):
         return False
 
     def action_validate_rnc(self):
-        """Boton para validar RNC manualmente"""
+        """Boton para validar RNC manualmente contra DGII.
+
+        Ademas de traer los datos, reclasifica el tipo de contribuyente
+        usando la actividad economica recien obtenida.
+        """
         self.ensure_one()
         if not self.vat:
             return {
@@ -341,28 +560,26 @@ class ResPartner(models.Model):
                 if nombre_dgii:
                     vals['name'] = nombre_dgii
 
-                # Mismo criterio que _auto_set_taxpayer_type:
-                # el prefijo 430 no se auto-clasifica.
-                if self.l10n_do_dgii_tax_payer_type not in ('special_regime', 'governmental'):
-                    if len(rnc) == 9 and rnc.startswith(('401', '402')):
-                        vals['l10n_do_dgii_tax_payer_type'] = 'governmental'
-                    elif len(rnc) == 9 and rnc.startswith('430'):
-                        pass  # ambiguo, lo decide el usuario
-                    elif len(rnc) == 9:
-                        vals['l10n_do_dgii_tax_payer_type'] = 'taxpayer'
-                    elif len(rnc) == 11:
-                        vals['l10n_do_dgii_tax_payer_type'] = 'final_consumer'
-
                 self.with_context(l10n_do_skip_auto_type=True).write(vals)
+
+                # Reclasificar con la actividad recien obtenida
+                self.with_context(
+                    l10n_do_skip_auto_type=True
+                )._auto_set_taxpayer_type(rnc)
+
+                tipo_label = dict(
+                    self._fields['l10n_do_dgii_tax_payer_type'].selection
+                ).get(self.l10n_do_dgii_tax_payer_type, '')
 
                 return {
                     'type': 'ir.actions.client',
                     'tag': 'display_notification',
                     'params': {
                         'title': _('RNC Validado'),
-                        'message': _('Nombre: %s\nEstado: %s') % (
+                        'message': _('Nombre: %s\nActividad: %s\nTipo: %s') % (
                             nombre_dgii,
-                            data.get("status", "")
+                            data.get('activity', ''),
+                            tipo_label,
                         ),
                         'type': 'success',
                         'sticky': False,
@@ -433,5 +650,7 @@ class ResPartner(models.Model):
             vals['is_company'] = False
 
         # El tipo de contribuyente lo asigna create() via
-        # _auto_set_taxpayer_type, segun la longitud del documento.
+        # _auto_set_taxpayer_type. Como aqui ya se guarda la actividad
+        # economica, la clasificacion del prefijo 430 la reutiliza sin
+        # hacer una segunda llamada a la API.
         return self.create(vals)
