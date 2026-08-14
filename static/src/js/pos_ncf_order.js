@@ -30,6 +30,8 @@ patch(PosOrder.prototype, {
             const defaultPartner = config?.l10n_do_pos_default_partner_id;
             if (defaultPartner && !this.getPartner()) {
                 this.setPartner(defaultPartner);
+                
+                this.setToInvoice(true);
             }
         } catch (e) {
             console.warn("NCF: no se pudo asignar el cliente por defecto", e);
