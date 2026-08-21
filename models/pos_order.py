@@ -181,6 +181,104 @@ class PosOrder(models.Model):
         for order in self:
             order.l10n_do_partner_vat = order.partner_id.vat if order.partner_id else ''
 
+    # =========================================================================
+    # METODO DE PAGO USADO (para agrupar en la vista de Ordenes)
+    # =========================================================================
+    # MOTIVO: la vista estandar permite agrupar por "Metodos de pago
+    # disponibles" (pos.config.payment_method_ids), que es un many2many de
+    # CONFIGURACION: dice que metodos acepta cada caja, no con cual se pago.
+    # Al agrupar por un many2many, cada orden aparece en cada grupo al que
+    # pertenece, y los totales se multiplican. Caso real observado en
+    # produccion: la vista mostraba RD$75.8 millones cuando las ventas
+    # reales eran RD$25.2 millones, porque "Tarjetas" y "Transferencias"
+    # repetian las mismas 11,807 ordenes (ambos metodos estan habilitados
+    # en las 13 cajas).
+    #
+    # Este campo resuelve el problema: es un Selection simple, calculado a
+    # partir de los pagos REALES de la orden (pos.payment). Cada orden cae
+    # en un solo grupo, por lo que los totales suman exacto.
+    #
+    # Normaliza ademas los nombres: cada sucursal tiene su propio metodo
+    # "Efectivo" (uno por caja, para poder cuadrar arqueos por separado).
+    # Todos se agrupan bajo la misma categoria.
+    # =========================================================================
+    l10n_do_payment_method_used = fields.Selection([
+        ('cash', 'Efectivo'),
+        ('card', 'Tarjeta'),
+        ('bank', 'Transferencia / Cheque'),
+        ('credit', 'Crédito'),
+        ('other', 'Otro'),
+        ('mixed', 'Mixto'),
+        ('none', 'Sin pago'),
+    ], string='Método de Pago Usado',
+        compute='_compute_l10n_do_payment_method_used',
+        store=True,
+        help='Con que se pago realmente esta orden, segun sus pagos '
+             'registrados. A diferencia de "Metodos de pago disponibles" '
+             '(que es la configuracion de la caja), agrupar por este campo '
+             'da totales correctos: cada orden cuenta una sola vez.'
+    )
+
+    # Palabras clave para normalizar los nombres de los metodos de pago.
+    # Ampliable sin tocar codigo con el parametro del sistema:
+    #   l10n_do_ncf.pos_method_keywords_<categoria>
+    _L10N_DO_METHOD_KEYWORDS = {
+        'cash': ('efectivo', 'cash', 'contado'),
+        'card': ('tarjeta', 'card', 'visa', 'mastercard', 'azul'),
+        'bank': ('transferencia', 'cheque', 'banco', 'bank', 'deposito', 'wire'),
+        'credit': ('credito', 'fiado', 'pay later', 'cuenta por cobrar'),
+    }
+
+    @api.model
+    def _l10n_do_classify_payment_method(self, method_name):
+        """Normalizar el nombre de un metodo de pago a una categoria.
+
+        Cada caja tiene su propio metodo de efectivo ("Efectivo",
+        "Efectivo Tienda Fisica RD$", etc). Aqui se agrupan todos bajo
+        'cash', y lo mismo para el resto de categorias.
+        """
+        nombre = (method_name or '').lower()
+        Param = self.env['ir.config_parameter'].sudo()
+
+        for categoria, defaults in self._L10N_DO_METHOD_KEYWORDS.items():
+            extra = Param.get_param(
+                f'l10n_do_ncf.pos_method_keywords_{categoria}', default=''
+            )
+            palabras = list(defaults)
+            if extra:
+                palabras += [p.strip().lower() for p in extra.split(',') if p.strip()]
+            for p in palabras:
+                if p in nombre:
+                    return categoria
+        return 'other'
+
+    @api.depends('payment_ids', 'payment_ids.payment_method_id', 'payment_ids.amount')
+    def _compute_l10n_do_payment_method_used(self):
+        """Deducir con que se pago la orden.
+
+        - Sin pagos            -> 'none'
+        - Un solo tipo de pago -> esa categoria
+        - Varios tipos         -> 'mixed'
+
+        Se ignoran los pagos de importe cero, que no representan un cobro
+        real (aparecen en promociones o ajustes).
+        """
+        for order in self:
+            categorias = set()
+            for pago in order.payment_ids:
+                if not pago.amount:
+                    continue
+                categorias.add(
+                    self._l10n_do_classify_payment_method(pago.payment_method_id.name)
+                )
+
+            if not categorias:
+                order.l10n_do_payment_method_used = 'none'
+            elif len(categorias) == 1:
+                order.l10n_do_payment_method_used = categorias.pop()
+            else:
+                order.l10n_do_payment_method_used = 'mixed'
+
     # NOTA (Odoo 19): NO sobreescribir _load_pos_data_fields aqui.
     # Igual que pos.config, pos.order hereda la implementacion vacia de
     # pos.load.mixin, que carga TODOS los campos. Los campos NCF

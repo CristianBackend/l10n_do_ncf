@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- =========================================================
+         ORDENES POS: metodo de pago usado
+         =========================================================
+         Agrega el campo l10n_do_payment_method_used a la lista y al
+         panel de busqueda, para poder agrupar por el metodo de pago
+         REAL en lugar de por "Metodos de pago disponibles"
+         (pos.config.payment_method_ids), que es un many2many de
+         configuracion y multiplica los totales al agrupar.
+
+         Caso real: la vista mostraba RD$75.8 millones cuando las
+         ventas eran RD$25.2 millones.
+         ========================================================= -->
+
+    <record id="view_pos_order_tree_payment_method" model="ir.ui.view">
+        <field name="name">pos.order.list.payment.method</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_order_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='amount_total']" position="before">
+                <field name="l10n_do_payment_method_used"
+                       string="Método de Pago"
+                       widget="badge"
+                       decoration-success="l10n_do_payment_method_used == 'cash'"
+                       decoration-info="l10n_do_payment_method_used == 'card'"
+                       decoration-warning="l10n_do_payment_method_used == 'mixed'"
+                       optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_pos_order_filter_payment_method" model="ir.ui.view">
+        <field name="name">pos.order.search.payment.method</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_order_filter"/>
+        <field name="arch" type="xml">
+            <!-- Filtros rapidos por metodo de pago real.
+                 Ancla: filtro 'cancelled', que existe en Odoo 19. -->
+            <xpath expr="//filter[@name='cancelled']" position="after">
+                <separator/>
+                <filter name="l10n_do_pay_cash" string="Pagado en Efectivo"
+                        domain="[('l10n_do_payment_method_used', '=', 'cash')]"/>
+                <filter name="l10n_do_pay_card" string="Pagado con Tarjeta"
+                        domain="[('l10n_do_payment_method_used', '=', 'card')]"/>
+                <filter name="l10n_do_pay_bank" string="Transferencia / Cheque"
+                        domain="[('l10n_do_payment_method_used', '=', 'bank')]"/>
+                <filter name="l10n_do_pay_mixed" string="Pago Mixto"
+                        domain="[('l10n_do_payment_method_used', '=', 'mixed')]"/>
+            </xpath>
+
+            <!-- Agrupacion correcta: campo Selection, no many2many.
+                 Ancla: agrupacion 'config_id' (Punto de venta). -->
+            <xpath expr="//filter[@name='config_id']" position="after">
+                <filter name="group_l10n_do_payment_method"
+                        string="Método de Pago (real)"
+                        context="{'group_by': 'l10n_do_payment_method_used'}"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Formulario: mostrar el metodo en los datos de la orden -->
+    <record id="view_pos_pos_form_payment_method" model="ir.ui.view">
+        <field name="name">pos.order.form.payment.method</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="l10n_do_payment_method_used" readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>
