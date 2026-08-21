@@ -1,4 +1,5 @@
 /** @odoo-module **/
+
 import { registry } from "@web/core/registry";
 import { Component, onWillStart, useState } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
@@ -55,10 +56,19 @@ export class NcfDashboard extends Component {
     }
 
     openDocument(ncf) {
-        // Abrir el documento (factura) asociado al NCF
+        // El listado "Ultimos NCF Generados" mezcla facturas (account.move)
+        // y ordenes del POS (pos.order). El backend marca el origen en
+        // ncf.type ('invoice' o 'pos').
+        //
+        // Antes se abria SIEMPRE account.move con ese id: para un NCF que
+        // venia del POS eso llevaba a una factura distinta y sin relacion,
+        // o a un error si el id no existia en account.move.
+        const esPos = ncf && (ncf.type === 'pos' || ncf.move_type === 'pos_order');
+
         this.action.doAction({
             type: 'ir.actions.act_window',
-            res_model: 'account.move',
+            name: esPos ? 'Orden de Punto de Venta' : 'Factura',
+            res_model: esPos ? 'pos.order' : 'account.move',
             res_id: ncf.id,
             views: [[false, 'form']],
             target: 'current',

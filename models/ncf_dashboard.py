@@ -3,6 +3,23 @@
 # Archivo: models/ncf_dashboard.py
 # Descripción: Dashboard NCF con estadísticas completas
 # Compatibilidad: Odoo 19
+#
+# NOTA SOBRE EL CONTEO DE DOCUMENTOS
+# Una venta del POS que genera factura existe en DOS modelos a la vez:
+# pos.order y account.move. Al sumar ambos sin filtrar, cada venta
+# facturada se contaba dos veces.
+#
+# Caso real en produccion (agosto 2026):
+#     mostraba : 15,261  (7,565 facturas + 7,696 POS)
+#     real     :  7,567  (7,565 facturas + 2 ordenes sin facturar)
+#
+# Por eso todas las consultas a pos.order de este archivo llevan
+# ('account_move', '=', False): asi la venta facturada cuenta como
+# factura, la no facturada cuenta como orden POS, y ninguna se duplica.
+#
+# EXCEPCION: el listado "Ultimos NCF Generados" NO lleva ese filtro; ahi
+# si deben verse las ordenes facturadas, porque son los ultimos
+# comprobantes emitidos.
 
 from odoo import models, api
 from datetime import date, datetime
@@ -114,7 +131,12 @@ class NcfDashboard(models.AbstractModel):
                         ('company_id', '=', company_id),
                         ('date_order', '>=', datetime.combine(first_day_month, datetime.min.time())),
                         ('state', 'in', ('paid', 'done', 'invoiced')),
-                        ('l10n_do_ncf_number', '!=', False)
+                        ('l10n_do_ncf_number', '!=', False),
+                        # Excluir las que ya generaron factura: esas ya se
+                        # cuentan en invoices_month. Sin este filtro cada
+                        # venta facturada se contaba DOS veces y el total
+                        # del mes salia al doble de lo real.
+                        ('account_move', '=', False),
                     ])
         except Exception as e:
             _logger.warning('NCF Dashboard: Error contando POS - %s', str(e))
@@ -153,7 +175,10 @@ class NcfDashboard(models.AbstractModel):
                         ('company_id', '=', company_id),
                         ('state', '=', 'cancel'),
                         ('date_order', '>=', datetime.combine(first_day_month, datetime.min.time())),
-                        ('l10n_do_ncf_number', '!=', False)
+                        ('l10n_do_ncf_number', '!=', False),
+                        # Si tiene factura, la anulacion se cuenta del lado
+                        # de account.move (cancelled_invoices).
+                        ('account_move', '=', False),
                     ])
         except Exception as e:
             _logger.warning('NCF Dashboard: Error contando POS anulados - %s', str(e))
@@ -202,7 +227,9 @@ class NcfDashboard(models.AbstractModel):
                             ('l10n_do_ncf_type', '=', ncf_type.prefix),
                             ('date_order', '>=', datetime.combine(first_day_month, datetime.min.time())),
                             ('state', 'in', ('paid', 'done', 'invoiced')),
-                            ('l10n_do_ncf_number', '!=', False)
+                            ('l10n_do_ncf_number', '!=', False),
+                            # Evitar contar dos veces las ya facturadas
+                            ('account_move', '=', False),
                         ])
             except Exception:
                 pass
@@ -294,7 +321,9 @@ class NcfDashboard(models.AbstractModel):
                     total_pos_ncf = pos_model.search_count([
                         ('company_id', '=', company_id),
                         ('l10n_do_ncf_number', '!=', False),
-                        ('state', 'in', ('paid', 'done', 'invoiced'))
+                        ('state', 'in', ('paid', 'done', 'invoiced')),
+                        # Evitar contar dos veces las ya facturadas
+                        ('account_move', '=', False),
                     ])
         except Exception:
             pass
