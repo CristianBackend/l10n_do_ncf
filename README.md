@@ -1,12 +1,10 @@
 # Módulo NCF - Comprobantes Fiscales para República Dominicana
 
-[![Odoo Version](https://img.shields.io/badge/Odoo-17.0-blue.svg)](https://www.odoo.com)
+[![Odoo Version](https://img.shields.io/badge/Odoo-19.0-blue.svg)](https://www.odoo.com)
 [![License](https://img.shields.io/badge/License-LGPL--3-green.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 [![DGII](https://img.shields.io/badge/DGII-Norma%2007--2018-orange.svg)](https://dgii.gov.do)
 
-Módulo de localización dominicana para Odoo 17 que implementa la gestión completa de Comprobantes Fiscales (NCF) según las normativas de la Dirección General de Impuestos Internos (DGII).
-
-![Dashboard NCF](static/description/dashboard.png)
+Módulo de localización dominicana para Odoo 19 que implementa la gestión completa de Comprobantes Fiscales (NCF) según las normativas de la Dirección General de Impuestos Internos (DGII).
 
 ## 🚀 Características Principales
 
@@ -51,12 +49,10 @@ Todos los reportes cumplen con la **Norma General 07-2018** y actualizaciones po
 
 ## 📋 Requisitos
 
-- Odoo 17.0 Community o Enterprise
-- Módulo `l10n_do` (Localización Dominicana base)
-- Módulo `account` (Contabilidad)
-- Módulo `contacts` (Contactos)
-- Módulo `mail` (Correo)
-- Python 3.10+
+- Odoo 19.0 Community o Enterprise
+- Módulos de Odoo de los que depende (se instalan solos): `account`, `l10n_do`,
+  `contacts`, `mail`, `sale_management`, `crm`, `sale_crm` y `point_of_sale`
+- Python 3.10+ y PostgreSQL 13+
 
 ## 🔧 Instalación
 
@@ -95,6 +91,10 @@ Reinicia Odoo y activa el módulo desde Aplicaciones.
    - **B14** - Regímenes Especiales
    - **B15** - Gubernamental
 
+Los comprobantes electrónicos (E31–E47) todavía no se emiten desde este
+módulo: los emitirá el conector `l10n_do_ecf_newplain` (ver
+[docs/DISENO_CONECTOR_ECF.md](docs/DISENO_CONECTOR_ECF.md)).
+
 ### 3. Configurar Empresa
 
 1. Ve a **Ajustes → Compañías**
@@ -102,6 +102,21 @@ Reinicia Odoo y activa el módulo desde Aplicaciones.
    - RNC de la empresa
    - Dirección completa
    - Logo (para facturas)
+
+### 4. Impuestos
+
+Al instalar (y al actualizar desde una versión anterior) el módulo, para cada
+compañía dominicana:
+
+- Garantiza un ITBIS 18 % de ventas y otro de compras.
+- Garantiza un impuesto **exento** de ventas y otro de compras, y los marca en
+  el campo **Tipo ITBIS 0 %** del impuesto.
+- Clasifica para el 606 los impuestos de retención de ITBIS e ISR que aún no
+  tengan columna asignada.
+
+El campo **Tipo ITBIS 0 %** (Contabilidad → Configuración → Impuestos, grupo
+"DGII República Dominicana") distingue una venta *gravada a tasa cero* de una
+*exenta*. Si usas impuestos al 0 % propios, clasifícalos a mano.
 
 ## 📊 Uso de Reportes DGII
 
@@ -139,6 +154,30 @@ El módulo incluye un sistema de alertas que notifica:
 | B15 | Gubernamental | Ventas al gobierno |
 | B16 | Exportaciones | Ventas al exterior |
 
+## 🔒 Unicidad de NCF
+
+La base de datos impide repetir un NCF mediante índices únicos:
+
+| Índice | Garantiza |
+|--------|-----------|
+| `unique_ncf_per_company` | Un NCF emitido por la compañía (ventas, notas de crédito y los B11/B13 generados en compras) no se repite en la misma compañía |
+| `unique_vendor_ncf_per_company` | Un NCF de proveedor no se repite para el mismo proveedor y compañía |
+
+Se crean al instalar. Al **actualizar** desde una versión anterior a
+`19.0.3.1.0` los crea el script de migración; si ya existen NCF duplicados, la
+actualización se detiene, lista los documentos afectados (también en el log) y
+no aplica ningún cambio. Corrige los duplicados y vuelve a actualizar.
+
+## 🧪 Pruebas
+
+```bash
+odoo -d <base_de_pruebas> -i l10n_do_ncf --test-tags /l10n_do_ncf --stop-after-init
+```
+
+Usa una base de datos nueva. Cubren la selección del tipo de NCF, la
+generación de números, el NCF afectado en notas de crédito y débito, la
+confirmación desde el POS y los índices únicos.
+
 ## 🛠️ Soporte Técnico
 
 - **Website:** https://www.newplain.com/
@@ -154,6 +193,15 @@ El módulo incluye un sistema de alertas que notifica:
 - Norma General 06-2023
 
 ## 📝 Changelog
+
+### v19.0.3.1.0 (2026-10)
+- 🐛 `hooks.py` no se ejecutaba: ahora crea los índices únicos de NCF y los impuestos exentos, también al actualizar (script de migración)
+- ✨ Campo "Tipo ITBIS 0 %" en impuestos (gravado a tasa cero / exento)
+- ✨ Primeras pruebas automáticas (`tests/`)
+- 🧹 Eliminados un modelo duplicado, un archivo de datos sin uso y archivos residuales
+
+### v19.0 (2026)
+- ✨ Migración a Odoo 19 (contabilidad, ventas y Punto de Venta)
 
 ### v17.0.1.8.0 (2025-12)
 - ✨ Reportes DGII 606, 607, 608, 609, IR-17
@@ -173,4 +221,4 @@ Este módulo está licenciado bajo LGPL-3.0. Ver archivo [LICENSE](LICENSE) para
 
 ---
 
-**Desarrollado por [NewPlain](https://www.newplain.com/)** | © 2025
+**Desarrollado por [NewPlain](https://www.newplain.com/)** | © 2025-2026

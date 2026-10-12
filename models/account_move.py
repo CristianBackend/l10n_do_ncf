@@ -625,6 +625,9 @@ class AccountMove(models.Model):
 
     @api.constrains('l10n_do_vendor_ncf', 'company_id', 'partner_id')
     def _check_vendor_ncf_duplicate(self):
+        # Mismo criterio que el índice unique_vendor_ncf_per_company (hooks.py):
+        # compañía + proveedor + NCF. Dos proveedores distintos pueden tener
+        # el mismo número.
         for move in self:
             if not move.l10n_do_vendor_ncf or move.move_type not in ('in_invoice', 'in_refund'):
                 continue
@@ -632,12 +635,24 @@ class AccountMove(models.Model):
             duplicates = self.search([
                 ('id', '!=', move.id),
                 ('company_id', '=', move.company_id.id),
+                ('commercial_partner_id', '=', move.commercial_partner_id.id),
                 ('l10n_do_vendor_ncf', '=ilike', ncf),
                 ('move_type', 'in', ('in_invoice', 'in_refund')),
                 ('state', '!=', 'cancel'),
-            ])
+            ], limit=1)
             if duplicates:
-                raise ValidationError(_('NCF proveedor duplicado: %s (ya existe en %s)') % (ncf, duplicates[0].name))
+                raise ValidationError(_('NCF proveedor duplicado: %s (ya existe en %s para %s)') % (
+                    ncf, duplicates.name, move.commercial_partner_id.display_name))
+
+    def _sql_error_to_message(self, exc):
+        # Los índices únicos de NCF se crean en hooks.py, así que Odoo no
+        # conoce su mensaje: sin esto el usuario vería un error genérico.
+        constraint = exc.diag.constraint_name
+        if constraint == 'unique_vendor_ncf_per_company':
+            return _('Ya existe otra factura de este proveedor con el mismo NCF.')
+        if constraint == 'unique_ncf_per_company':
+            return _('Ya existe otro documento con el mismo NCF en esta compañía.')
+        return super()._sql_error_to_message(exc)
 
     @api.constrains('l10n_do_vendor_ncf')
     def _check_vendor_ncf_format(self):

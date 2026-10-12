@@ -22,30 +22,15 @@ class AccountTax(models.Model):
         store=True
     )
 
+    dgii_itbis_zero_type = fields.Selection([
+        ('zero_rated', 'ITBIS 0 % (gravado a tasa cero)'),
+        ('exempt', 'Exento de ITBIS'),
+    ], string='Tipo ITBIS 0 %',
+       help='Solo aplica a impuestos con tasa 0 %. Distingue una operación '
+            'gravada a tasa cero de una exenta: en el e-CF son indicadores '
+            'de facturación distintos (3 = ITBIS 0 %, 4 = Exento).')
+
     @api.depends('amount', 'dgii_606_bucket')
     def _compute_is_dgii_retention(self):
         for tax in self:
             tax.is_dgii_retention = tax.amount < 0 and tax.dgii_606_bucket
-
-
-def configure_dgii_retention_taxes(env):
-    """Configurar automáticamente los impuestos de retención DGII"""
-    # ITBIS retenciones
-    itbis_taxes = env['account.tax'].search([
-        ('amount', '<', 0),
-        '|', ('name', 'ilike', 'ITBIS'), ('name', 'ilike', 'itbis')
-    ])
-    itbis_taxes.write({
-        'dgii_retention_type': 'itbis',
-        'dgii_606_bucket': 'itbis_retenido'
-    })
-    
-    # ISR retenciones
-    isr_taxes = env['account.tax'].search([
-        ('amount', '<', 0),
-        '|', ('name', 'ilike', 'ISR'), ('name', 'ilike', 'isr')
-    ])
-    isr_taxes.write({
-        'dgii_retention_type': 'isr',
-        'dgii_606_bucket': 'isr_retenido'
-    })
