@@ -685,12 +685,6 @@ class AccountMove(models.Model):
             if move.move_type == 'out_refund' and move.l10n_do_ncf_required:
                 if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
                     raise ValidationError(_('NC requiere NCF afectado.'))
-        for move in self:
-            if move.company_id.country_id.code != 'DO':
-                continue
-            if move.move_type == 'out_refund' and move.l10n_do_ncf_required:
-                if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
-                    raise ValidationError(_('NC requiere NCF afectado.'))
 
     @api.constrains('l10n_do_is_debit_note', 'l10n_do_debit_ncf_origin')
     def _check_debit_note_origin(self):
