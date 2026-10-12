@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # módulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
@@ -661,8 +661,30 @@ class AccountMove(models.Model):
                 if not re.match(NCF_FULL_PATTERN, move.l10n_do_vendor_ncf.strip().upper()):
                     raise ValidationError(_('NCF proveedor inválido: %s') % move.l10n_do_vendor_ncf)
 
-    @api.constrains('l10n_do_ncf_origin', 'move_type')
+    @api.constrains('l10n_do_ncf_origin', 'move_type', 'state')
     def _check_ncf_origin(self):
+        """La NC debe referenciar el comprobante que corrige.
+
+        Solo se exige cuando ya esta POSTEADA, igual que
+        _check_debit_note_origin y _check_vendor_debit_note:
+
+        - En borrador el usuario aun esta completando el documento; el
+          constrain saltaba apenas se creaba la NC y no dejaba ni abrirla.
+        - Los datos demo de contabilidad de Odoo crean notas de credito sin
+          contexto fiscal dominicano, y el constrain hacia fallar la carga
+          entera del chart_template (_install_demo).
+
+        El bloqueo real al postear ya lo hace action_post, que ademas exige
+        el motivo de la NC.
+        """
+        for move in self:
+            if move.company_id.country_id.code != 'DO':
+                continue
+            if move.state != 'posted':
+                continue
+            if move.move_type == 'out_refund' and move.l10n_do_ncf_required:
+                if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
+                    raise ValidationError(_('NC requiere NCF afectado.'))
         for move in self:
             if move.company_id.country_id.code != 'DO':
                 continue
