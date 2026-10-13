@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import UserError
 from odoo.tests import tagged
 
 from .common import NcfCommon
@@ -30,9 +30,12 @@ class TestCreditDebitOrigin(NcfCommon):
     # ---------------------------------------------------------------
     # Notas de crédito
     # ---------------------------------------------------------------
-    def test_credit_note_without_origin_is_rejected(self):
-        with self.assertRaises(ValidationError):
-            self._create_refund(self.partner_taxpayer)
+    def test_credit_note_without_origin_can_be_drafted_but_not_posted(self):
+        refund = self._create_refund(self.partner_taxpayer)
+        self.assertEqual(refund.state, 'draft')
+        refund.l10n_do_credit_note_reason = '01'
+        with self.assertRaises(UserError):
+            refund.action_post()
 
     def test_credit_note_with_typed_origin_is_accepted(self):
         refund = self._create_refund(

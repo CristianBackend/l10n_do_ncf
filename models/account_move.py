@@ -17,6 +17,12 @@ _logger = logging.getLogger(__name__)
 # =========================================
 NCF_PATTERN = r'^B(01|02|03|04|11|12|13|14|15|16|17)\d{8}$'
 ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
+
+# Prefijos de RNC típicos de entidades del Estado. Solo se usan para
+# ADVERTIR (nunca bloquean): 401 ministerios y direcciones, 402 instituciones
+# descentralizadas, 430 ayuntamientos y 431 otros organismos. El 430 es
+# ambiguo (ver res_partner.py), por eso es solo un aviso.
+GOV_RNC_PREFIXES = ('401', '402', '430', '431')
 NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
 
 
@@ -338,6 +344,20 @@ class AccountMove(models.Model):
                     'Para corregir, emita Nota de Crédito.'
                 ) % move.l10n_do_ncf_number)
 
+            # El tipo fiscal decide el tipo de comprobante (B11, B13...): con
+            # NCF asignado ya no se puede cambiar. Reescribir el mismo valor
+            # sí se permite.
+            if (
+                move.l10n_do_ncf_number
+                and 'l10n_do_fiscal_type' in vals
+                and vals['l10n_do_fiscal_type'] != move.l10n_do_fiscal_type
+            ):
+                raise UserError(_(
+                    '🔒 CAMBIO FISCAL NO PERMITIDO\n\n'
+                    'Documento con NCF %s.\n\n'
+                    'No se puede modificar el tipo fiscal de un comprobante ya emitido.'
+                ) % move.l10n_do_ncf_number)
+
         return super().write(vals)
 
     # =========================================
@@ -505,15 +525,20 @@ class AccountMove(models.Model):
                 (move.l10n_do_third_party_retention_itbis > 0 or move.l10n_do_third_party_retention_isr > 0)
             )
 
-    @api.depends('move_type', 'partner_id.vat', 'partner_id.l10n_do_dgii_tax_payer_type', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
+    @api.depends('move_type', 'partner_id.vat', 'partner_id.country_id', 'partner_id.l10n_do_dgii_tax_payer_type', 'l10n_do_fiscal_type', 'l10n_do_is_debit_note')
     def _compute_l10n_do_ncf_type_id(self):
         """Asignar tipo de NCF segun tipo fiscal del cliente/proveedor
 
-        VENTAS (out_invoice) - Orden de evaluacion segun DGII:
-        1. Exportacion (cliente extranjero) -> B16
-        2. Gubernamental -> B15
-        3. Regimen Especial -> B14
-        4. Nota de Debito -> B03
+        DOCUMENTOS CON NCF: si el documento ya tiene numero y tipo, el tipo
+        se conserva. Editar despues el cliente (tipo de contribuyente, RNC,
+        pais) o el tipo fiscal de una compra no puede cambiar el tipo de un
+        comprobante ya emitido.
+
+        VENTAS (out_invoice) - Orden de evaluacion:
+        1. Nota de Debito -> B03 (sea cual sea el tipo de cliente)
+        2. Exportacion (cliente extranjero) -> B16
+        3. Gubernamental -> B15
+        4. Regimen Especial -> B14
         5. Contribuyente (tipo 'taxpayer') -> B01
         6. Todos los demas (consumidor final) -> B02
 
@@ -546,26 +571,30 @@ class AccountMove(models.Model):
         }
 
         for move in self:
+            if move.l10n_do_ncf_number and move.l10n_do_ncf_type_id:
+                # Comprobante ya emitido: el tipo no se recalcula
+                move.l10n_do_ncf_type_id = move.l10n_do_ncf_type_id
+                continue
+
             code = False
 
             if move.move_type == 'out_invoice':
-                # ORDEN CORRECTO segun normativa DGII
                 partner = move.partner_id
                 partner_country = partner.country_id.code if partner.country_id else 'DO'
                 client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
 
-                # 1. Exportacion: cliente extranjero (pais != DO)
-                if partner_country and partner_country != 'DO':
+                # 1. Nota de Debito: siempre B03
+                if move.l10n_do_is_debit_note:
+                    code = '03'  # B03 - Nota de Debito
+                # 2. Exportacion: cliente extranjero (pais != DO)
+                elif partner_country and partner_country != 'DO':
                     code = '16'  # B16 - Exportacion
-                # 2. Gubernamental
+                # 3. Gubernamental
                 elif client_type == 'governmental':
                     code = '15'  # B15 - Gubernamental
-                # 3. Regimen Especial
+                # 4. Regimen Especial
                 elif client_type == 'special_regime':
                     code = '14'  # B14 - Regimen Especial
-                # 4. Nota de Debito
-                elif move.l10n_do_is_debit_note:
-                    code = '03'  # B03 - Nota de Debito
                 # 5. Contribuyente registrado que solicita credito fiscal
                 elif client_type == 'taxpayer':
                     code = '01'  # B01 - Credito Fiscal
@@ -933,48 +962,6 @@ class AccountMove(models.Model):
             ], limit=1):
                 return {'warning': {'title': _('Sin secuencia'), 'message': _('Configure secuencia para este tipo.')}}
 
-    @api.onchange('l10n_do_expense_type', 'invoice_line_ids', 'invoice_line_ids.product_id')
-    def _onchange_validate_expense_vs_product(self):
-        """Warning si hay inconsistencia entre Tipo de Gasto y Producto"""
-        if self.move_type not in ('in_invoice', 'in_refund') or not self.l10n_do_expense_type:
-            return
-
-        # Detectar si hay productos tipo "bienes" vs "servicios"
-        has_goods = any(
-            line.product_id and line.product_id.type in ('consu', 'product')
-            for line in self.invoice_line_ids
-        )
-        has_services = any(
-            line.product_id and line.product_id.type == 'service'
-            for line in self.invoice_line_ids
-        )
-
-        # Tipo de gasto 02 = Servicios, 01 = Bienes
-        expense_is_service = self.l10n_do_expense_type == '02'
-        expense_is_goods = self.l10n_do_expense_type == '01'
-
-        warning_msg = False
-        if expense_is_service and has_goods and not has_services:
-            warning_msg = (
-                "El Tipo de Gasto seleccionado es '02 - Gastos por Trabajos/Servicios', "
-                "pero las lineas contienen productos de tipo Bienes. "
-                "Verifique la clasificacion fiscal antes de confirmar."
-            )
-        elif expense_is_goods and has_services and not has_goods:
-            warning_msg = (
-                "El Tipo de Gasto seleccionado es '01 - Gastos de Personal', "
-                "pero las lineas contienen productos de tipo Servicio. "
-                "Verifique la clasificacion fiscal antes de confirmar."
-            )
-
-        if warning_msg:
-            return {
-                'warning': {
-                    'title': 'Verificar Clasificacion Fiscal',
-                    'message': warning_msg,
-                }
-            }
-
     @api.onchange('l10n_do_fiscal_type')
     def _onchange_fiscal_type(self):
         if self.move_type not in ('in_invoice', 'in_refund'):
@@ -1059,12 +1046,7 @@ class AccountMove(models.Model):
 
         # Validación B15 (Gubernamental) con RNC no gubernamental
         if ncf_code == '15' and partner_vat:
-            is_gov_pattern = (
-                partner_vat.startswith('4010') or
-                partner_vat.startswith('4020') or
-                partner_vat.startswith('430') or
-                partner_vat.startswith('431')
-            )
+            is_gov_pattern = partner_vat.startswith(GOV_RNC_PREFIXES)
             if not is_gov_pattern:
                 return {'warning': {
                     'title': _('⚠️ Inconsistencia Fiscal Detectada'),
@@ -1072,8 +1054,8 @@ class AccountMove(models.Model):
                         'El cliente "%s" está marcado como Gubernamental (B15), '
                         'pero su RNC %s no corresponde a un patrón típico de entidad estatal.\n\n'
                         'Patrones gubernamentales típicos:\n'
-                        '• 4010XXXXX - Ministerios\n'
-                        '• 4020XXXXX - Instituciones Descentralizadas\n'
+                        '• 401XXXXXX - Ministerios/Direcciones\n'
+                        '• 402XXXXXX - Instituciones Descentralizadas\n'
                         '• 430XXXXXX - Ayuntamientos\n\n'
                         'Verifique si debería usar:\n'
                         '• B01 (Crédito Fiscal) - contribuyente normal\n'
@@ -1098,11 +1080,7 @@ class AccountMove(models.Model):
 
         # Validación B01 con RNC gubernamental
         if ncf_code == '01' and partner_vat:
-            is_gov_pattern = (
-                partner_vat.startswith('4010') or
-                partner_vat.startswith('4020') or
-                partner_vat.startswith('430')
-            )
+            is_gov_pattern = partner_vat.startswith(GOV_RNC_PREFIXES)
             if is_gov_pattern:
                 return {'warning': {
                     'title': _('⚠️ Verificar Tipo Fiscal'),
@@ -1162,7 +1140,8 @@ class AccountMove(models.Model):
         """Validación fiscal según algoritmo unificado.
 
         Reglas:
-        - País != RD → debe ser B16 (Exportación)
+        - País != RD → la factura debe ser B16 (Exportación). No aplica a
+          notas de crédito (B04) ni de débito (B03), que llevan su propio tipo
         - B01 (Fiscal) → RNC obligatorio, país RD
         - B02 (Consumidor) → admite cédula; warning si es RNC de empresa
         - B14 (Especial) → RNC obligatorio, país RD, warning si parece normal
@@ -1198,8 +1177,10 @@ class AccountMove(models.Model):
         # REGLA 1: Exportación (B16)
         # =====================
         if partner_country != 'DO':
-            # Cliente extranjero DEBE usar B16
-            if ncf_code != '16':
+            # Cliente extranjero DEBE usar B16 en la factura. Las notas de
+            # crédito (B04) y de débito (B03) que la corrigen no son B16.
+            is_plain_invoice = self.move_type == 'out_invoice' and not self.l10n_do_is_debit_note
+            if is_plain_invoice and ncf_code != '16':
                 raise UserError(_(
                     "❌ ERROR FISCAL: Cliente Extranjero\n\n"
                     "El cliente '%s' es de %s (no RD).\n"
@@ -1207,7 +1188,7 @@ class AccountMove(models.Model):
                     "Tipo actual: %s\n\n"
                     "Corrija el tipo de comprobante o el país del cliente."
                 ) % (partner.name, partner_country, ncf_type.name))
-            return {}  # B16 con extranjero = OK
+            return {}  # B16, o NC/ND, con extranjero = OK
 
         # De aquí en adelante: País = RD
 
@@ -1263,13 +1244,7 @@ class AccountMove(models.Model):
         # REGLA 5: B15 (Gubernamental) - Validar patrón RNC
         # =====================
         if ncf_code == '15' and partner_vat:
-            # Patrones típicos de RNC gubernamental
-            is_gov_pattern = (
-                partner_vat.startswith('401') or  # Ministerios, direcciones
-                partner_vat.startswith('402') or  # Instituciones descentralizadas
-                partner_vat.startswith('430') or  # Ayuntamientos
-                partner_vat.startswith('431')     # Otros organismos
-            )
+            is_gov_pattern = partner_vat.startswith(GOV_RNC_PREFIXES)
 
             if not is_gov_pattern:
                 warnings.append(_(
@@ -1314,12 +1289,7 @@ class AccountMove(models.Model):
         # REGLA 7: B01 con RNC gubernamental
         # =====================
         if ncf_code == '01' and partner_vat:
-            is_gov_pattern = (
-                partner_vat.startswith('401') or
-                partner_vat.startswith('402') or
-                partner_vat.startswith('430') or
-                partner_vat.startswith('431')
-            )
+            is_gov_pattern = partner_vat.startswith(GOV_RNC_PREFIXES)
             if is_gov_pattern:
                 warnings.append(_(
                     "⚠️ ADVERTENCIA: RNC parece Gubernamental\n\n"

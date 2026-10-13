@@ -156,6 +156,38 @@ class NcfSequence(models.Model):
         return super().write(vals)
 
     # =====================================================
+    # DATOS DEMO
+    # =====================================================
+    @api.model
+    def _create_demo_sequences(self, company, ncf_types):
+        """Crear secuencias activas de demostración para una compañía.
+
+        Solo lo usa la carga de datos demo de contabilidad
+        (account.chart.template._post_load_demo_data). Una base demo no tiene
+        licencia, así que se crean sin pasar por create()/write() de este
+        modelo. Es un método privado: no se puede llamar por RPC.
+
+        No crea nada para los tipos que ya tienen una secuencia activa.
+        """
+        Sequence = self.sudo().with_company(company)
+        covered = Sequence.search([
+            ('company_id', '=', company.id),
+            ('state', '=', 'active'),
+        ]).ncf_type_id
+        vals_list = [{
+            'ncf_type_id': ncf_type.id,
+            'company_id': company.id,
+            'range_from': 1,
+            'range_to': 1000,
+        } for ncf_type in ncf_types - covered]
+        if not vals_list:
+            return Sequence.browse()
+
+        sequences = super(NcfSequence, Sequence).create(vals_list)
+        super(NcfSequence, sequences).write({'state': 'active'})
+        return sequences
+
+    # =====================================================
     # CAMPOS COMPUTADOS
     # =====================================================
     @api.constrains('range_from')

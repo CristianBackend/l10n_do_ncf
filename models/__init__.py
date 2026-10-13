@@ -16,3 +16,4 @@ from . import bc_exchange_rate
 from . import dgii_validation
 from . import dgii_txt_validator
 from . import account_tax
+from . import chart_template

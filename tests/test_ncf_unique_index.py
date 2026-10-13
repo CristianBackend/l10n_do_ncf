@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import psycopg2
 
+from odoo import SUPERUSER_ID
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests import tagged
 from odoo.tools import mute_logger
@@ -226,6 +227,11 @@ class TestNcfUniqueIndex(NcfCommon):
     # ---------------------------------------------------------------
     # Impuestos
     # ---------------------------------------------------------------
+    def _configure_taxes(self):
+        # Como superusuario, igual que el hook real: recorre todas las
+        # compañías dominicanas, también las que el usuario de prueba no ve.
+        hooks.configure_vat_and_taxes(self.env(user=SUPERUSER_ID))
+
     def _exempt_taxes(self):
         return self.env['account.tax'].with_context(active_test=False).search([
             *self.env['account.tax']._check_company_domain(self.company),
@@ -233,27 +239,27 @@ class TestNcfUniqueIndex(NcfCommon):
         ])
 
     def test_exempt_taxes_are_classified(self):
-        hooks.configure_vat_and_taxes(self.env)
+        self._configure_taxes()
         exempt = self._exempt_taxes()
         self.assertEqual(set(exempt.mapped('type_tax_use')), {'sale', 'purchase'})
         self.assertEqual(set(exempt.mapped('amount')), {0.0})
 
     def test_configure_taxes_is_idempotent(self):
         Tax = self.env['account.tax'].with_context(active_test=False)
-        hooks.configure_vat_and_taxes(self.env)
+        self._configure_taxes()
         count = Tax.search_count([])
         exempt = self._exempt_taxes()
 
-        hooks.configure_vat_and_taxes(self.env)
+        self._configure_taxes()
 
         self.assertEqual(Tax.search_count([]), count)
         self.assertEqual(self._exempt_taxes(), exempt)
 
     def test_manual_zero_rated_classification_is_kept(self):
-        hooks.configure_vat_and_taxes(self.env)
+        self._configure_taxes()
         tax = self._exempt_taxes().filtered(lambda t: t.type_tax_use == 'sale')[:1]
         tax.dgii_itbis_zero_type = 'zero_rated'
 
-        hooks.configure_vat_and_taxes(self.env)
+        self._configure_taxes()
 
         self.assertEqual(tax.dgii_itbis_zero_type, 'zero_rated')
