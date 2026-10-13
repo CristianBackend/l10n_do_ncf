@@ -2,40 +2,20 @@
 <odoo>
 
     <!-- ============================================= -->
-    <!-- FACTURA CLIENTE - FORMULARIO                 -->
+    <!-- FACTURA - PESTAÑAS DE DATOS FISCALES         -->
     <!-- ============================================= -->
+    <!-- El banner de NCF, los campos de cabecera y la pestaña Retenciones
+         están en view_move_form_ncf (report/invoice_report.xml). Esta vista
+         tuvo ese mismo id y quedaba sobrescrita: no repetir aquí lo de allá. -->
 
-    <record id="view_move_form_ncf" model="ir.ui.view">
-        <field name="name">account.move.form.ncf</field>
+    <record id="view_move_form_ncf_fiscal_data" model="ir.ui.view">
+        <field name="name">account.move.form.ncf.fiscal.data</field>
         <field name="model">account.move</field>
         <field name="inherit_id" ref="account.view_move_form"/>
         <field name="arch" type="xml">
 
-            <!-- NCF Banner superior -->
+            <!-- Banners superiores -->
             <xpath expr="//sheet" position="before">
-                
-                <!-- Banner NCF Ventas -->
-                <div class="alert alert-success text-center mb-3" role="status"
-                     invisible="not l10n_do_ncf_number or move_type not in ('out_invoice', 'out_refund')">
-                    <div class="d-flex justify-content-center align-items-center">
-                        <span class="me-2">NCF:</span>
-                        <span class="fs-3 fw-bold"><field name="l10n_do_ncf_number" readonly="1"/></span>
-                        <field name="l10n_do_fiscal_status" widget="badge" class="ms-3"
-                               decoration-success="l10n_do_fiscal_status == 'valid'"
-                               decoration-warning="l10n_do_fiscal_status == 'partial_credit'"
-                               decoration-danger="l10n_do_fiscal_status in ('annulled', 'rejected')"
-                               decoration-info="l10n_do_fiscal_status in ('credited', 'debited')"/>
-                    </div>
-                </div>
-
-                <!-- Banner NCF Proveedor -->
-                <div class="alert alert-info text-center mb-3" role="status"
-                     invisible="not l10n_do_vendor_ncf or move_type not in ('in_invoice', 'in_refund')">
-                    <span class="me-2">NCF Proveedor:</span>
-                    <span class="fs-4 fw-bold"><field name="l10n_do_vendor_ncf" readonly="1"/></span>
-                    <span class="badge bg-success ms-2" invisible="not l10n_do_vendor_ncf_validated">✓ Validado</span>
-                </div>
-
                 <!-- Banner BLOQUEADO si reportado -->
                 <div class="alert alert-danger text-center mb-3" role="alert"
                      invisible="not l10n_do_reported_606 and not l10n_do_reported_607">
@@ -46,7 +26,7 @@
                 <!-- Banner Nota Débito -->
                 <div class="alert alert-warning text-center mb-3" role="status"
                      invisible="not l10n_do_is_debit_note">
-                    <strong>📝 NOTA DE DÉBITO (B03)</strong>
+                    <strong>📝 NOTA DE DÉBITO</strong>
                     <span class="ms-2">NCF Afectado: <field name="l10n_do_debit_ncf_origin" readonly="1"/></span>
                 </div>
 
@@ -57,30 +37,6 @@
                     <span class="ms-2">NCF Afectado: <field name="l10n_do_vendor_debit_ncf_origin" readonly="1"/></span>
                 </div>
 
-            </xpath>
-
-            <!-- Campos fiscales después de partner_id -->
-            <xpath expr="//field[@name='partner_id']" position="after">
-                <!-- Requiere NCF (Ventas) -->
-                <field name="l10n_do_ncf_required" 
-                       invisible="move_type not in ('out_invoice', 'out_refund')"
-                       readonly="state == 'posted' or l10n_do_ncf_number"/>
-
-                <!-- Tipo Fiscal (Compras) -->
-                <field name="l10n_do_fiscal_type" 
-                       invisible="move_type not in ('in_invoice', 'in_refund')"
-                       readonly="state == 'posted'"/>
-            </xpath>
-
-            <!-- NCF Proveedor -->
-            <xpath expr="//field[@name='invoice_date']" position="after">
-                <field name="l10n_do_vendor_ncf" 
-                       invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_fiscal_type in ('informal', 'minor_expense')"
-                       readonly="state == 'posted'"
-                       placeholder="B0100000001"/>
-                <button name="action_validate_vendor_ncf" type="object" string="Validar NCF"
-                        class="btn-link" 
-                        invisible="move_type not in ('in_invoice', 'in_refund') or not l10n_do_vendor_ncf or l10n_do_vendor_ncf_validated"/>
             </xpath>
 
             <!-- Notebook fiscal -->
@@ -132,7 +88,7 @@
                                  el campo queda readonly y obligatorio a la vez,
                                  lo que bloquea guardar/imprimir la NC. -->
                             <field name="l10n_do_credit_note_reason" 
-                                   required="move_type == 'out_refund' and state == 'draft'"
+                                   required="move_type == 'out_refund' and l10n_do_ncf_required and state == 'draft'"
                                    readonly="state == 'posted'"/>
                         </group>
                         <group>
@@ -298,25 +254,6 @@
                         <group>
                             <field name="l10n_do_dop_currency_id" invisible="1"/>
                         </group>
-                    </group>
-                </page>
-
-                <!-- TAB RETENCIONES -->
-                <page string="Retenciones" name="retentions" 
-                      invisible="move_type not in ('in_invoice', 'in_refund')">
-                    <group>
-                        <group string="Retenciones Aplicadas">
-                            <field name="l10n_do_total_isr_retention" readonly="1"/>
-                            <field name="l10n_do_total_itbis_retention" readonly="1"/>
-                        </group>
-                        <group string="Monto a Pagar">
-                            <field name="l10n_do_amount_to_pay" readonly="1"/>
-                        </group>
-                    </group>
-                    <group>
-                        <p class="text-muted">
-                            Las retenciones se gestionan desde el botón "Agregar Retención" en la pestaña principal.
-                        </p>
                     </group>
                 </page>
 

@@ -6,12 +6,21 @@ from odoo.exceptions import UserError
 class AccountMoveReversal(models.TransientModel):
     _inherit = 'account.move.reversal'
 
+    def _l10n_do_refund_needs_local_sequence(self, move):
+        """True si la NC de este documento necesita una secuencia B04 local.
+
+        Punto de extensión: un conector de e-CF devuelve False cuando la
+        nota de crédito se numera fuera de Odoo.
+        """
+        return (
+            move.company_id.country_id.code == 'DO'
+            and bool(move.l10n_do_ncf_number)
+        )
+
     def reverse_moves(self, is_modify=False):
         """Validar que exista secuencia B04 antes de crear NC"""
         for move in self.move_ids:
-            if move.company_id.country_id.code != 'DO':
-                continue
-            if not move.l10n_do_ncf_number:
+            if not self._l10n_do_refund_needs_local_sequence(move):
                 continue
             
             ncf_type = self.env['l10n_do_ncf.type'].search([('code', '=', '04')], limit=1)

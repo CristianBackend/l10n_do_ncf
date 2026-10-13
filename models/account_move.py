@@ -561,54 +561,63 @@ class AccountMove(models.Model):
         all_types = NcfType.search([])
         type_cache = {t.code: t for t in all_types}
 
-        # Mapeo tipo fiscal proveedor -> NCF para compras
-        supplier_fiscal_map = {
-            'informal': '11',
-            'minor_expense': '13',
-            'exterior': '17',
-            'special': '14',
-            'governmental': '15',
-        }
-
         for move in self:
             if move.l10n_do_ncf_number and move.l10n_do_ncf_type_id:
                 # Comprobante ya emitido: el tipo no se recalcula
                 move.l10n_do_ncf_type_id = move.l10n_do_ncf_type_id
                 continue
 
-            code = False
-
-            if move.move_type == 'out_invoice':
-                partner = move.partner_id
-                partner_country = partner.country_id.code if partner.country_id else 'DO'
-                client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
-
-                # 1. Nota de Debito: siempre B03
-                if move.l10n_do_is_debit_note:
-                    code = '03'  # B03 - Nota de Debito
-                # 2. Exportacion: cliente extranjero (pais != DO)
-                elif partner_country and partner_country != 'DO':
-                    code = '16'  # B16 - Exportacion
-                # 3. Gubernamental
-                elif client_type == 'governmental':
-                    code = '15'  # B15 - Gubernamental
-                # 4. Regimen Especial
-                elif client_type == 'special_regime':
-                    code = '14'  # B14 - Regimen Especial
-                # 5. Contribuyente registrado que solicita credito fiscal
-                elif client_type == 'taxpayer':
-                    code = '01'  # B01 - Credito Fiscal
-                # 6. Consumidor Final (default)
-                else:
-                    code = '02'  # B02 - Consumidor Final
-
-            elif move.move_type == 'out_refund':
-                code = '04'  # B04 - Nota de Credito
-
-            elif move.move_type in ('in_invoice', 'in_refund'):
-                code = supplier_fiscal_map.get(move.l10n_do_fiscal_type)
-
+            code = move._l10n_do_get_ncf_type_code()
             move.l10n_do_ncf_type_id = type_cache.get(code).id if code and code in type_cache else False
+
+    def _l10n_do_get_ncf_type_code(self):
+        """Código del tipo de comprobante que corresponde al documento
+        ('01', '02', '04'...), o False si no lleva NCF propio.
+
+        Punto de extensión: un conector de e-CF lo sobrescribe para
+        convertir el código de papel en su equivalente electrónico
+        (01 -> 31, 02 -> 32...). Las reglas están documentadas en
+        _compute_l10n_do_ncf_type_id.
+        """
+        self.ensure_one()
+
+        if self.move_type == 'out_invoice':
+            partner = self.partner_id
+            partner_country = partner.country_id.code if partner.country_id else 'DO'
+            client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
+
+            # 1. Nota de Debito: siempre B03
+            if self.l10n_do_is_debit_note:
+                return '03'  # B03 - Nota de Debito
+            # 2. Exportacion: cliente extranjero (pais != DO)
+            if partner_country and partner_country != 'DO':
+                return '16'  # B16 - Exportacion
+            # 3. Gubernamental
+            if client_type == 'governmental':
+                return '15'  # B15 - Gubernamental
+            # 4. Regimen Especial
+            if client_type == 'special_regime':
+                return '14'  # B14 - Regimen Especial
+            # 5. Contribuyente registrado que solicita credito fiscal
+            if client_type == 'taxpayer':
+                return '01'  # B01 - Credito Fiscal
+            # 6. Consumidor Final (default)
+            return '02'  # B02 - Consumidor Final
+
+        if self.move_type == 'out_refund':
+            return '04'  # B04 - Nota de Credito
+
+        if self.move_type in ('in_invoice', 'in_refund'):
+            # Mapeo tipo fiscal proveedor -> NCF para compras
+            return {
+                'informal': '11',
+                'minor_expense': '13',
+                'exterior': '17',
+                'special': '14',
+                'governmental': '15',
+            }.get(self.l10n_do_fiscal_type, False)
+
+        return False
 
     # =========================================
     # VALIDACIONES CÉDULA / RNC
@@ -848,6 +857,15 @@ class AccountMove(models.Model):
     # =========================================
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
     # =========================================
+    def _l10n_do_uses_external_numbering(self):
+        """True si el número de este documento lo asigna un sistema externo.
+
+        Punto de extensión para un conector de e-CF. Aquí siempre es False:
+        el NCF sale de las secuencias locales.
+        """
+        self.ensure_one()
+        return False
+
     def _generate_ncf(self):
         """Generar NCF con protección de concurrencia usando FOR UPDATE.
 
@@ -856,6 +874,11 @@ class AccountMove(models.Model):
         """
         self.ensure_one()
         if self.l10n_do_ncf_number:
+            return
+
+        if self._l10n_do_uses_external_numbering():
+            # El número lo asigna un sistema externo (e-CF): no se consume
+            # ninguna secuencia local.
             return
 
         if not self.l10n_do_ncf_type_id:
