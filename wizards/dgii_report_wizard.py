@@ -92,11 +92,16 @@ class DgiiReportWizard(models.TransientModel):
     def _to_dop(self, invoice, amount):
         """
         Convertir un monto de la moneda de la factura a DOP (moneda de la compañía).
-        Si la factura ya está en DOP, retorna el mismo monto.
-        Si está en otra moneda (USD, EUR, etc.), convierte usando la tasa de la fecha de la factura.
 
-        Esto garantiza que TODOS los reportes a DGII salgan en pesos dominicanos,
-        sin importar la moneda original de la factura.
+        Usa la tasa con la que la factura quedó ASENTADA, no la que esté hoy en
+        res.currency.rate. Son dos cosas distintas: la tabla de tasas cambia con
+        el tiempo (se cargan tasas nuevas, se corrigen las viejas), y volver a
+        consultarla produce un monto que no coincide con la contabilidad.
+
+        La tasa real de la factura está implícita en sus propios montos:
+        amount_total_signed (moneda de compañía) / amount_total (moneda factura).
+
+        Solo si la factura no permite deducirla se recurre a la tabla.
         """
         if not amount:
             return 0.0
@@ -107,7 +112,15 @@ class DgiiReportWizard(models.TransientModel):
         if invoice_currency == company_currency:
             return amount
 
-        # Convertir usando la tasa de la fecha de la factura
+        # Tasa con la que la factura quedó registrada en los libros
+        rate = 0.0
+        if invoice.amount_total:
+            rate = abs(invoice.amount_total_signed) / abs(invoice.amount_total)
+
+        if rate:
+            return company_currency.round(amount * rate)
+
+        # Respaldo: factura sin montos (raro) -> tasa de la tabla a su fecha
         conversion_date = invoice.invoice_date or invoice.date or fields.Date.today()
         return invoice_currency._convert(
             amount,
@@ -147,17 +160,32 @@ class DgiiReportWizard(models.TransientModel):
             return ''
         return vat.replace('-', '').replace(' ', '')
 
-    def _pad_ncf(self, ncf, length=11):
-        """Formatear NCF a longitud fija"""
+    def _pad_ncf(self, ncf, length=None):
+        """
+        Formatear NCF/e-CF a su longitud según el tipo.
+
+        NCF fiscal  (B01, B02, ...): 11 caracteres  -> B + 2 + 8
+        e-CF        (E31, E32, ...): 13 caracteres  -> E + 2 + 10
+
+        Cortar todo a 11 le quitaba los dos últimos dígitos a cada e-CF.
+        """
         if not ncf:
             return ''
-        return (ncf or '')[:length]
+        ncf = ncf.strip().upper()
+        if length is None:
+            length = 13 if ncf.startswith('E') else 11
+        return ncf[:length]
 
     def _pad_ncf_modified(self, ncf):
-        """Formatear NCF modificado (19 caracteres para e-CF)"""
+        """
+        Formatear NCF modificado (el comprobante que corrige una NC/ND).
+
+        Es un NCF como cualquier otro: 11 para B, 13 para e-CF. No se rellena
+        con espacios, que en un archivo separado por pipes quedan dentro del campo.
+        """
         if not ncf:
             return ''
-        return ncf.ljust(19)[:19]
+        return self._pad_ncf(ncf)
 
     def _format_date(self, dt):
         """Formatear fecha YYYYMMDD"""
