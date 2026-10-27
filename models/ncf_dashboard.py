@@ -33,8 +33,25 @@ class NcfDashboard(models.AbstractModel):
     _description = 'Dashboard NCF'
 
     @api.model
+    def _l10n_do_ecf_dashboard_data(self):
+        """Punto de extension: datos del panel cuando hay proveedor e-CF activo.
+
+        En el modulo base siempre devuelve None y el panel usa los datos
+        locales (NCF en papel + licencia). El conector e-CF sobrescribe este
+        metodo para devolver las secuencias, el plan y los documentos de la
+        plataforma cuando la compania tiene un proveedor activo.
+        """
+        return None
+
+    @api.model
     def get_dashboard_data(self):
         """Obtener datos para el dashboard NCF"""
+        # Con proveedor e-CF activo, el panel muestra los datos de la
+        # plataforma en lugar de las secuencias y la licencia locales.
+        ecf_data = self._l10n_do_ecf_dashboard_data()
+        if ecf_data is not None:
+            return ecf_data
+
         company_id = self.env.company.id
         today = date.today()
         first_day_month = today.replace(day=1)

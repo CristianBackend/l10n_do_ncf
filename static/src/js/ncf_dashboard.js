@@ -15,7 +15,17 @@ export class NcfDashboard extends Component {
             purchases_month: 0,
             cancelled_month: 0,
             license: {},
-            current_month: ''
+            current_month: '',
+            // Modo e-CF (proveedor activo): datos de la plataforma.
+            ecf_active: false,
+            api_available: true,
+            api_message: '',
+            provider_label: '',
+            plan: {},
+            can_load_sequence: false,
+            accepted_month: 0,
+            rejected_month: 0,
+            pending_month: 0,
         });
         onWillStart(async () => {
             await this.loadDashboardData();
@@ -29,6 +39,19 @@ export class NcfDashboard extends Component {
             []
         );
         Object.assign(this.state, data);
+    }
+
+    async refresh() {
+        await this.loadDashboardData();
+    }
+
+    // Abre el asistente "Cargar secuencia e-CF" (solo si el usuario es
+    // Administrador e-CF) y recarga el panel al cerrarlo.
+    async openLoadSequence() {
+        await this.action.doAction(
+            "l10n_do_ecf_newplain.action_l10n_do_ecf_load_sequence",
+            { onClose: () => this.refresh() }
+        );
     }
 
     openSequences() {

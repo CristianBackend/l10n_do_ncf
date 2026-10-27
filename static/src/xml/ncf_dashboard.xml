@@ -7,11 +7,37 @@
 
                 <!-- Header -->
                 <div class="row mb-4">
-                    <div class="col-12">
-                        <h3 class="mb-1 fw-bold">Dashboard NCF</h3>
-                        <p class="text-muted mb-0">Panel de Control de Comprobantes Fiscales</p>
+                    <div class="col-12 d-flex justify-content-between align-items-start">
+                        <div>
+                            <h3 class="mb-1 fw-bold">
+                                <t t-if="state.ecf_active">Panel e-CF</t>
+                                <t t-else="">Dashboard NCF</t>
+                            </h3>
+                            <p class="text-muted mb-0">
+                                <t t-if="state.ecf_active">
+                                    Facturación electrónica ·
+                                    <span class="badge bg-info" t-esc="state.provider_label"/>
+                                </t>
+                                <t t-else="">Panel de Control de Comprobantes Fiscales</t>
+                            </p>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" t-on-click="refresh">
+                            🔄 Actualizar
+                        </button>
                     </div>
                 </div>
+
+                <!-- Aviso: la plataforma e-CF no respondió -->
+                <t t-if="state.ecf_active and !state.api_available">
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="alert alert-warning" role="status">
+                                <strong>Plataforma e-CF no disponible:</strong>
+                                <span t-esc="state.api_message"/>
+                            </div>
+                        </div>
+                    </div>
+                </t>
 
                 <!-- Alertas -->
                 <t t-if="state.alerts and state.alerts.length > 0">
@@ -26,8 +52,85 @@
                     </div>
                 </t>
 
-                <!-- Estadísticas principales -->
-                <div class="row mb-4 g-3">
+                <!-- Estadísticas e-CF (proveedor activo) -->
+                <t t-if="state.ecf_active">
+                    <div class="row mb-4 g-3">
+                        <!-- Aceptados del mes -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="card ncf-card h-100">
+                                <div class="card-body ncf-stat-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <p class="ncf-stat-label text-muted mb-1">ACEPTADOS DEL MES</p>
+                                            <h2 class="ncf-stat-value mb-0" t-esc="state.accepted_month || 0"/>
+                                        </div>
+                                        <div class="ncf-icon-circle ncf-icon-success"><span>✅</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Rechazados del mes -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="card ncf-card h-100">
+                                <div class="card-body ncf-stat-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <p class="ncf-stat-label text-muted mb-1">RECHAZADOS DEL MES</p>
+                                            <h2 class="ncf-stat-value mb-0" t-esc="state.rejected_month || 0"/>
+                                        </div>
+                                        <div class="ncf-icon-circle ncf-icon-danger"><span>❌</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Pendientes -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="card ncf-card h-100">
+                                <div class="card-body ncf-stat-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <p class="ncf-stat-label text-muted mb-1">EN PROCESO</p>
+                                            <h2 class="ncf-stat-value mb-0" t-esc="state.pending_month || 0"/>
+                                        </div>
+                                        <div class="ncf-icon-circle ncf-icon-warning"><span>⏳</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Plan -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="card ncf-card h-100">
+                                <div class="card-body ncf-stat-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="w-100">
+                                            <p class="ncf-stat-label text-muted mb-1">PLAN</p>
+                                            <t t-if="state.plan and state.plan.name">
+                                                <h5 class="mb-0 fw-bold" t-esc="state.plan.name"/>
+                                                <small class="text-muted">
+                                                    <t t-esc="state.plan.used || 0"/> / <t t-esc="state.plan.quota || 0"/> usadas
+                                                    <t t-if="state.plan.days_remaining !== ''">
+                                                        · <t t-esc="state.plan.days_remaining"/> días
+                                                    </t>
+                                                </small>
+                                                <div class="progress mt-2" style="height: 6px;">
+                                                    <div t-att-class="'progress-bar ' + ((state.plan.percentage || 0) &lt; 75 ? 'bg-success' : ((state.plan.percentage || 0) &lt; 90 ? 'bg-warning' : 'bg-danger'))"
+                                                         t-attf-style="width: #{state.plan.percentage || 0}%"/>
+                                                </div>
+                                            </t>
+                                            <t t-else="">
+                                                <h5 class="mb-0 fw-bold text-muted">Sin plan</h5>
+                                            </t>
+                                        </div>
+                                        <div class="ncf-icon-circle ncf-icon-primary ms-2"><span>💳</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- Estadísticas principales (modo papel) -->
+                <div t-if="!state.ecf_active" class="row mb-4 g-3">
                     <!-- Facturas del Mes (Total) -->
                     <div class="col-lg-3 col-md-6">
                         <div class="card ncf-card h-100">
@@ -124,10 +227,24 @@
                         <div class="card ncf-card">
                             <div class="card-header py-3 border-bottom">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0 fw-bold">Secuencias NCF Activas</h5>
-                                    <button class="btn btn-sm btn-outline-primary" t-on-click="openSequences">
-                                        Ver todas
-                                    </button>
+                                    <h5 class="mb-0 fw-bold">
+                                        <t t-if="state.ecf_active">Secuencias e-CF</t>
+                                        <t t-else="">Secuencias NCF Activas</t>
+                                    </h5>
+                                    <div>
+                                        <t t-if="state.ecf_active">
+                                            <button t-if="state.can_load_sequence"
+                                                    class="btn btn-sm btn-primary"
+                                                    t-on-click="openLoadSequence">
+                                                ➕ Cargar secuencia e-CF
+                                            </button>
+                                        </t>
+                                        <t t-else="">
+                                            <button class="btn btn-sm btn-outline-primary" t-on-click="openSequences">
+                                                Ver todas
+                                            </button>
+                                        </t>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-body p-0">
@@ -141,6 +258,7 @@
                                                     <th>DISPONIBLES</th>
                                                     <th style="width: 200px;">USO</th>
                                                     <th class="pe-4">VENCIMIENTO</th>
+                                                    <th t-if="state.ecf_active" class="pe-4">ESTADO</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -165,6 +283,10 @@
                                                             </div>
                                                         </td>
                                                         <td class="pe-4 text-muted" t-esc="seq.expiration"/>
+                                                        <td t-if="state.ecf_active" class="pe-4">
+                                                            <span t-att-class="'badge ' + (seq.status === 'ACTIVE' ? 'bg-success' : (seq.status === 'EXPIRED' || seq.status === 'EXHAUSTED' ? 'bg-danger' : 'bg-secondary'))"
+                                                                  t-esc="seq.status"/>
+                                                        </td>
                                                     </tr>
                                                 </t>
                                             </tbody>
@@ -173,10 +295,18 @@
                                 </t>
                                 <t t-else="">
                                     <div class="text-center py-5 text-muted">
-                                        <p class="mb-2">No hay secuencias NCF activas</p>
-                                        <button class="btn btn-primary btn-sm" t-on-click="openSequences">
-                                            Crear Secuencia
-                                        </button>
+                                        <t t-if="state.ecf_active">
+                                            <p class="mb-2">No hay secuencias e-CF en la plataforma</p>
+                                            <button t-if="state.can_load_sequence" class="btn btn-primary btn-sm" t-on-click="openLoadSequence">
+                                                Cargar secuencia e-CF
+                                            </button>
+                                        </t>
+                                        <t t-else="">
+                                            <p class="mb-2">No hay secuencias NCF activas</p>
+                                            <button class="btn btn-primary btn-sm" t-on-click="openSequences">
+                                                Crear Secuencia
+                                            </button>
+                                        </t>
                                     </div>
                                 </t>
                             </div>
