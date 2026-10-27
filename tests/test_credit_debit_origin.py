@@ -15,6 +15,7 @@ class TestCreditDebitOrigin(NcfCommon):
         cls._create_ncf_sequence('01')
         cls._create_ncf_sequence('03')
         cls.seq_b04 = cls._create_ncf_sequence('04')
+        cls._create_sales_ncf_sequences()
         cls.invoice = cls._create_invoice(cls.partner_taxpayer, post=True)
 
     def _reverse(self, invoice):

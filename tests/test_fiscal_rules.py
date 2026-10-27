@@ -23,6 +23,7 @@ class TestForeignCreditDebitNotes(NcfCommon):
         cls._create_ncf_sequence('16')
         cls._create_ncf_sequence('04')
         cls._create_ncf_sequence('03')
+        cls._create_sales_ncf_sequences()
         cls.export = cls._create_invoice(cls.partner_foreign, post=True)
 
     def test_origin_is_b16(self):
@@ -64,6 +65,11 @@ class TestForeignCreditDebitNotes(NcfCommon):
 class TestDebitNoteTypePriority(NcfCommon):
     """La nota de débito es B03 sea cual sea el tipo de cliente."""
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._create_sales_ncf_sequences()
+
     def _debit_note_prefix(self, partner):
         debit = self._create_invoice(partner, l10n_do_is_debit_note=True)
         return debit.l10n_do_ncf_type_id.prefix
@@ -90,6 +96,7 @@ class TestNcfTypeFrozenAfterNumber(NcfCommon):
         cls._create_ncf_sequence('01')
         cls._create_ncf_sequence('11')
         cls._create_ncf_sequence('13')
+        cls._create_sales_ncf_sequences()
         cls.invoice = cls._create_invoice(cls.partner_taxpayer, post=True)
         cls.informal_vendor = cls.env['res.partner'].create({
             'name': 'Proveedor Informal', 'country_id': cls.country_do.id,
@@ -211,6 +218,11 @@ class TestExpenseTypeOnchange(NcfCommon):
 @tagged('post_install', '-at_install')
 class TestGovernmentRncPattern(NcfCommon):
     """El onchange y la validación al confirmar usan los mismos prefijos."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._create_sales_ncf_sequences()
 
     def _warnings(self, vat, taxpayer_type):
         partner = self.env['res.partner'].create({

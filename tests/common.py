@@ -63,6 +63,32 @@ class NcfTestMixin:
         sequence.flush_recordset()
         return sequence
 
+    # Tipos de venta en papel (B01-B16) que el onchange de la factura comprueba.
+    SALES_NCF_CODES = ('01', '02', '03', '04', '14', '15', '16')
+
+    @classmethod
+    def _create_sales_ncf_sequences(cls, range_to=1000):
+        """Crea secuencias activas para los tipos de venta en papel.
+
+        Evita el aviso de onchange "Sin secuencia" en los tests que solo prueban
+        la clasificación del tipo (no la numeración): al existir una secuencia
+        activa para cada tipo, el onchange no tiene nada que advertir. Es
+        idempotente, así que se puede llamar aunque la clase ya haya creado
+        algunas secuencias: salta los tipos que ya tienen una activa.
+        """
+        Sequence = cls.env['l10n_do_ncf.sequence']
+        for code in cls.SALES_NCF_CODES:
+            ncf_type = cls._ncf_type(code)
+            if not ncf_type:
+                continue
+            exists = Sequence.search([
+                ('company_id', '=', cls.company.id),
+                ('ncf_type_id', '=', ncf_type.id),
+                ('state', '=', 'active'),
+            ], limit=1)
+            if not exists:
+                cls._create_ncf_sequence(code, range_to=range_to)
+
     @classmethod
     def _create_invoice(cls, partner, move_type='out_invoice', post=False, **vals):
         invoice = cls.init_invoice(

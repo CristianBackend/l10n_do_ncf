@@ -285,8 +285,8 @@
                                                         </td>
                                                         <td class="pe-4 text-muted" t-esc="seq.expiration"/>
                                                         <td t-if="state.ecf_active" class="pe-4">
-                                                            <span t-att-class="'badge ' + (seq.status === 'ACTIVE' ? 'bg-success' : (seq.status === 'EXPIRED' || seq.status === 'EXHAUSTED' ? 'bg-danger' : 'bg-secondary'))"
-                                                                  t-esc="seq.status"/>
+                                                            <span t-att-class="'badge ' + (seq.status === 'ACTIVE' ? 'bg-success' : (seq.status === 'QUEUED' ? 'bg-info' : (seq.status === 'EXPIRED' || seq.status === 'EXHAUSTED' ? 'bg-danger' : 'bg-secondary')))"
+                                                                  t-esc="seq.status_label || seq.status"/>
                                                         </td>
                                                         <td t-if="state.ecf_active and state.can_load_sequence" class="pe-4">
                                                             <button t-if="seq.can_deactivate"

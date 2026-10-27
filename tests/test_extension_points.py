@@ -19,6 +19,7 @@ class TestExtensionPoints(NcfCommon):
         super().setUpClass()
         cls.seq_b01 = cls._create_ncf_sequence('01')
         cls.seq_b02 = cls._create_ncf_sequence('02')
+        cls._create_sales_ncf_sequences()
 
     def _patch_move(self, method, value):
         return patch.object(

@@ -27,6 +27,7 @@ class TestMoveFormView(NcfCommon):
         super().setUpClass()
         cls.seq_b01 = cls._create_ncf_sequence('01')
         cls.seq_b03 = cls._create_ncf_sequence('03')
+        cls._create_sales_ncf_sequences()
         cls.header_view = cls.env.ref('l10n_do_ncf.view_move_form_ncf')
         cls.tabs_view = cls.env.ref('l10n_do_ncf.view_move_form_ncf_fiscal_data')
 

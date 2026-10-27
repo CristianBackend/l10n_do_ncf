@@ -8,6 +8,11 @@ from .common import NcfCommon
 class TestNcfType(NcfCommon):
     """Selección automática del tipo de NCF (_compute_l10n_do_ncf_type_id)."""
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._create_sales_ncf_sequences()
+
     def _assert_type(self, move, prefix):
         self.assertEqual(move.l10n_do_ncf_type_id.prefix, prefix)
 
