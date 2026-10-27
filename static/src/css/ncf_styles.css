@@ -43,7 +43,14 @@
 
 /* === DASHBOARD NCF - VERSIÓN COMPACTA === */
 .ncf-dashboard {
-    min-height: 100%;
+    /* La client action ocupa todo el alto disponible y hace scroll vertical
+       ella misma: sin esto el contenido se cortaba abajo y había que alejar el
+       zoom para verlo (no había barra de scroll). overflow-x oculto para que en
+       pantallas angostas la página no tenga scroll horizontal; las tablas
+       anchas scrollean dentro de su .table-responsive. */
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 0.5rem 0.75rem;
 }
 
