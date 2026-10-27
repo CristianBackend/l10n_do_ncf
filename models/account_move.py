@@ -381,9 +381,13 @@ class AccountMove(models.Model):
     @api.depends('state', 'l10n_do_origin_move_id', 'amount_total', 'move_type')
     def _compute_credited_amount(self):
         for move in self:
-            if move.move_type == 'out_invoice':
+            # _origin.id es el id real en base de datos (0/False en un registro
+            # nuevo todavía sin guardar). Buscar con el move.id "NewId" de un
+            # borrador provocaba un warning y nunca encontraba nada.
+            origin_id = move._origin.id
+            if move.move_type == 'out_invoice' and origin_id:
                 credit_notes = self.search([
-                    ('l10n_do_origin_move_id', '=', move.id),
+                    ('l10n_do_origin_move_id', '=', origin_id),
                     ('state', '=', 'posted'),
                     ('move_type', '=', 'out_refund'),
                 ])

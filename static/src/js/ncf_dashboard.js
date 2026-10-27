@@ -54,6 +54,23 @@ export class NcfDashboard extends Component {
         );
     }
 
+    // Abre el asistente "Desactivar rango e-CF" (PATCH isActive=false) para una
+    // secuencia de la plataforma. Solo Administrador e-CF ve el botón. Recarga
+    // el panel al cerrarlo.
+    async deactivateSequence(seq) {
+        await this.action.doAction(
+            "l10n_do_ecf_newplain.action_l10n_do_ecf_deactivate_sequence",
+            {
+                additionalContext: {
+                    default_sequence_id: seq.id,
+                    default_range_label: seq.prefix + ": " + seq.name,
+                    default_available: seq.available,
+                },
+                onClose: () => this.refresh(),
+            }
+        );
+    }
+
     openSequences() {
         this.action.doAction("l10n_do_ncf.action_ncf_sequence");
     }

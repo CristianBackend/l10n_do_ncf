@@ -259,6 +259,7 @@
                                                     <th style="width: 200px;">USO</th>
                                                     <th class="pe-4">VENCIMIENTO</th>
                                                     <th t-if="state.ecf_active" class="pe-4">ESTADO</th>
+                                                    <th t-if="state.ecf_active and state.can_load_sequence" class="pe-4">ACCIONES</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -286,6 +287,13 @@
                                                         <td t-if="state.ecf_active" class="pe-4">
                                                             <span t-att-class="'badge ' + (seq.status === 'ACTIVE' ? 'bg-success' : (seq.status === 'EXPIRED' || seq.status === 'EXHAUSTED' ? 'bg-danger' : 'bg-secondary'))"
                                                                   t-esc="seq.status"/>
+                                                        </td>
+                                                        <td t-if="state.ecf_active and state.can_load_sequence" class="pe-4">
+                                                            <button t-if="seq.can_deactivate"
+                                                                    class="btn btn-sm btn-outline-danger"
+                                                                    t-on-click="() => this.deactivateSequence(seq)">
+                                                                Desactivar
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 </t>
