@@ -4,6 +4,7 @@ from stdnum.do import rnc as stdnum_rnc
 from odoo import Command
 from odoo.exceptions import UserError
 from odoo.tests import tagged
+from odoo.tools import mute_logger
 
 from .common import NcfCommon
 
@@ -224,6 +225,13 @@ class TestGovernmentRncPattern(NcfCommon):
         super().setUpClass()
         cls._create_sales_ncf_sequences()
 
+    # El aviso de coherencia se comprueba por el valor de retorno del onchange y
+    # de la validación, no por el log. Al construir la factura con Form y al
+    # clasificar un RNC gubernamental sin datos de actividad (la API está
+    # desactivada en pruebas) se emiten avisos esperados que son ruido para este
+    # test; se silencian sus loggers sin cambiar el comportamiento del módulo.
+    @mute_logger('odoo.tests.form.onchange',
+                 'odoo.addons.l10n_do_ncf.models.res_partner')
     def _warnings(self, vat, taxpayer_type):
         partner = self.env['res.partner'].create({
             'name': 'Entidad %s' % vat,

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo.exceptions import UserError
 from odoo.tests import tagged
+from odoo.tools import mute_logger
 
 from .common import NcfCommon
 
@@ -70,6 +71,10 @@ class TestGenerateNcf(NcfCommon):
         invoice = self._create_invoice(self.partner_taxpayer, post=True)
         self.assertEqual(invoice.l10n_do_ncf_number, 'B0100000500')
 
+    # Sin secuencia B01 el onchange avisa "Sin secuencia" al construir la
+    # factura (ruido del formulario de prueba); lo que se comprueba es que el
+    # asiento no se puede publicar. Se silencia ese logger.
+    @mute_logger('odoo.tests.form.onchange')
     def test_no_sequence_blocks_posting(self):
         self.seq_b01.unlink()
         invoice = self._create_invoice(self.partner_taxpayer)

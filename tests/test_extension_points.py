@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 from odoo.tests import tagged
+from odoo.tools import mute_logger
 
 from .common import NcfCommon
 
@@ -54,6 +55,10 @@ class TestExtensionPoints(NcfCommon):
         bill.l10n_do_fiscal_type = 'informal'
         self.assertEqual(bill._l10n_do_get_ncf_type_code(), '11')
 
+    # El tipo pasa a E31 (electrónico) sin secuencia local: el onchange avisa
+    # "Sin secuencia" (ruido del formulario de prueba). Se comprueba el tipo, no
+    # el log, así que se silencia ese logger.
+    @mute_logger('odoo.tests.form.onchange')
     def test_overridden_type_code_decides_the_type(self):
         with self._patch_move('_l10n_do_get_ncf_type_code', '31'):
             invoice = self._create_invoice(self.partner_taxpayer)

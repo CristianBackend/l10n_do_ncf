@@ -43,12 +43,20 @@
 
 /* === DASHBOARD NCF - VERSIÓN COMPACTA === */
 .ncf-dashboard {
-    /* La client action ocupa todo el alto disponible y hace scroll vertical
-       ella misma: sin esto el contenido se cortaba abajo y había que alejar el
-       zoom para verlo (no había barra de scroll). overflow-x oculto para que en
-       pantallas angostas la página no tenga scroll horizontal; las tablas
-       anchas scrollean dentro de su .table-responsive. */
-    height: 100%;
+    /* La client action hace scroll vertical ella misma. `height: 100%` no
+       bastaba: el contenedor del action manager es un flex-item sin altura
+       explícita, así que 100% resolvía a la altura del contenido (no del
+       hueco) y no aparecía barra de scroll; había que alejar el zoom.
+
+       El action manager de Odoo 19 es `position: relative`, y la client action
+       es su hijo directo, así que anclarla con position:absolute + inset:0 la
+       fuerza a ocupar EXACTAMENTE el hueco disponible (no el del contenido) y
+       entonces overflow-y:auto sí muestra la barra y hace scroll a cualquier
+       resolución y zoom. overflow-x oculto para que en pantallas angostas la
+       página no scrollee en horizontal; las tablas anchas scrollean dentro de
+       su .table-responsive. */
+    position: absolute;
+    inset: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0.5rem 0.75rem;
