@@ -1,485 +1,630 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
+    <!--
+        Panel NCF / Panel e-CF.
+
+        Una sola plantilla para los dos modos:
+          - state.ecf_active = false  -> Dashboard NCF (papel, licencia). Es lo
+            que ve un cliente que solo tiene l10n_do_ncf.
+          - state.ecf_active = true   -> Panel e-CF (datos de la plataforma). Lo
+            activa l10n_do_ecf_newplain; su patch JS añade `platform` y los
+            métodos del listado "e-CF de la plataforma".
+
+        Estructura de scroll: la cabecera queda fija y solo .ncfd-body hace
+        scroll (ver ncf_styles.css, sección LAYOUT).
+    -->
     <t t-name="l10n_do_ncf.Dashboard">
-        <div class="o_action ncf-dashboard">
-            <div class="container-fluid py-3">
+        <div class="o_action ncfd" t-att-class="{'ncfd--ecf': state.ecf_active}">
 
-                <!-- Header -->
-                <div class="row mb-4">
-                    <div class="col-12 d-flex justify-content-between align-items-start">
-                        <div>
-                            <h3 class="mb-1 fw-bold">
-                                <t t-if="state.ecf_active">Panel e-CF</t>
-                                <t t-else="">Dashboard NCF</t>
-                            </h3>
-                            <p class="text-muted mb-0">
-                                <t t-if="state.ecf_active">
-                                    Facturación electrónica ·
-                                    <span class="badge bg-info" t-esc="state.provider_label"/>
-                                </t>
-                                <t t-else="">Panel de Control de Comprobantes Fiscales</t>
-                            </p>
-                        </div>
-                        <button class="btn btn-sm btn-outline-secondary" t-on-click="refresh">
-                            🔄 Actualizar
-                        </button>
+            <!-- ================= CABECERA (fija) ================= -->
+            <header class="ncfd-header">
+                <div class="ncfd-header__main">
+                    <div class="ncfd-header__icon">
+                        <i t-att-class="state.ecf_active ? 'fa fa-bolt' : 'fa fa-file-text-o'"/>
                     </div>
-                </div>
-
-                <!-- Aviso: la plataforma e-CF no respondió -->
-                <t t-if="state.ecf_active and !state.api_available">
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <div class="alert alert-warning" role="status">
-                                <strong>Plataforma e-CF no disponible:</strong>
-                                <span t-esc="state.api_message"/>
-                            </div>
-                        </div>
-                    </div>
-                </t>
-
-                <!-- Alertas -->
-                <t t-if="state.alerts and state.alerts.length > 0">
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <t t-foreach="state.alerts" t-as="alert" t-key="alert_index">
-                                <div t-attf-class="alert alert-#{alert.type}" role="status">
-                                    <strong t-esc="alert.title"/>: <span t-esc="alert.message"/>
-                                </div>
+                    <div class="ncfd-header__text">
+                        <h1 class="ncfd-title">
+                            <t t-if="state.ecf_active">Panel e-CF</t>
+                            <t t-else="">Dashboard NCF</t>
+                        </h1>
+                        <div class="ncfd-subtitle">
+                            <t t-if="state.ecf_active">
+                                <span>Facturación electrónica</span>
+                                <span t-if="state.provider_label" class="ncfd-pill is-info" t-esc="state.provider_label"/>
+                                <span t-if="state.dgii_env_label" class="ncfd-pill"
+                                      t-att-class="envClass(state.dgii_env)"
+                                      title="Ambiente DGII que informa la plataforma"
+                                      t-esc="state.dgii_env_label"/>
+                            </t>
+                            <t t-else="">
+                                <span>Comprobantes fiscales</span>
+                                <span t-if="state.current_month" class="ncfd-subtitle__sep">·</span>
+                                <span t-if="state.current_month" t-esc="state.current_month"/>
                             </t>
                         </div>
                     </div>
-                </t>
-
-                <!-- Estadísticas e-CF (proveedor activo) -->
-                <t t-if="state.ecf_active">
-                    <div class="row mb-4 g-3">
-                        <!-- Aceptados del mes -->
-                        <div class="col-lg-3 col-md-6">
-                            <div class="card ncf-card h-100">
-                                <div class="card-body ncf-stat-card">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <p class="ncf-stat-label text-muted mb-1">ACEPTADOS DEL MES</p>
-                                            <h2 class="ncf-stat-value mb-0" t-esc="state.accepted_month || 0"/>
-                                        </div>
-                                        <div class="ncf-icon-circle ncf-icon-success"><span>✅</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Rechazados del mes -->
-                        <div class="col-lg-3 col-md-6">
-                            <div class="card ncf-card h-100">
-                                <div class="card-body ncf-stat-card">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <p class="ncf-stat-label text-muted mb-1">RECHAZADOS DEL MES</p>
-                                            <h2 class="ncf-stat-value mb-0" t-esc="state.rejected_month || 0"/>
-                                        </div>
-                                        <div class="ncf-icon-circle ncf-icon-danger"><span>❌</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Pendientes -->
-                        <div class="col-lg-3 col-md-6">
-                            <div class="card ncf-card h-100">
-                                <div class="card-body ncf-stat-card">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <p class="ncf-stat-label text-muted mb-1">EN PROCESO</p>
-                                            <h2 class="ncf-stat-value mb-0" t-esc="state.pending_month || 0"/>
-                                        </div>
-                                        <div class="ncf-icon-circle ncf-icon-warning"><span>⏳</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Plan -->
-                        <div class="col-lg-3 col-md-6">
-                            <div class="card ncf-card h-100">
-                                <div class="card-body ncf-stat-card">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div class="w-100">
-                                            <p class="ncf-stat-label text-muted mb-1">PLAN</p>
-                                            <t t-if="state.plan and state.plan.name">
-                                                <h5 class="mb-0 fw-bold" t-esc="state.plan.name"/>
-                                                <small class="text-muted">
-                                                    <t t-esc="state.plan.used || 0"/> / <t t-esc="state.plan.quota || 0"/> usadas
-                                                    <t t-if="state.plan.days_remaining !== ''">
-                                                        · <t t-esc="state.plan.days_remaining"/> días
-                                                    </t>
-                                                </small>
-                                                <div class="progress mt-2" style="height: 6px;">
-                                                    <div t-att-class="'progress-bar ' + ((state.plan.percentage || 0) &lt; 75 ? 'bg-success' : ((state.plan.percentage || 0) &lt; 90 ? 'bg-warning' : 'bg-danger'))"
-                                                         t-attf-style="width: #{state.plan.percentage || 0}%"/>
-                                                </div>
-                                            </t>
-                                            <t t-else="">
-                                                <h5 class="mb-0 fw-bold text-muted">Sin plan</h5>
-                                            </t>
-                                        </div>
-                                        <div class="ncf-icon-circle ncf-icon-primary ms-2"><span>💳</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </t>
-
-                <!-- Estadísticas principales (modo papel) -->
-                <div t-if="!state.ecf_active" class="row mb-4 g-3">
-                    <!-- Facturas del Mes (Total) -->
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card ncf-card h-100">
-                            <div class="card-body ncf-stat-card">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <p class="ncf-stat-label text-muted mb-1">FACTURAS DEL MES</p>
-                                        <h2 class="ncf-stat-value mb-0" t-esc="state.invoices_month || 0"/>
-                                        <t t-if="state.pos_orders_month > 0">
-                                            <small class="text-muted">
-                                                (<t t-esc="state.invoices_only || 0"/> fact. + <t t-esc="state.pos_orders_month"/> POS)
-                                            </small>
-                                        </t>
-                                    </div>
-                                    <div class="ncf-icon-circle ncf-icon-primary">
-                                        <span>📄</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Compras del Mes -->
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card ncf-card h-100">
-                            <div class="card-body ncf-stat-card">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <p class="ncf-stat-label text-muted mb-1">COMPRAS DEL MES</p>
-                                        <h2 class="ncf-stat-value mb-0" t-esc="state.purchases_month || 0"/>
-                                    </div>
-                                    <div class="ncf-icon-circle ncf-icon-success">
-                                        <span>🛒</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Anulados -->
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card ncf-card h-100">
-                            <div class="card-body ncf-stat-card">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <p class="ncf-stat-label text-muted mb-1">ANULADOS</p>
-                                        <h2 class="ncf-stat-value mb-0" t-esc="state.cancelled_month || 0"/>
-                                    </div>
-                                    <div class="ncf-icon-circle ncf-icon-warning">
-                                        <span>🚫</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Licencia -->
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card ncf-card h-100">
-                            <div class="card-body ncf-stat-card">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <p class="ncf-stat-label text-muted mb-1">LICENCIA</p>
-                                        <t t-if="state.license and state.license.is_valid">
-                                            <h5 class="mb-0 fw-bold text-success">Activa</h5>
-                                            <small class="text-muted">
-                                                <t t-esc="state.license.days_remaining"/> días restantes
-                                            </small>
-                                        </t>
-                                        <t t-else="">
-                                            <h5 class="mb-0 fw-bold text-danger">Inactiva</h5>
-                                            <small class="text-muted">Configurar licencia</small>
-                                        </t>
-                                    </div>
-                                    <t t-if="state.license and state.license.is_valid">
-                                        <div class="ncf-icon-circle ncf-icon-success">
-                                            <span>✅</span>
-                                        </div>
-                                    </t>
-                                    <t t-else="">
-                                        <div class="ncf-icon-circle ncf-icon-danger">
-                                            <span>❌</span>
-                                        </div>
-                                    </t>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
+                <div class="ncfd-header__actions">
+                    <button class="btn btn-secondary" t-on-click="refresh" t-att-disabled="state.loading">
+                        <i class="fa fa-refresh" t-att-class="{'fa-spin': state.loading}"/>
+                        <span class="ncfd-hide-sm">Actualizar</span>
+                    </button>
+                    <button t-if="state.ecf_active and state.can_load_sequence"
+                            class="btn btn-primary" t-on-click="openLoadSequence">
+                        <i class="fa fa-plus"/>
+                        <span class="ncfd-hide-sm">Cargar secuencia e-CF</span>
+                    </button>
+                </div>
+            </header>
 
-                <!-- Secuencias NCF -->
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card ncf-card">
-                            <div class="card-header py-3 border-bottom">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0 fw-bold">
-                                        <t t-if="state.ecf_active">Secuencias e-CF</t>
-                                        <t t-else="">Secuencias NCF Activas</t>
-                                    </h5>
-                                    <div>
-                                        <t t-if="state.ecf_active">
-                                            <button t-if="state.can_load_sequence"
-                                                    class="btn btn-sm btn-primary"
-                                                    t-on-click="openLoadSequence">
-                                                ➕ Cargar secuencia e-CF
-                                            </button>
-                                        </t>
-                                        <t t-else="">
-                                            <button class="btn btn-sm btn-outline-primary" t-on-click="openSequences">
-                                                Ver todas
-                                            </button>
-                                        </t>
-                                    </div>
+            <!-- ================= CUERPO (hace scroll) ================= -->
+            <div class="ncfd-body">
+                <div class="ncfd-container">
+
+                    <!-- Plataforma no disponible -->
+                    <div t-if="state.ecf_active and !state.api_available" class="ncfd-banner is-warning" role="status">
+                        <i class="fa fa-plug"/>
+                        <div>
+                            <strong>Plataforma e-CF no disponible.</strong>
+                            <span t-esc="state.api_message"/>
+                        </div>
+                    </div>
+
+                    <!-- Avisos: una sola tarjeta compacta -->
+                    <section t-if="state.alerts and state.alerts.length" class="ncfd-card ncfd-alerts">
+                        <div class="ncfd-alerts__head">
+                            <i class="fa fa-exclamation-triangle"/>
+                            <span>Avisos</span>
+                            <span class="ncfd-count" t-esc="state.alerts.length"/>
+                        </div>
+                        <ul class="ncfd-alerts__list">
+                            <li t-foreach="alertGroups()" t-as="group" t-key="group.key"
+                                class="ncfd-alert" t-att-class="'is-' + group.type">
+                                <span class="ncfd-dot"/>
+                                <strong t-esc="group.title"/>
+                                <span class="ncfd-alert__msgs">
+                                    <t t-foreach="group.messages" t-as="msg" t-key="msg_index">
+                                        <span class="ncfd-alert__msg" t-esc="msg"/>
+                                    </t>
+                                </span>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <!-- ================= INDICADORES ================= -->
+                    <div class="ncfd-kpis">
+                        <t t-if="state.ecf_active">
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Aceptados</span>
+                                    <span class="ncfd-kpi__icon is-success"><i class="fa fa-check"/></span>
                                 </div>
+                                <div class="ncfd-kpi__value" t-esc="fmtInt(state.accepted_month)"/>
+                                <div class="ncfd-kpi__hint">Este mes</div>
                             </div>
-                            <div class="card-body p-0">
-                                <t t-if="state.sequences and state.sequences.length > 0">
-                                    <div class="table-responsive">
-                                        <table class="table ncf-table mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th class="ps-4">TIPO</th>
-                                                    <th>SERIE</th>
-                                                    <th>DISPONIBLES</th>
-                                                    <th style="width: 200px;">USO</th>
-                                                    <th class="pe-4">VENCIMIENTO</th>
-                                                    <th t-if="state.ecf_active" class="pe-4">ESTADO</th>
-                                                    <th t-if="state.ecf_active and state.can_load_sequence" class="pe-4">ACCIONES</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <t t-foreach="state.sequences" t-as="seq" t-key="seq.id">
-                                                    <tr>
-                                                        <td class="ps-4 fw-bold" t-esc="seq.name"/>
-                                                        <td>
-                                                            <span class="badge bg-secondary" t-esc="seq.prefix"/>
-                                                        </td>
-                                                        <td>
-                                                            <span t-att-class="'badge ' + (seq.percentage > 50 ? 'bg-success' : (seq.percentage > 20 ? 'bg-warning' : 'bg-danger'))">
-                                                                <t t-esc="seq.available"/> / <t t-esc="seq.total"/>
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <div class="d-flex align-items-center">
-                                                                <div class="progress flex-grow-1" style="height: 8px;">
-                                                                    <div t-att-class="'progress-bar ' + (seq.percentage > 50 ? 'bg-success' : (seq.percentage > 20 ? 'bg-warning' : 'bg-danger'))"
-                                                                         t-attf-style="width: #{seq.percentage}%"/>
-                                                                </div>
-                                                                <span class="ms-2 small text-muted"><t t-esc="seq.percentage"/>%</span>
-                                                            </div>
-                                                        </td>
-                                                        <td class="pe-4 text-muted" t-esc="seq.expiration"/>
-                                                        <td t-if="state.ecf_active" class="pe-4">
-                                                            <span t-att-class="'badge ' + (seq.status === 'ACTIVE' ? 'bg-success' : (seq.status === 'QUEUED' ? 'bg-info' : (seq.status === 'EXPIRED' || seq.status === 'EXHAUSTED' ? 'bg-danger' : 'bg-secondary')))"
-                                                                  t-esc="seq.status_label || seq.status"/>
-                                                        </td>
-                                                        <td t-if="state.ecf_active and state.can_load_sequence" class="pe-4">
-                                                            <button t-if="seq.can_deactivate"
-                                                                    class="btn btn-sm btn-outline-danger"
-                                                                    t-on-click="() => this.deactivateSequence(seq)">
-                                                                Desactivar
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                </t>
-                                            </tbody>
-                                        </table>
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Rechazados</span>
+                                    <span class="ncfd-kpi__icon is-danger"><i class="fa fa-times"/></span>
+                                </div>
+                                <div class="ncfd-kpi__value" t-esc="fmtInt(state.rejected_month)"/>
+                                <div class="ncfd-kpi__hint">Este mes</div>
+                            </div>
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">En proceso</span>
+                                    <span class="ncfd-kpi__icon is-warning"><i class="fa fa-hourglass-half"/></span>
+                                </div>
+                                <div class="ncfd-kpi__value" t-esc="fmtInt(state.pending_month)"/>
+                                <div class="ncfd-kpi__hint">Esperando respuesta de la DGII</div>
+                            </div>
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Plan</span>
+                                    <span class="ncfd-kpi__icon is-info"><i class="fa fa-credit-card"/></span>
+                                </div>
+                                <t t-if="state.plan and state.plan.has_plan">
+                                    <div class="ncfd-kpi__value is-text" t-esc="state.plan.name"/>
+                                    <div class="ncfd-meter">
+                                        <div class="ncfd-meter__bar" t-att-class="quotaTone(state.plan.percentage)"
+                                             t-attf-style="width: #{pct(state.plan.percentage)}%"/>
+                                    </div>
+                                    <div class="ncfd-kpi__hint">
+                                        <t t-esc="fmtInt(state.plan.used)"/> de <t t-esc="fmtInt(state.plan.quota)"/> usadas
+                                        <t t-if="state.plan.days_remaining !== ''">· <t t-esc="state.plan.days_remaining"/> días</t>
                                     </div>
                                 </t>
                                 <t t-else="">
-                                    <div class="text-center py-5 text-muted">
-                                        <t t-if="state.ecf_active">
-                                            <p class="mb-2">No hay secuencias e-CF en la plataforma</p>
-                                            <button t-if="state.can_load_sequence" class="btn btn-primary btn-sm" t-on-click="openLoadSequence">
-                                                Cargar secuencia e-CF
-                                            </button>
-                                        </t>
-                                        <t t-else="">
-                                            <p class="mb-2">No hay secuencias NCF activas</p>
-                                            <button class="btn btn-primary btn-sm" t-on-click="openSequences">
-                                                Crear Secuencia
-                                            </button>
-                                        </t>
-                                    </div>
+                                    <div class="ncfd-kpi__value is-text"
+                                         t-att-class="{'is-danger-text': state.plan and state.plan.billing_required}">Sin plan activo</div>
+                                    <div class="ncfd-kpi__hint" t-esc="(state.plan and state.plan.message) || 'La plataforma no informó el plan.'"/>
                                 </t>
                             </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Fila con NCF por Tipo y Últimos NCF -->
-                <div class="row mb-4 g-3">
-                    
-                    <!-- NCF por Tipo (Este mes) -->
-                    <div class="col-lg-4">
-                        <div class="card ncf-card h-100">
-                            <div class="card-header py-3 border-bottom">
-                                <h5 class="mb-0 fw-bold">NCF por Tipo (Este Mes)</h5>
-                            </div>
-                            <div class="card-body">
-                                <t t-if="state.ncf_by_type and state.ncf_by_type.length > 0">
-                                    <t t-foreach="state.ncf_by_type" t-as="ncf_type" t-key="ncf_type.prefix">
-                                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                                            <div>
-                                                <span class="badge bg-primary me-2" t-esc="ncf_type.prefix"/>
-                                                <span t-esc="ncf_type.name"/>
-                                            </div>
-                                            <div>
-                                                <span class="badge bg-secondary" t-esc="ncf_type.count"/>
-                                                <t t-if="ncf_type.pos_count and ncf_type.pos_count > 0">
-                                                    <small class="text-muted ms-1">
-                                                        (<t t-esc="ncf_type.invoice_count"/> + <t t-esc="ncf_type.pos_count"/> POS)
-                                                    </small>
-                                                </t>
-                                            </div>
-                                        </div>
+                        </t>
+                        <t t-else="">
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Facturas</span>
+                                    <span class="ncfd-kpi__icon is-info"><i class="fa fa-file-text-o"/></span>
+                                </div>
+                                <div class="ncfd-kpi__value" t-esc="fmtInt(state.invoices_month)"/>
+                                <div class="ncfd-kpi__hint">
+                                    <t t-if="state.pos_orders_month">
+                                        <t t-esc="fmtInt(state.invoices_only)"/> facturas + <t t-esc="fmtInt(state.pos_orders_month)"/> POS
                                     </t>
-                                </t>
-                                <t t-else="">
-                                    <div class="text-center py-4 text-muted">
-                                        <p class="mb-0">Sin NCF generados este mes</p>
-                                    </div>
-                                </t>
+                                    <t t-else="">Este mes</t>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Últimos NCF Generados -->
-                    <div class="col-lg-8">
-                        <div class="card ncf-card h-100">
-                            <div class="card-header py-3 border-bottom">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0 fw-bold">Últimos NCF Generados</h5>
-                                    <span class="badge bg-info">
-                                        Total histórico: <t t-esc="state.total_ncf_generated || 0"/>
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Compras</span>
+                                    <span class="ncfd-kpi__icon is-success"><i class="fa fa-shopping-cart"/></span>
+                                </div>
+                                <div class="ncfd-kpi__value" t-esc="fmtInt(state.purchases_month)"/>
+                                <div class="ncfd-kpi__hint">Este mes</div>
+                            </div>
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Anulados</span>
+                                    <span class="ncfd-kpi__icon is-warning"><i class="fa fa-ban"/></span>
+                                </div>
+                                <div class="ncfd-kpi__value" t-esc="fmtInt(state.cancelled_month)"/>
+                                <div class="ncfd-kpi__hint">Este mes</div>
+                            </div>
+                            <div class="ncfd-card ncfd-kpi">
+                                <div class="ncfd-kpi__top">
+                                    <span class="ncfd-kpi__label">Licencia</span>
+                                    <span class="ncfd-kpi__icon"
+                                          t-att-class="state.license and state.license.is_valid ? 'is-success' : 'is-danger'">
+                                        <i class="fa fa-key"/>
                                     </span>
                                 </div>
-                            </div>
-                            <div class="card-body p-0">
-                                <t t-if="state.recent_ncf and state.recent_ncf.length > 0">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm ncf-table mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th class="ps-3">NCF</th>
-                                                    <th>CLIENTE</th>
-                                                    <th>RNC</th>
-                                                    <th class="text-end">MONTO</th>
-                                                    <th>FECHA</th>
-                                                    <th class="pe-3">ORIGEN</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <t t-foreach="state.recent_ncf" t-as="ncf" t-key="ncf_index">
-                                                    <tr class="ncf-row-clickable" t-on-click="() => this.openDocument(ncf)">
-                                                        <td class="ps-3">
-                                                            <code class="text-primary" t-esc="ncf.ncf"/>
-                                                        </td>
-                                                        <td>
-                                                            <span t-esc="ncf.partner" t-att-title="ncf.partner"/>
-                                                        </td>
-                                                        <td>
-                                                            <small class="text-muted" t-esc="ncf.partner_vat || '-'"/>
-                                                        </td>
-                                                        <td class="text-end fw-bold">
-                                                            <t t-esc="ncf.currency || '$'"/><t t-esc="ncf.amount ? ncf.amount.toFixed(2) : '0.00'"/>
-                                                        </td>
-                                                        <td>
-                                                            <small t-esc="ncf.date"/>
-                                                        </td>
-                                                        <td class="pe-3">
-                                                            <t t-if="ncf.type === 'pos'">
-                                                                <span class="badge bg-success">POS</span>
-                                                            </t>
-                                                            <t t-elif="ncf.move_type === 'out_refund'">
-                                                                <span class="badge bg-warning">NC</span>
-                                                            </t>
-                                                            <t t-else="">
-                                                                <span class="badge bg-primary">Factura</span>
-                                                            </t>
-                                                        </td>
-                                                    </tr>
-                                                </t>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                <t t-if="state.license and state.license.is_valid">
+                                    <div class="ncfd-kpi__value is-text is-success-text">Activa</div>
+                                    <div class="ncfd-kpi__hint"><t t-esc="state.license.days_remaining"/> días restantes</div>
                                 </t>
                                 <t t-else="">
-                                    <div class="text-center py-4 text-muted">
-                                        <p class="mb-0">No hay NCF generados aún</p>
+                                    <div class="ncfd-kpi__value is-text is-danger-text">Inactiva</div>
+                                    <div class="ncfd-kpi__hint">
+                                        <a href="#" t-on-click.prevent="openLicense">Configurar licencia</a>
                                     </div>
                                 </t>
                             </div>
-                        </div>
+                        </t>
                     </div>
-                </div>
 
-                <!-- Accesos rápidos -->
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card ncf-card">
-                            <div class="card-header py-3 border-bottom">
-                                <h5 class="mb-0 fw-bold">Accesos Rápidos</h5>
+                    <!-- ================= SECUENCIAS (e-CF o NCF) ================= -->
+                    <section class="ncfd-card">
+                        <div class="ncfd-card__head">
+                            <div>
+                                <h2 class="ncfd-card__title">
+                                    <t t-if="state.ecf_active">Comprobantes electrónicos (e-CF)</t>
+                                    <t t-else="">Secuencias NCF activas</t>
+                                </h2>
+                                <p class="ncfd-card__sub">
+                                    <t t-if="state.ecf_active">Rangos autorizados por la DGII, leídos de la plataforma</t>
+                                    <t t-else="">Secuencias locales en uso</t>
+                                </p>
                             </div>
-                            <div class="card-body">
-                                <div class="row g-3">
-                                    <div class="col-lg-2 col-md-4 col-6">
-                                        <button class="btn btn-outline-primary w-100 ncf-quick-btn" t-on-click="openInvoices">
-                                            <span class="ncf-btn-icon">📄</span>
-                                            <span class="small">Facturas</span>
-                                        </button>
-                                    </div>
-                                    <div class="col-lg-2 col-md-4 col-6">
-                                        <button class="btn btn-outline-success w-100 ncf-quick-btn" t-on-click="openPurchases">
-                                            <span class="ncf-btn-icon">🛒</span>
-                                            <span class="small">Compras</span>
-                                        </button>
-                                    </div>
-                                    <div class="col-lg-2 col-md-4 col-6">
-                                        <button class="btn btn-outline-info w-100 ncf-quick-btn" t-on-click="openSequences">
-                                            <span class="ncf-btn-icon">📋</span>
-                                            <span class="small">Secuencias</span>
-                                        </button>
-                                    </div>
-                                    <div class="col-lg-2 col-md-4 col-6">
-                                        <button class="btn btn-outline-warning w-100 ncf-quick-btn" t-on-click="openReports">
-                                            <span class="ncf-btn-icon">📊</span>
-                                            <span class="small">Reportes DGII</span>
-                                        </button>
-                                    </div>
-                                    <div class="col-lg-2 col-md-4 col-6">
-                                        <button class="btn btn-outline-secondary w-100 ncf-quick-btn" t-on-click="openLicense">
-                                            <span class="ncf-btn-icon">🔑</span>
-                                            <span class="small">Licencia</span>
-                                        </button>
-                                    </div>
-                                    <div class="col-lg-2 col-md-4 col-6">
-                                        <button class="btn btn-outline-dark w-100 ncf-quick-btn" t-on-click="openTypes">
-                                            <span class="ncf-btn-icon">⚙️</span>
-                                            <span class="small">Tipos NCF</span>
-                                        </button>
-                                    </div>
+                            <button t-if="!state.ecf_active" class="btn btn-sm btn-secondary" t-on-click="openSequences">
+                                Ver todas
+                            </button>
+                        </div>
+
+                        <div t-if="state.sequences and state.sequences.length" class="ncfd-table-wrap">
+                            <table class="ncfd-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tipo</th>
+                                        <th t-if="state.ecf_active">Rango</th>
+                                        <th t-if="state.ecf_active">Próximo</th>
+                                        <th class="ncfd-col-usage">Usados</th>
+                                        <th class="text-end">Disponibles</th>
+                                        <th>Vence</th>
+                                        <th t-if="state.ecf_active">Estado</th>
+                                        <th t-if="state.ecf_active and state.can_load_sequence" class="text-end"/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="state.sequences" t-as="seq" t-key="seq.id"
+                                        t-att-class="{'is-dimmed': isDimmed(seq)}">
+                                        <td>
+                                            <div class="ncfd-type">
+                                                <span class="ncfd-code" t-esc="seq.prefix"/>
+                                                <span class="ncfd-type__name" t-esc="seq.name"/>
+                                            </div>
+                                        </td>
+                                        <td t-if="state.ecf_active">
+                                            <span class="ncfd-mono ncfd-muted" t-esc="seq.range_label || '—'"/>
+                                        </td>
+                                        <td t-if="state.ecf_active">
+                                            <span class="ncfd-mono" t-esc="seq.next_encf || '—'"/>
+                                        </td>
+                                        <td>
+                                            <div class="ncfd-usage">
+                                                <div class="ncfd-meter">
+                                                    <div class="ncfd-meter__bar" t-att-class="stockTone(seq)"
+                                                         t-attf-style="width: #{usedPct(seq)}%"/>
+                                                </div>
+                                                <span class="ncfd-usage__txt">
+                                                    <t t-esc="fmtInt(usedCount(seq))"/> / <t t-esc="fmtInt(seq.total)"/>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="ncfd-num" t-att-class="availClass(seq)" t-esc="fmtInt(seq.available)"/>
+                                        </td>
+                                        <td class="ncfd-nowrap" t-esc="seq.expiration"/>
+                                        <td t-if="state.ecf_active">
+                                            <span class="ncfd-pill" t-att-class="seqStatusClass(seq.status)"
+                                                  t-esc="seq.status_label || seq.status"/>
+                                        </td>
+                                        <td t-if="state.ecf_active and state.can_load_sequence" class="text-end">
+                                            <button t-if="seq.can_deactivate" class="ncfd-ghost-btn is-danger"
+                                                    title="Desactivar rango"
+                                                    t-on-click="() => this.deactivateSequence(seq)">
+                                                <i class="fa fa-ban"/> Desactivar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div t-else="" class="ncfd-empty">
+                            <i class="fa fa-list-ol"/>
+                            <t t-if="state.ecf_active">
+                                <p>No hay rangos e-CF registrados en la plataforma.</p>
+                                <button t-if="state.can_load_sequence" class="btn btn-primary btn-sm" t-on-click="openLoadSequence">
+                                    Cargar secuencia e-CF
+                                </button>
+                            </t>
+                            <t t-else="">
+                                <p>No hay secuencias NCF activas.</p>
+                                <button class="btn btn-primary btn-sm" t-on-click="openSequences">Crear secuencia</button>
+                            </t>
+                        </div>
+                    </section>
+
+                    <!-- ================= PAPEL (solo e-CF con diario de papel o POS) ================= -->
+                    <section t-if="state.ecf_active and state.has_paper" class="ncfd-card">
+                        <div class="ncfd-card__head">
+                            <div>
+                                <h2 class="ncfd-card__title">Comprobantes en papel (NCF serie B)</h2>
+                                <p class="ncfd-card__sub">Diarios de papel y punto de venta</p>
+                            </div>
+                            <button class="btn btn-sm btn-secondary" t-on-click="openSequences">Ver todas</button>
+                        </div>
+                        <div t-if="state.paper_sequences and state.paper_sequences.length" class="ncfd-table-wrap">
+                            <table class="ncfd-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tipo</th>
+                                        <th class="ncfd-col-usage">Usados</th>
+                                        <th class="text-end">Disponibles</th>
+                                        <th>Vence</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="state.paper_sequences" t-as="pseq" t-key="pseq.id">
+                                        <td>
+                                            <div class="ncfd-type">
+                                                <span class="ncfd-code" t-esc="pseq.prefix"/>
+                                                <span class="ncfd-type__name" t-esc="pseq.name"/>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="ncfd-usage">
+                                                <div class="ncfd-meter">
+                                                    <div class="ncfd-meter__bar" t-att-class="stockTone(pseq)"
+                                                         t-attf-style="width: #{usedPct(pseq)}%"/>
+                                                </div>
+                                                <span class="ncfd-usage__txt">
+                                                    <t t-esc="fmtInt(usedCount(pseq))"/> / <t t-esc="fmtInt(pseq.total)"/>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="ncfd-num" t-att-class="availClass(pseq)" t-esc="fmtInt(pseq.available)"/>
+                                        </td>
+                                        <td class="ncfd-nowrap" t-esc="pseq.expiration"/>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div t-else="" class="ncfd-empty">
+                            <i class="fa fa-file-o"/>
+                            <p>No hay secuencias en papel (serie B) activas.</p>
+                            <button class="btn btn-primary btn-sm" t-on-click="openSequences">Crear secuencia en papel</button>
+                        </div>
+                    </section>
+
+                    <!-- ================= POR TIPO + ÚLTIMOS ================= -->
+                    <div class="ncfd-split">
+                        <section class="ncfd-card">
+                            <div class="ncfd-card__head">
+                                <div>
+                                    <h2 class="ncfd-card__title">
+                                        <t t-if="state.ecf_active">e-CF por tipo</t>
+                                        <t t-else="">NCF por tipo</t>
+                                    </h2>
+                                    <p class="ncfd-card__sub">Este mes</p>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
+                            <ul t-if="state.ncf_by_type and state.ncf_by_type.length" class="ncfd-bytype">
+                                <li t-foreach="state.ncf_by_type" t-as="item" t-key="item.prefix">
+                                    <div class="ncfd-bytype__row">
+                                        <span class="ncfd-code" t-esc="item.prefix"/>
+                                        <span class="ncfd-bytype__name" t-esc="item.name"/>
+                                        <span class="ncfd-bytype__count" t-esc="fmtInt(item.count)"/>
+                                    </div>
+                                    <div class="ncfd-meter is-thin">
+                                        <div class="ncfd-meter__bar is-accent" t-attf-style="width: #{typeShare(item)}%"/>
+                                    </div>
+                                    <div t-if="item.pos_count" class="ncfd-bytype__detail">
+                                        <t t-esc="fmtInt(item.invoice_count)"/> facturas + <t t-esc="fmtInt(item.pos_count)"/> POS
+                                    </div>
+                                </li>
+                            </ul>
+                            <div t-else="" class="ncfd-empty is-compact">
+                                <p>
+                                    <t t-if="state.ecf_active">Sin e-CF emitidos este mes.</t>
+                                    <t t-else="">Sin NCF generados este mes.</t>
+                                </p>
+                            </div>
+                        </section>
 
+                        <section class="ncfd-card">
+                            <div class="ncfd-card__head">
+                                <div>
+                                    <h2 class="ncfd-card__title">
+                                        <t t-if="state.ecf_active">Últimos e-CF</t>
+                                        <t t-else="">Últimos NCF generados</t>
+                                    </h2>
+                                    <p class="ncfd-card__sub">Los 10 más recientes</p>
+                                </div>
+                                <span class="ncfd-pill is-neutral">Total histórico: <t t-esc="fmtInt(state.total_ncf_generated)"/></span>
+                            </div>
+                            <div t-if="state.recent_ncf and state.recent_ncf.length" class="ncfd-table-wrap">
+                                <table class="ncfd-table">
+                                    <thead>
+                                        <tr>
+                                            <th><t t-if="state.ecf_active">e-NCF</t><t t-else="">NCF</t></th>
+                                            <th>Cliente</th>
+                                            <th class="text-end">Monto</th>
+                                            <th>Fecha</th>
+                                            <th><t t-if="state.ecf_active">Estado</t><t t-else="">Origen</t></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr t-foreach="state.recent_ncf" t-as="ncf" t-key="ncf_index"
+                                            class="is-clickable" t-on-click="() => this.openDocument(ncf)">
+                                            <td><span class="ncfd-mono ncfd-link" t-esc="ncf.ncf"/></td>
+                                            <td>
+                                                <div class="ncfd-party">
+                                                    <span class="ncfd-party__name" t-esc="ncf.partner" t-att-title="ncf.partner"/>
+                                                    <span t-if="ncf.partner_vat" class="ncfd-party__id" t-esc="ncf.partner_vat"/>
+                                                </div>
+                                            </td>
+                                            <td class="text-end ncfd-num">
+                                                <t t-esc="ncf.currency || 'RD$'"/> <t t-esc="fmtMoney(ncf.amount)"/>
+                                            </td>
+                                            <td class="ncfd-nowrap" t-esc="ncf.date"/>
+                                            <td class="ncfd-nowrap">
+                                                <t t-if="state.ecf_active">
+                                                    <span class="ncfd-pill" t-att-class="invoiceStatusClass(ncf.state)"
+                                                          t-esc="ncf.status_label || ncf.state"/>
+                                                    <span t-if="ncf.in_odoo === false" class="ncfd-pill is-neutral"
+                                                          title="No existe en Odoo, solo en la plataforma">Solo plataforma</span>
+                                                </t>
+                                                <t t-else="">
+                                                    <span t-if="ncf.type === 'pos'" class="ncfd-pill is-success">POS</span>
+                                                    <span t-elif="ncf.move_type === 'out_refund'" class="ncfd-pill is-warning">Nota de crédito</span>
+                                                    <span t-else="" class="ncfd-pill is-info">Factura</span>
+                                                </t>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div t-else="" class="ncfd-empty is-compact">
+                                <p>
+                                    <t t-if="state.ecf_active">No hay e-CF emitidos aún.</t>
+                                    <t t-else="">No hay NCF generados aún.</t>
+                                </p>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- ================= e-CF DE LA PLATAFORMA (conector) ================= -->
+                    <section t-if="state.ecf_active and platform" class="ncfd-card">
+                        <div class="ncfd-card__head">
+                            <div>
+                                <h2 class="ncfd-card__title">e-CF de la plataforma</h2>
+                                <p class="ncfd-card__sub">Todo lo emitido para esta empresa, aunque no exista en Odoo</p>
+                            </div>
+                            <span t-if="platform.total" class="ncfd-pill is-neutral">
+                                <t t-esc="fmtInt(platform.total)"/> comprobantes
+                            </span>
+                        </div>
+
+                        <div class="ncfd-filters">
+                            <div class="ncfd-field">
+                                <label>e-NCF</label>
+                                <input type="text" class="form-control" placeholder="E31…"
+                                       t-model="platform.filters.encf"
+                                       t-on-keydown="(ev) => ev.key === 'Enter' and this.applyPlatformFilters()"/>
+                            </div>
+                            <div class="ncfd-field">
+                                <label>RNC comprador</label>
+                                <input type="text" class="form-control" placeholder="RNC o cédula"
+                                       t-model="platform.filters.buyerRnc"
+                                       t-on-keydown="(ev) => ev.key === 'Enter' and this.applyPlatformFilters()"/>
+                            </div>
+                            <div class="ncfd-field">
+                                <label>Tipo</label>
+                                <select class="form-select" t-model="platform.filters.ecfType">
+                                    <option value="">Todos</option>
+                                    <option value="E31">E31 · Crédito fiscal</option>
+                                    <option value="E32">E32 · Consumo</option>
+                                    <option value="E33">E33 · Nota de débito</option>
+                                    <option value="E34">E34 · Nota de crédito</option>
+                                    <option value="E41">E41 · Compras</option>
+                                    <option value="E43">E43 · Gastos menores</option>
+                                    <option value="E44">E44 · Regímenes especiales</option>
+                                    <option value="E45">E45 · Gubernamental</option>
+                                    <option value="E46">E46 · Exportaciones</option>
+                                    <option value="E47">E47 · Pagos al exterior</option>
+                                </select>
+                            </div>
+                            <div class="ncfd-field">
+                                <label>Estado</label>
+                                <select class="form-select" t-model="platform.filters.status">
+                                    <option value="">Todos</option>
+                                    <option value="ACCEPTED">Aceptado</option>
+                                    <option value="CONDITIONAL">Aceptado con obs.</option>
+                                    <option value="REJECTED">Rechazado</option>
+                                    <option value="PROCESSING">Procesando</option>
+                                    <option value="QUEUED">En cola</option>
+                                    <option value="CONTINGENCY">Contingencia</option>
+                                    <option value="ERROR">Error</option>
+                                    <option value="VOIDED">Anulado</option>
+                                </select>
+                            </div>
+                            <div class="ncfd-field">
+                                <label>Desde</label>
+                                <input type="date" class="form-control" t-model="platform.filters.dateFrom"/>
+                            </div>
+                            <div class="ncfd-field">
+                                <label>Hasta</label>
+                                <input type="date" class="form-control" t-model="platform.filters.dateTo"/>
+                            </div>
+                            <div class="ncfd-filters__actions">
+                                <button class="btn btn-primary" t-on-click="applyPlatformFilters">
+                                    <i class="fa fa-search"/> Buscar
+                                </button>
+                                <button class="btn btn-secondary" t-on-click="clearPlatformFilters">Limpiar</button>
+                            </div>
+                        </div>
+
+                        <div t-if="!platform.api_available" class="ncfd-banner is-warning is-inset" role="status">
+                            <i class="fa fa-plug"/>
+                            <div>
+                                <strong>Plataforma e-CF no disponible.</strong>
+                                <span t-esc="platform.api_message"/>
+                            </div>
+                        </div>
+
+                        <div t-if="platform.rows.length" class="ncfd-table-wrap" t-att-class="{'is-loading': platform.loading}">
+                            <table class="ncfd-table">
+                                <thead>
+                                    <tr>
+                                        <th>e-NCF</th>
+                                        <th>Comprador</th>
+                                        <th>Tipo</th>
+                                        <th>Estado</th>
+                                        <th class="text-end">Monto</th>
+                                        <th>Fecha</th>
+                                        <th class="text-end">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="platform.rows" t-as="row" t-key="row.platform_id || row_index">
+                                        <td><span class="ncfd-mono" t-esc="row.encf"/></td>
+                                        <td>
+                                            <div class="ncfd-party">
+                                                <span class="ncfd-party__name" t-esc="row.buyer" t-att-title="row.buyer"/>
+                                                <span t-if="row.buyer_rnc" class="ncfd-party__id" t-esc="row.buyer_rnc"/>
+                                            </div>
+                                        </td>
+                                        <td><span class="ncfd-code" t-esc="row.ecf_type" t-att-title="row.type_label"/></td>
+                                        <td>
+                                            <span class="ncfd-pill" t-att-class="invoiceStatusClass(row.status)" t-esc="row.status_label"/>
+                                        </td>
+                                        <td class="text-end ncfd-num">RD$ <t t-esc="fmtMoney(row.amount)"/></td>
+                                        <td class="ncfd-nowrap" t-esc="row.date"/>
+                                        <td class="text-end ncfd-nowrap">
+                                            <div class="ncfd-row-actions">
+                                                <button t-if="row.in_odoo" class="ncfd-ghost-btn is-primary"
+                                                        title="Abrir la factura en Odoo"
+                                                        t-on-click="() => this.openPlatformMove(row)">
+                                                    <i class="fa fa-external-link"/> Odoo
+                                                </button>
+                                                <span t-else="" class="ncfd-pill is-neutral" title="No existe en Odoo">Solo plataforma</span>
+                                                <a class="ncfd-ghost-btn" t-att-href="platformDownloadUrl(row, 'xml')"
+                                                   title="Descargar XML"><i class="fa fa-code"/> XML</a>
+                                                <a class="ncfd-ghost-btn" t-att-href="platformDownloadUrl(row, 'pdf')"
+                                                   title="Descargar PDF"><i class="fa fa-file-pdf-o"/> PDF</a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div t-elif="platform.loading" class="ncfd-empty is-compact">
+                            <p><i class="fa fa-circle-o-notch fa-spin"/> Cargando…</p>
+                        </div>
+                        <div t-elif="platform.api_available" class="ncfd-empty is-compact">
+                            <p>No hay e-CF que coincidan con el filtro.</p>
+                        </div>
+
+                        <div t-if="platform.total_pages > 1" class="ncfd-pager">
+                            <span class="ncfd-muted">
+                                Página <t t-esc="platform.page"/> de <t t-esc="platform.total_pages"/>
+                            </span>
+                            <div class="ncfd-pager__btns">
+                                <button class="btn btn-secondary btn-sm" t-att-disabled="platform.page lte 1"
+                                        t-on-click="platformPrevPage">
+                                    <i class="fa fa-chevron-left"/> Anterior
+                                </button>
+                                <button class="btn btn-secondary btn-sm" t-att-disabled="platform.page gte platform.total_pages"
+                                        t-on-click="platformNextPage">
+                                    Siguiente <i class="fa fa-chevron-right"/>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ================= ACCESOS RÁPIDOS ================= -->
+                    <section class="ncfd-card">
+                        <div class="ncfd-card__head">
+                            <div><h2 class="ncfd-card__title">Accesos rápidos</h2></div>
+                        </div>
+                        <div class="ncfd-tiles">
+                            <button class="ncfd-tile" t-on-click="openInvoices">
+                                <span class="ncfd-tile__icon is-info"><i class="fa fa-file-text-o"/></span>
+                                <span class="ncfd-tile__text"><strong>Facturas</strong><small>Facturas de cliente</small></span>
+                            </button>
+                            <button class="ncfd-tile" t-on-click="openPurchases">
+                                <span class="ncfd-tile__icon is-success"><i class="fa fa-shopping-cart"/></span>
+                                <span class="ncfd-tile__text"><strong>Compras</strong><small>Facturas de proveedor</small></span>
+                            </button>
+                            <button class="ncfd-tile" t-on-click="openReports">
+                                <span class="ncfd-tile__icon is-warning"><i class="fa fa-bar-chart"/></span>
+                                <span class="ncfd-tile__text"><strong>Reportes DGII</strong><small>606 · 607 · 608</small></span>
+                            </button>
+                            <button t-if="!state.ecf_active or state.has_paper" class="ncfd-tile" t-on-click="openSequences">
+                                <span class="ncfd-tile__icon is-neutral"><i class="fa fa-list-ol"/></span>
+                                <span class="ncfd-tile__text">
+                                    <strong><t t-if="state.ecf_active">Secuencias (papel)</t><t t-else="">Secuencias</t></strong>
+                                    <small>NCF serie B</small>
+                                </span>
+                            </button>
+                            <button t-if="!state.ecf_active or state.has_paper" class="ncfd-tile" t-on-click="openTypes">
+                                <span class="ncfd-tile__icon is-neutral"><i class="fa fa-cog"/></span>
+                                <span class="ncfd-tile__text">
+                                    <strong><t t-if="state.ecf_active">Tipos NCF (papel)</t><t t-else="">Tipos NCF</t></strong>
+                                    <small>Catálogo de comprobantes</small>
+                                </span>
+                            </button>
+                            <button t-if="!state.ecf_active" class="ncfd-tile" t-on-click="openLicense">
+                                <span class="ncfd-tile__icon is-neutral"><i class="fa fa-key"/></span>
+                                <span class="ncfd-tile__text"><strong>Licencia</strong><small>Activación del módulo</small></span>
+                            </button>
+                        </div>
+                    </section>
+
+                </div>
             </div>
         </div>
     </t>

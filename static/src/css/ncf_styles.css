@@ -1,11 +1,12 @@
-/* ========================================
-   Estilos para el módulo NCF
-   República Dominicana - DGII
-   Compatible con tema claro y oscuro
-   Versión compacta optimizada
-   ======================================== */
+/* ==========================================================================
+   Estilos del módulo NCF (República Dominicana - DGII)
+   1. Campos NCF en facturas y licencia (sin cambios)
+   2. Panel NCF / Panel e-CF (.ncfd)
+   ========================================================================== */
 
-/* === VARIABLES CSS PARA TEMAS === */
+/* ==========================================================================
+   1. CAMPOS NCF EN FACTURAS Y LICENCIA
+   ========================================================================== */
 :root {
     --ncf-primary: #007bff;
     --ncf-success: #28a745;
@@ -14,7 +15,6 @@
     --ncf-info: #17a2b8;
 }
 
-/* === NCF EN FACTURAS === */
 .o_field_widget[name="l10n_do_ncf_number"] {
     font-size: 18px !important;
     font-weight: bold !important;
@@ -25,14 +25,12 @@
     border: 2px solid var(--ncf-success);
 }
 
-/* NCF en lista de facturas */
 .o_list_view .o_data_cell[name="l10n_do_ncf_number"] {
     font-weight: bold !important;
     color: var(--ncf-success) !important;
     font-size: 13px;
 }
 
-/* === NCF PROVEEDOR === */
 .o_field_widget[name="l10n_do_vendor_ncf"] input {
     font-weight: bold !important;
     font-size: 15px !important;
@@ -41,229 +39,6 @@
     border-radius: 5px;
 }
 
-/* === DASHBOARD NCF - VERSIÓN COMPACTA === */
-.ncf-dashboard {
-    /* La client action hace scroll vertical ella misma. `height: 100%` no
-       bastaba: el contenedor del action manager es un flex-item sin altura
-       explícita, así que 100% resolvía a la altura del contenido (no del
-       hueco) y no aparecía barra de scroll; había que alejar el zoom.
-
-       El action manager de Odoo 19 es `position: relative`, y la client action
-       es su hijo directo, así que anclarla con position:absolute + inset:0 la
-       fuerza a ocupar EXACTAMENTE el hueco disponible (no el del contenido) y
-       entonces overflow-y:auto sí muestra la barra y hace scroll a cualquier
-       resolución y zoom. overflow-x oculto para que en pantallas angostas la
-       página no scrollee en horizontal; las tablas anchas scrollean dentro de
-       su .table-responsive. */
-    position: absolute;
-    inset: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 0.5rem 0.75rem;
-}
-
-.ncf-dashboard h3 {
-    font-size: 1.1rem !important;
-    margin-bottom: 0.15rem !important;
-}
-
-.ncf-dashboard h3 + p {
-    font-size: 0.75rem !important;
-    margin-bottom: 0.5rem !important;
-}
-
-.ncf-dashboard .row.mb-4 {
-    margin-bottom: 0.5rem !important;
-}
-
-.ncf-dashboard .g-3 {
-    --bs-gutter-y: 0.5rem;
-    --bs-gutter-x: 0.5rem;
-}
-
-.ncf-dashboard .ncf-card {
-    border: none;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-/* Tarjetas de estadísticas COMPACTAS */
-.ncf-dashboard .ncf-stat-card {
-    padding: 0.5rem 0.75rem !important;
-}
-
-.ncf-dashboard .ncf-stat-value {
-    font-size: 1.4rem;
-    font-weight: 700;
-    line-height: 1.1;
-}
-
-.ncf-dashboard .ncf-stat-label {
-    font-size: 0.6rem;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    margin-bottom: 0 !important;
-}
-
-.ncf-dashboard .ncf-stat-card small {
-    font-size: 0.65rem !important;
-}
-
-.ncf-dashboard .ncf-icon-circle {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-}
-
-/* Iconos con colores */
-.ncf-icon-primary { background-color: rgba(13, 110, 253, 0.15); color: #0d6efd; }
-.ncf-icon-success { background-color: rgba(25, 135, 84, 0.15); color: #198754; }
-.ncf-icon-warning { background-color: rgba(255, 193, 7, 0.15); color: #ffc107; }
-.ncf-icon-danger { background-color: rgba(220, 53, 69, 0.15); color: #dc3545; }
-
-/* Card headers COMPACTOS */
-.ncf-dashboard .card-header {
-    padding: 0.4rem 0.6rem !important;
-}
-
-.ncf-dashboard .card-header h5 {
-    font-size: 0.8rem !important;
-    margin-bottom: 0 !important;
-}
-
-.ncf-dashboard .card-body {
-    padding: 0.4rem 0.6rem !important;
-}
-
-/* Botones de acceso rápido - MUY COMPACTOS */
-.ncf-dashboard .ncf-quick-btn {
-    padding: 0.4rem 0.2rem !important;
-    border-radius: 6px;
-    text-align: center;
-}
-
-.ncf-dashboard .ncf-quick-btn .ncf-btn-icon {
-    font-size: 1.1rem;
-    margin-bottom: 0.15rem;
-    display: block;
-}
-
-.ncf-dashboard .ncf-quick-btn .small {
-    font-size: 0.65rem !important;
-}
-
-/* Tabla de secuencias COMPACTA */
-.ncf-dashboard .ncf-table {
-    margin-bottom: 0;
-    font-size: 0.75rem;
-}
-
-.ncf-dashboard .ncf-table th {
-    padding: 0.4rem 0.5rem !important;
-    font-weight: 600;
-    font-size: 0.65rem;
-    text-transform: uppercase;
-}
-
-.ncf-dashboard .ncf-table td {
-    padding: 0.35rem 0.5rem !important;
-    vertical-align: middle;
-}
-
-.ncf-dashboard .progress {
-    height: 5px;
-    border-radius: 2px;
-}
-
-/* Sección NCF por Tipo y Últimos NCF - altura fija */
-.ncf-dashboard .col-lg-4 .card-body,
-.ncf-dashboard .col-lg-8 .card-body {
-    max-height: 120px;
-    overflow-y: auto;
-}
-
-.ncf-dashboard .col-lg-4 .py-2 {
-    padding-top: 0.25rem !important;
-    padding-bottom: 0.25rem !important;
-    font-size: 0.75rem;
-}
-
-/* Tabla últimos NCF */
-.ncf-dashboard .table-sm th,
-.ncf-dashboard .table-sm td {
-    padding: 0.25rem 0.4rem !important;
-    font-size: 0.7rem;
-}
-
-.ncf-dashboard .ncf-row-clickable {
-    cursor: pointer;
-}
-
-.ncf-dashboard .ncf-row-clickable:hover {
-    background-color: rgba(0, 123, 255, 0.1);
-}
-
-/* Badges pequeños */
-.ncf-dashboard .badge {
-    font-size: 0.6rem;
-    padding: 0.15rem 0.35rem;
-}
-
-/* Alertas compactas */
-.ncf-dashboard .alert {
-    padding: 0.4rem 0.6rem;
-    margin-bottom: 0.4rem;
-    font-size: 0.75rem;
-    border-radius: 5px;
-}
-
-/* === TEMA OSCURO === */
-.o_dark .ncf-dashboard .ncf-card,
-html[data-color-scheme="dark"] .ncf-dashboard .ncf-card {
-    background-color: #2d2d2d;
-    color: #ffffff;
-}
-
-.o_dark .ncf-dashboard .ncf-card .text-muted,
-html[data-color-scheme="dark"] .ncf-dashboard .ncf-card .text-muted {
-    color: #adb5bd !important;
-}
-
-.o_dark .ncf-dashboard .ncf-table thead,
-html[data-color-scheme="dark"] .ncf-dashboard .ncf-table thead {
-    background-color: #3d3d3d;
-}
-
-.o_dark .ncf-dashboard .card-header,
-html[data-color-scheme="dark"] .ncf-dashboard .card-header {
-    background-color: #2d2d2d;
-    border-color: #404040;
-}
-
-.o_dark .ncf-dashboard h3,
-.o_dark .ncf-dashboard h5,
-.o_dark .ncf-dashboard .fw-bold,
-html[data-color-scheme="dark"] .ncf-dashboard h3,
-html[data-color-scheme="dark"] .ncf-dashboard h5,
-html[data-color-scheme="dark"] .ncf-dashboard .fw-bold {
-    color: #ffffff !important;
-}
-
-.o_dark .ncf-dashboard .ncf-stat-value,
-html[data-color-scheme="dark"] .ncf-dashboard .ncf-stat-value {
-    color: #ffffff;
-}
-
-/* === BADGES === */
-.badge.bg-success { background: linear-gradient(135deg, #28a745 0%, #218838 100%) !important; }
-.badge.bg-warning { background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%) !important; color: #212529 !important; }
-.badge.bg-danger { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important; }
-
-/* === LICENCIA NCF === */
 .o_field_widget[name="license_key"] input {
     font-size: 16px !important;
     font-weight: bold !important;
@@ -271,17 +46,912 @@ html[data-color-scheme="dark"] .ncf-dashboard .ncf-stat-value {
     text-transform: uppercase;
 }
 
-/* === RESPONSIVE === */
-@media (max-width: 992px) {
-    .ncf-dashboard .ncf-stat-value { font-size: 1.2rem; }
-    .ncf-dashboard .ncf-icon-circle { width: 32px; height: 32px; font-size: 0.9rem; }
+/* ==========================================================================
+   2. PANEL NCF / PANEL e-CF
+   Los colores salen del tema activo de Odoo (claro u oscuro): se toman el
+   fondo y el texto del body y se derivan superficies y bordes con
+   color-mix(), así el panel se ve bien en los dos temas sin reglas aparte.
+   ========================================================================== */
+
+.ncfd {
+    --ncfd-fg: var(--bs-body-color, #1f2937);
+    --ncfd-bg: var(--bs-body-bg, #ffffff);
+    --ncfd-surface: color-mix(in srgb, var(--ncfd-fg) 3.5%, var(--ncfd-bg));
+    --ncfd-surface-2: color-mix(in srgb, var(--ncfd-fg) 7%, var(--ncfd-bg));
+    --ncfd-border: color-mix(in srgb, var(--ncfd-fg) 13%, transparent);
+    --ncfd-border-soft: color-mix(in srgb, var(--ncfd-fg) 8%, transparent);
+    --ncfd-muted: color-mix(in srgb, var(--ncfd-fg) 62%, transparent);
+    --ncfd-faint: color-mix(in srgb, var(--ncfd-fg) 42%, transparent);
+
+    --ncfd-accent: #3b82f6;
+    --ncfd-success: #22c55e;
+    --ncfd-warning: #f59e0b;
+    --ncfd-danger: #ef4444;
+    --ncfd-info: #3b82f6;
+    --ncfd-neutral: #94a3b8;
+
+    --ncfd-radius: 12px;
+    --ncfd-radius-sm: 8px;
+    --ncfd-gap: 16px;
+    --ncfd-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+    color: var(--ncfd-fg);
+    font-size: 0.875rem;
+}
+
+/* --------------------------------------------------------------------------
+   LAYOUT Y SCROLL
+   El action manager es el hueco que queda debajo de la barra de menú. Se
+   marca como contenedor posicionado y el panel lo ocupa entero; dentro, la
+   cabecera queda fija y solo .ncfd-body hace scroll. Así no se tapa el menú
+   superior y el scroll funciona a cualquier resolución y zoom.
+   -------------------------------------------------------------------------- */
+.o_action_manager:has(.ncfd) {
+    position: relative;
+    overflow: hidden;
+}
+
+.ncfd {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--ncfd-bg);
+}
+
+.ncfd-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
+.ncfd-container {
+    padding: 20px 24px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ncfd-gap);
+}
+
+/* --------------------------------------------------------------------------
+   CABECERA
+   -------------------------------------------------------------------------- */
+.ncfd-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--ncfd-border-soft);
+    background: var(--ncfd-bg);
+}
+
+.ncfd-header__main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.ncfd-header__icon {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 1.05rem;
+    color: #fff;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    box-shadow: 0 6px 16px -6px rgba(59, 130, 246, 0.6);
+}
+
+.ncfd-header__text {
+    min-width: 0;
+}
+
+.ncfd-title {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--ncfd-fg);
+}
+
+.ncfd-subtitle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    font-size: 0.8rem;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-subtitle__sep {
+    opacity: 0.6;
+}
+
+.ncfd-header__actions {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.ncfd-header__actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   TARJETAS
+   -------------------------------------------------------------------------- */
+.ncfd-card {
+    background: var(--ncfd-surface);
+    border: 1px solid var(--ncfd-border);
+    border-radius: var(--ncfd-radius);
+    min-width: 0;
+}
+
+.ncfd-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--ncfd-border-soft);
+}
+
+.ncfd-card__title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--ncfd-fg);
+}
+
+.ncfd-card__sub {
+    margin: 2px 0 0;
+    font-size: 0.78rem;
+    color: var(--ncfd-muted);
+}
+
+/* --------------------------------------------------------------------------
+   AVISOS
+   -------------------------------------------------------------------------- */
+.ncfd-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--ncfd-radius-sm);
+    border: 1px solid;
+    font-size: 0.84rem;
+}
+
+.ncfd-banner > .fa {
+    margin-top: 2px;
+}
+
+.ncfd-banner.is-warning {
+    color: color-mix(in srgb, var(--ncfd-warning) 70%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-warning) 10%, transparent);
+    border-color: color-mix(in srgb, var(--ncfd-warning) 35%, transparent);
+}
+
+.ncfd-banner.is-inset {
+    margin: 0 20px 16px;
+}
+
+.ncfd-alerts {
+    padding: 12px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ncfd-alerts__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 650;
+    font-size: 0.85rem;
+    color: color-mix(in srgb, var(--ncfd-warning) 75%, var(--ncfd-fg));
+}
+
+.ncfd-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 0.72rem;
+    color: var(--ncfd-fg);
+    background: var(--ncfd-surface-2);
+}
+
+.ncfd-alerts__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ncfd-alert {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    min-width: 0;
+}
+
+.ncfd-alert strong {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ncfd-alert__msgs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 0;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-alert__msg {
+    white-space: nowrap;
+}
+
+.ncfd-alert__msg + .ncfd-alert__msg::before {
+    content: "·";
+    margin: 0 8px;
+    opacity: 0.6;
+}
+
+.ncfd-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    transform: translateY(-1px);
+    background: var(--ncfd-info);
+}
+
+.ncfd-alert.is-warning .ncfd-dot { background: var(--ncfd-warning); }
+.ncfd-alert.is-danger .ncfd-dot { background: var(--ncfd-danger); }
+.ncfd-alert.is-success .ncfd-dot { background: var(--ncfd-success); }
+
+/* --------------------------------------------------------------------------
+   INDICADORES
+   -------------------------------------------------------------------------- */
+.ncfd-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ncfd-gap);
+}
+
+.ncfd-kpi {
+    padding: 16px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ncfd-kpi__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ncfd-kpi__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-kpi__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    font-size: 0.95rem;
+}
+
+.ncfd-kpi__value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ncfd-fg);
+}
+
+.ncfd-kpi__value.is-text {
+    font-size: 1.15rem;
+    letter-spacing: 0;
+    padding: 4px 0 2px;
+}
+
+.ncfd-kpi__hint {
+    font-size: 0.78rem;
+    color: var(--ncfd-muted);
+}
+
+/* Tonos compartidos: íconos, píldoras, textos */
+.is-success.ncfd-kpi__icon,
+.is-success.ncfd-tile__icon {
+    color: color-mix(in srgb, var(--ncfd-success) 80%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-success) 14%, transparent);
+}
+
+.is-danger.ncfd-kpi__icon,
+.is-danger.ncfd-tile__icon {
+    color: color-mix(in srgb, var(--ncfd-danger) 80%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-danger) 14%, transparent);
+}
+
+.is-warning.ncfd-kpi__icon,
+.is-warning.ncfd-tile__icon {
+    color: color-mix(in srgb, var(--ncfd-warning) 80%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-warning) 16%, transparent);
+}
+
+.is-info.ncfd-kpi__icon,
+.is-info.ncfd-tile__icon {
+    color: color-mix(in srgb, var(--ncfd-info) 80%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-info) 14%, transparent);
+}
+
+.is-neutral.ncfd-tile__icon {
+    color: var(--ncfd-muted);
+    background: var(--ncfd-surface-2);
+}
+
+.ncfd .is-success-text { color: color-mix(in srgb, var(--ncfd-success) 80%, var(--ncfd-fg)); }
+.ncfd .is-danger-text { color: color-mix(in srgb, var(--ncfd-danger) 82%, var(--ncfd-fg)); }
+.ncfd .is-warning-text { color: color-mix(in srgb, var(--ncfd-warning) 82%, var(--ncfd-fg)); }
+.ncfd .is-muted-text { color: var(--ncfd-faint); }
+
+/* --------------------------------------------------------------------------
+   PÍLDORAS (estado, ambiente, totales) y CÓDIGOS
+   -------------------------------------------------------------------------- */
+.ncfd-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.ncfd-pill.is-success {
+    color: color-mix(in srgb, var(--ncfd-success) 80%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-success) 13%, transparent);
+    border-color: color-mix(in srgb, var(--ncfd-success) 30%, transparent);
+}
+
+.ncfd-pill.is-danger {
+    color: color-mix(in srgb, var(--ncfd-danger) 82%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-danger) 13%, transparent);
+    border-color: color-mix(in srgb, var(--ncfd-danger) 30%, transparent);
+}
+
+.ncfd-pill.is-warning {
+    color: color-mix(in srgb, var(--ncfd-warning) 82%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-warning) 14%, transparent);
+    border-color: color-mix(in srgb, var(--ncfd-warning) 32%, transparent);
+}
+
+.ncfd-pill.is-info {
+    color: color-mix(in srgb, var(--ncfd-info) 82%, var(--ncfd-fg));
+    background: color-mix(in srgb, var(--ncfd-info) 13%, transparent);
+    border-color: color-mix(in srgb, var(--ncfd-info) 30%, transparent);
+}
+
+.ncfd-pill.is-neutral {
+    color: var(--ncfd-muted);
+    background: var(--ncfd-surface-2);
+    border-color: var(--ncfd-border-soft);
+}
+
+.ncfd-code {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-family: var(--ncfd-mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--ncfd-fg);
+    background: var(--ncfd-surface-2);
+    border: 1px solid var(--ncfd-border-soft);
+}
+
+.ncfd-mono {
+    font-family: var(--ncfd-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.01em;
+}
+
+.ncfd-muted {
+    color: var(--ncfd-muted);
+}
+
+.ncfd-link {
+    color: color-mix(in srgb, var(--ncfd-accent) 85%, var(--ncfd-fg));
+}
+
+.ncfd-nowrap {
+    white-space: nowrap;
+}
+
+.ncfd-num {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   TABLAS
+   -------------------------------------------------------------------------- */
+.ncfd-table-wrap {
+    overflow-x: auto;
+    transition: opacity 0.15s ease;
+}
+
+.ncfd-table-wrap.is-loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.ncfd-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+
+.ncfd-table th {
+    padding: 10px 14px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: left;
+    white-space: nowrap;
+    color: var(--ncfd-muted);
+    background: var(--ncfd-surface-2);
+    border-bottom: 1px solid var(--ncfd-border-soft);
+}
+
+.ncfd-table th.text-end,
+.ncfd-table td.text-end {
+    text-align: right;
+}
+
+.ncfd-table td {
+    padding: 11px 14px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--ncfd-border-soft);
+}
+
+.ncfd-table th:first-child,
+.ncfd-table td:first-child {
+    padding-left: 20px;
+}
+
+.ncfd-table th:last-child,
+.ncfd-table td:last-child {
+    padding-right: 20px;
+}
+
+.ncfd-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.ncfd-table tbody tr:hover td {
+    background: color-mix(in srgb, var(--ncfd-fg) 3%, transparent);
+}
+
+.ncfd-table tr.is-clickable {
+    cursor: pointer;
+}
+
+.ncfd-table tr.is-dimmed td {
+    color: var(--ncfd-muted);
+}
+
+.ncfd-col-usage {
+    width: 220px;
+}
+
+.ncfd-type {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.ncfd-type__name {
+    font-weight: 550;
+    white-space: nowrap;
+}
+
+.ncfd-party {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 360px;
+}
+
+.ncfd-party__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ncfd-party__id {
+    font-family: var(--ncfd-mono);
+    font-size: 0.74rem;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   BARRAS DE USO
+   -------------------------------------------------------------------------- */
+.ncfd-usage {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ncfd-usage .ncfd-meter {
+    flex: 1 1 auto;
+}
+
+.ncfd-usage__txt {
+    flex: 0 0 auto;
+    min-width: 64px;
+    text-align: right;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-meter {
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--ncfd-surface-2);
+}
+
+.ncfd-meter.is-thin {
+    height: 4px;
+}
+
+.ncfd-meter__bar {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ncfd-accent);
+    transition: width 0.3s ease;
+}
+
+.ncfd-meter__bar.is-accent { background: var(--ncfd-accent); }
+.ncfd-meter__bar.is-success { background: var(--ncfd-success); }
+.ncfd-meter__bar.is-warning { background: var(--ncfd-warning); }
+.ncfd-meter__bar.is-danger { background: var(--ncfd-danger); }
+.ncfd-meter__bar.is-muted { background: var(--ncfd-neutral); opacity: 0.55; }
+
+.ncfd-kpi .ncfd-meter {
+    margin-top: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   BOTONES FANTASMA (acciones dentro de tablas)
+   -------------------------------------------------------------------------- */
+.ncfd-ghost-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--ncfd-border);
+    background: transparent;
+    font-size: 0.76rem;
+    font-weight: 550;
+    line-height: 1.5;
+    color: var(--ncfd-fg);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.ncfd-ghost-btn:hover {
+    background: var(--ncfd-surface-2);
+    color: var(--ncfd-fg);
+    text-decoration: none;
+}
+
+.ncfd-ghost-btn.is-danger {
+    color: color-mix(in srgb, var(--ncfd-danger) 82%, var(--ncfd-fg));
+    border-color: color-mix(in srgb, var(--ncfd-danger) 35%, transparent);
+}
+
+.ncfd-ghost-btn.is-danger:hover {
+    background: color-mix(in srgb, var(--ncfd-danger) 12%, transparent);
+}
+
+.ncfd-ghost-btn.is-primary {
+    color: color-mix(in srgb, var(--ncfd-accent) 85%, var(--ncfd-fg));
+    border-color: color-mix(in srgb, var(--ncfd-accent) 35%, transparent);
+}
+
+.ncfd-ghost-btn.is-primary:hover {
+    background: color-mix(in srgb, var(--ncfd-accent) 12%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   POR TIPO + ÚLTIMOS
+   -------------------------------------------------------------------------- */
+.ncfd-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr);
+    gap: var(--ncfd-gap);
+    align-items: start;
+}
+
+.ncfd-bytype {
+    list-style: none;
+    margin: 0;
+    padding: 8px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ncfd-bytype__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.ncfd-bytype__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ncfd-bytype__count {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.ncfd-bytype__detail {
+    margin-top: 4px;
+    font-size: 0.74rem;
+    color: var(--ncfd-muted);
+}
+
+/* --------------------------------------------------------------------------
+   FILTROS Y PAGINACIÓN
+   -------------------------------------------------------------------------- */
+.ncfd-filters {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) auto;
+    gap: 12px;
+    align-items: end;
+    padding: 16px 20px;
+}
+
+.ncfd-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.ncfd-field label {
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-filters__actions {
+    display: flex;
+    gap: 8px;
+}
+
+.ncfd-filters__actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.ncfd-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--ncfd-border-soft);
+    font-size: 0.8rem;
+}
+
+.ncfd-pager__btns {
+    display: flex;
+    gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   ACCESOS RÁPIDOS
+   -------------------------------------------------------------------------- */
+.ncfd-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 12px;
+    padding: 16px 20px 20px;
+}
+
+.ncfd-tile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--ncfd-border);
+    background: var(--ncfd-bg);
+    color: var(--ncfd-fg);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s ease, transform 0.12s ease, background 0.12s ease;
+}
+
+.ncfd-tile:hover {
+    border-color: color-mix(in srgb, var(--ncfd-accent) 50%, transparent);
+    background: var(--ncfd-surface-2);
+    transform: translateY(-1px);
+}
+
+.ncfd-tile:focus-visible {
+    outline: 2px solid var(--ncfd-accent);
+    outline-offset: 2px;
+}
+
+.ncfd-tile__icon {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    font-size: 1rem;
+}
+
+.ncfd-tile__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ncfd-tile__text strong {
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.ncfd-tile__text small {
+    font-size: 0.74rem;
+    color: var(--ncfd-muted);
+}
+
+/* --------------------------------------------------------------------------
+   VACÍOS
+   -------------------------------------------------------------------------- */
+.ncfd-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 36px 20px;
+    text-align: center;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-empty > .fa {
+    font-size: 1.6rem;
+    opacity: 0.5;
+}
+
+.ncfd-empty p {
+    margin: 0;
+}
+
+.ncfd-empty.is-compact {
+    padding: 24px 20px;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE
+   -------------------------------------------------------------------------- */
+@media (max-width: 1400px) {
+    .ncfd-filters {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .ncfd-filters__actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 1200px) {
+    .ncfd-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .ncfd-split {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 @media (max-width: 768px) {
-    .ncf-dashboard .ncf-stat-value { font-size: 1rem; }
-    .ncf-dashboard .ncf-quick-btn .ncf-btn-icon { font-size: 0.9rem; }
+    .ncfd-container {
+        padding: 14px 12px 32px;
+    }
+    .ncfd-header {
+        padding: 12px;
+    }
+    .ncfd-hide-sm {
+        display: none;
+    }
+    .ncfd-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 12px;
+    }
+    .ncfd-card__head {
+        padding: 12px 14px;
+    }
+    .ncfd-alert {
+        flex-wrap: wrap;
+    }
+    .ncfd-alert__msg {
+        white-space: normal;
+    }
 }
 
-/* Scrollbar */
-.ncf-dashboard ::-webkit-scrollbar { width: 4px; }
-.ncf-dashboard ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.3); border-radius: 2px; }
+@media (max-width: 520px) {
+    .ncfd-kpis {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ncfd-meter__bar,
+    .ncfd-tile,
+    .ncfd-table-wrap {
+        transition: none;
+    }
+}
