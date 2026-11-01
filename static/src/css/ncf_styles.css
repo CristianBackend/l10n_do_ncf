@@ -955,3 +955,123 @@
         transition: none;
     }
 }
+
+/* --------------------------------------------------------------------------
+   AVISO "FALTA CONFIGURAR e-CF" Y GUÍA "CÓMO FACTURAR CON e-CF"
+   -------------------------------------------------------------------------- */
+.ncfd-setup {
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ncfd-setup__text {
+    flex: 1 1 320px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+}
+
+.ncfd-guide__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 20px;
+    border: 0;
+    background: transparent;
+    color: var(--ncfd-fg);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ncfd-guide__head:focus-visible {
+    outline: 2px solid var(--ncfd-accent);
+    outline-offset: -2px;
+    border-radius: var(--ncfd-radius);
+}
+
+.ncfd-guide__head > .fa-question-circle {
+    color: var(--ncfd-accent);
+    font-size: 1.05rem;
+}
+
+.ncfd-guide__title {
+    font-size: 0.98rem;
+    font-weight: 650;
+}
+
+.ncfd-guide__hint {
+    font-size: 0.78rem;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-guide__chev {
+    margin-left: auto;
+    color: var(--ncfd-faint);
+}
+
+.ncfd-guide.is-open .ncfd-guide__head {
+    border-bottom: 1px solid var(--ncfd-border-soft);
+}
+
+.ncfd-guide__steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 18px 20px;
+    list-style: none;
+}
+
+.ncfd-guide__steps > li {
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+}
+
+.ncfd-guide__steps strong {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 0.88rem;
+}
+
+.ncfd-guide__steps p {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--ncfd-muted);
+}
+
+.ncfd-guide__n {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ncfd-accent) 14%, transparent);
+    color: var(--ncfd-accent);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.ncfd-guide__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--ncfd-border-soft);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 1200px) {
+    .ncfd-guide__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+    .ncfd-guide__hint { display: none; }
+    .ncfd-guide__steps { grid-template-columns: minmax(0, 1fr); }
+}

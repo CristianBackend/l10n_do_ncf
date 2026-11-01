@@ -7,6 +7,26 @@ import { useService } from "@web/core/utils/hooks";
 // Formato numérico de República Dominicana (1,234.56).
 const LOCALE = "es-DO";
 
+// Preferencia por usuario y navegador de la guía abierta/cerrada. El
+// almacenamiento puede no estar disponible (modo privado): se ignora el fallo.
+const GUIDE_KEY = "l10n_do_ncf.ecf_guide_open";
+
+function readGuideOpen() {
+    try {
+        return window.localStorage.getItem(GUIDE_KEY) !== "0";
+    } catch {
+        return true;
+    }
+}
+
+function writeGuideOpen(open) {
+    try {
+        window.localStorage.setItem(GUIDE_KEY, open ? "1" : "0");
+    } catch {
+        // sin almacenamiento: solo dura esta sesión
+    }
+}
+
 export class NcfDashboard extends Component {
     setup() {
         this.orm = useService("orm");
@@ -30,7 +50,13 @@ export class NcfDashboard extends Component {
             accepted_month: 0,
             rejected_month: 0,
             pending_month: 0,
+            // Aviso "falta configurar e-CF" (lo rellena el conector, si está).
+            ecf_setup_issue: false,
+            ecf_setup_label: "",
+            ecf_can_configure: false,
         });
+        // Guía "Cómo facturar e-CF": abierta hasta que el usuario la cierre.
+        this.guide = useState({ open: readGuideOpen() });
         onWillStart(async () => {
             await this.loadDashboardData();
         });
@@ -241,6 +267,24 @@ export class NcfDashboard extends Component {
                 onClose: () => this.refresh(),
             }
         );
+    }
+
+    toggleGuide() {
+        this.guide.open = !this.guide.open;
+        writeGuideOpen(this.guide.open);
+    }
+
+    // Ficha de la compañía, pestaña "Facturación electrónica" (método del
+    // conector; el botón solo sale cuando el conector manda ecf_setup_issue).
+    async openEcfSetup() {
+        const action = await this.orm.call("l10n_do_ncf.dashboard", "l10n_do_ecf_open_setup", []);
+        await this.action.doAction(action, { onClose: () => this.refresh() });
+    }
+
+    newInvoice() {
+        this.action.doAction("account.action_move_out_invoice_type", {
+            viewType: "form",
+        });
     }
 
     openSequences() {

@@ -71,6 +71,75 @@
                         </div>
                     </div>
 
+                    <!-- Compañía sin facturación electrónica lista (lo manda el conector) -->
+                    <div t-if="state.ecf_setup_issue" class="ncfd-banner is-warning ncfd-setup" role="alert">
+                        <i class="fa fa-exclamation-triangle"/>
+                        <div class="ncfd-setup__text">
+                            <strong t-esc="state.ecf_setup_label"/>
+                            <span t-if="state.ecf_setup_issue === 'not_enabled'">
+                                Las facturas de esta compañía siguen saliendo con NCF en papel (serie B).
+                            </span>
+                            <span t-else="">
+                                Las facturas electrónicas quedarán pendientes de envío hasta completar la configuración.
+                            </span>
+                            <span t-if="!state.ecf_can_configure" class="ncfd-muted">
+                                Pídaselo a un administrador.
+                            </span>
+                        </div>
+                        <button t-if="state.ecf_can_configure" class="btn btn-sm btn-primary" t-on-click="openEcfSetup">
+                            Configurar facturación electrónica
+                        </button>
+                    </div>
+
+                    <!-- Guía: cómo se factura un e-CF -->
+                    <section t-if="state.ecf_active" class="ncfd-card ncfd-guide" t-att-class="{'is-open': guide.open}">
+                        <button type="button" class="ncfd-guide__head" t-on-click="toggleGuide"
+                                t-att-aria-expanded="guide.open ? 'true' : 'false'">
+                            <i class="fa fa-question-circle"/>
+                            <span class="ncfd-guide__title">Cómo facturar con e-CF</span>
+                            <span class="ncfd-guide__hint">4 pasos · desde Facturación, igual que siempre</span>
+                            <i class="fa ncfd-guide__chev" t-att-class="guide.open ? 'fa-chevron-up' : 'fa-chevron-down'"/>
+                        </button>
+                        <t t-if="guide.open">
+                            <ol class="ncfd-guide__steps">
+                                <li>
+                                    <span class="ncfd-guide__n">1</span>
+                                    <div>
+                                        <strong>Cree la factura</strong>
+                                        <p>Facturación › Clientes › Facturas › Nuevo. El tipo de e-CF se elige solo según el cliente: con RNC de contribuyente sale <span class="ncfd-code">E31</span>, consumidor final <span class="ncfd-code">E32</span>.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="ncfd-guide__n">2</span>
+                                    <div>
+                                        <strong>Revise la franja de arriba</strong>
+                                        <p>En el borrador debe decir <em>“Saldrá como e-CF al confirmar”</em>. Si dice “saldrá en papel”, ahí mismo explica por qué.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="ncfd-guide__n">3</span>
+                                    <div>
+                                        <strong>Confirme</strong>
+                                        <p>Odoo la envía a la plataforma, que le asigna el e-NCF y la manda a la DGII. No hay que hacer nada más.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="ncfd-guide__n">4</span>
+                                    <div>
+                                        <strong>Vea la respuesta de la DGII</strong>
+                                        <p>En segundos la franja pasa a <span class="ncfd-pill is-success">Aceptada</span> con el e-NCF, el código de seguridad y el QR. Si sale <span class="ncfd-pill is-danger">Rechazada</span>, muestra el motivo.</p>
+                                    </div>
+                                </li>
+                            </ol>
+                            <div class="ncfd-guide__foot">
+                                <span class="ncfd-muted">Notas de crédito: desde la factura, botón “Nota de crédito” (sale <span class="ncfd-code">E34</span>).</span>
+                                <button class="btn btn-sm btn-primary" t-on-click="newInvoice">
+                                    <i class="fa fa-plus"/> Nueva factura
+                                </button>
+                            </div>
+                        </t>
+                    </section>
+
                     <!-- Avisos: una sola tarjeta compacta -->
                     <section t-if="state.alerts and state.alerts.length" class="ncfd-card ncfd-alerts">
                         <div class="ncfd-alerts__head">
