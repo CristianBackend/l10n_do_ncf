@@ -870,6 +870,45 @@ class AccountMove(models.Model):
         self.ensure_one()
         return False
 
+    # =========================================
+    # ESTADO FISCAL DEL ORIGEN SEGÚN SUS NOTAS
+    # =========================================
+    def _l10n_do_note_is_issued(self):
+        """True si esta nota ya modifica fiscalmente su comprobante de origen.
+
+        Con NCF de papel, la nota queda emitida al confirmarse. Con numeración
+        externa (e-CF), solo cuando la DGII la acepta, que es cuando recibe su
+        número: si se rechaza, no llega a enviarse o no hay secuencia, el
+        origen queda como estaba.
+        """
+        self.ensure_one()
+        if self.state != 'posted':
+            return False
+        if self._l10n_do_uses_external_numbering():
+            return bool(self.l10n_do_ncf_number)
+        return True
+
+    def _l10n_do_update_origin_fiscal_status(self):
+        """Marca el origen de cada nota emitida: Anulado o Parcialmente
+        Acreditado (nota de crédito) y Con ND (nota de débito)."""
+        for move in self:
+            if move.company_id.country_id.code != 'DO' or not move._l10n_do_note_is_issued():
+                continue
+            if move.move_type == 'out_refund' and move.l10n_do_origin_move_id:
+                origin = move.l10n_do_origin_move_id
+                notes = self.search([
+                    ('l10n_do_origin_move_id', '=', origin.id),
+                    ('state', '=', 'posted'),
+                    ('move_type', '=', 'out_refund'),
+                ]).filtered(lambda note: note._l10n_do_note_is_issued())
+                total_nc = sum(notes.mapped('amount_total'))
+                if abs(total_nc - origin.amount_total) < 0.01:
+                    origin.l10n_do_fiscal_status = 'annulled'
+                else:
+                    origin.l10n_do_fiscal_status = 'partial_credit'
+            if move.l10n_do_is_debit_note and move.l10n_do_debit_origin_move_id:
+                move.l10n_do_debit_origin_move_id.l10n_do_fiscal_status = 'debited'
+
     def _generate_ncf(self):
         """Generar NCF con protección de concurrencia usando FOR UPDATE.
 
@@ -1377,20 +1416,8 @@ class AccountMove(models.Model):
             if is_do and move.move_type in ('out_invoice', 'out_refund') and move.l10n_do_ncf_required and not move.l10n_do_ncf_number:
                 move._generate_ncf()
 
-            if is_do and move.move_type == 'out_refund' and move.l10n_do_origin_move_id:
-                origin = move.l10n_do_origin_move_id
-                total_nc = sum(self.search([
-                    ('l10n_do_origin_move_id', '=', origin.id),
-                    ('state', '=', 'posted'),
-                    ('move_type', '=', 'out_refund'),
-                ]).mapped('amount_total'))
-                if abs(total_nc - origin.amount_total) < 0.01:
-                    origin.l10n_do_fiscal_status = 'annulled'
-                else:
-                    origin.l10n_do_fiscal_status = 'partial_credit'
-
-            if is_do and move.l10n_do_is_debit_note and move.l10n_do_debit_origin_move_id:
-                move.l10n_do_debit_origin_move_id.l10n_do_fiscal_status = 'debited'
+            if is_do:
+                move._l10n_do_update_origin_fiscal_status()
 
             if is_do and move.move_type in ('in_invoice', 'in_refund') and move.l10n_do_fiscal_type in ('informal', 'minor_expense') and not move.l10n_do_ncf_number:
                 move._generate_ncf()
