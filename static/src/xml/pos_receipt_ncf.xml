@@ -3,6 +3,73 @@
     <!-- Extender el recibo del POS para mostrar NCF (Odoo 19) -->
     <t t-name="point_of_sale.OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
 
+        <!-- Impuestos: el nombre del impuesto ("ITBIS 18%"), no el del grupo
+             (pos_ncf_order.js, l10nDoTaxGroupLabel). -->
+        <xpath expr="//span[@t-esc='tax_group.group_name']" position="attributes">
+            <attribute name="t-esc">order.l10nDoTaxGroupLabel(tax_group)</attribute>
+        </xpath>
+
+        <!-- "Need an invoice?" (QR del portal de Odoo) no va en el ticket en RD:
+             el comprobante es el NCF (papel) o el e-CF, con su propio QR. -->
+        <xpath expr="//div[hasclass('pos-receipt-qr')]" position="attributes">
+            <attribute name="t-if">order.company.point_of_sale_use_ticket_qr_code and order.finalized and !order.l10nDoIsDo</attribute>
+        </xpath>
+
+        <!--
+            Ticket en República Dominicana (papel y e-CF), un solo diseño:
+            - cabecera del emisor arriba (razón social, RNC, dirección, fecha),
+              en lugar de la de Odoo (logo o ícono de cámara, "Served by"...);
+              el e-CF la trae completa de l10n_do_ecf_newplain (con tipo y e-NCF);
+            - en pequeño, el número de ticket y quién atendió (para buscar el
+              pedido en una devolución);
+            - pie: solo el nombre de la caja, sin la dirección repetida ni
+              "Powered by Odoo".
+        -->
+        <xpath expr="//ReceiptHeader" position="attributes">
+            <attribute name="t-if">!order.l10nDoIsDo</attribute>
+        </xpath>
+        <xpath expr="//ReceiptHeader" position="after">
+            <div t-if="order.l10nDoIsDo and !order.l10nDoEcfReceipt" class="l10n-do-paper-header text-center">
+                <img t-if="order.config.l10n_do_company_has_logo" t-att-src="order.config.receiptLogoUrl"
+                     alt="Logo" class="pos-receipt-logo"/>
+                <div class="fw-bolder" t-esc="order.company.name"/>
+                <div t-if="order.company.vat">RNC: <t t-esc="order.company.vat"/></div>
+                <div t-if="order.company.street" t-esc="order.company.street"/>
+                <div t-if="order.l10nDoCompanyLocality" t-esc="order.l10nDoCompanyLocality"/>
+                <div>Fecha Emisión: <t t-esc="order.l10nDoIssueDate"/></div>
+            </div>
+            <div t-if="order.l10nDoIsDo" class="l10n-do-ticket-ref text-center text-muted pt-1" style="font-size: 75%;">
+                Ticket <t t-esc="order.pos_reference"/>
+                <t t-if="order.getCashierName()"> · Atendió: <t t-esc="order.getCashierName()"/></t>
+            </div>
+        </xpath>
+
+        <!-- Devolución: "Devuelto en efectivo: RD$ 466.10", sin signo negativo -->
+        <xpath expr="//div[hasclass('paymentlines')]" position="replace">
+            <div class="paymentlines text-start pt-1" t-foreach="paymentLines" t-as="line" t-key="line_index">
+                <t t-if="order.l10nDoIsDo and line.getAmount() &lt; 0">
+                    Devuelto en <t t-esc="line.payment_method_id.name.toLowerCase()"/>:
+                    <span t-out="formatCurrency(-line.getAmount())" class="pos-receipt-right-align font-monospace"/>
+                </t>
+                <t t-else="">
+                    <t t-esc="line.payment_method_id.name"/>
+                    <span t-out="formatCurrency(line.getAmount())" class="pos-receipt-right-align font-monospace"/>
+                </t>
+            </div>
+        </xpath>
+
+        <!-- Pie en RD: solo la caja -->
+        <xpath expr="//div[hasclass('pos-config-name')]/../.." position="attributes">
+            <attribute name="t-if">!order.l10nDoIsDo</attribute>
+        </xpath>
+        <xpath expr="//div[hasclass('pos-config-name')]/../.." position="after">
+            <div t-if="order.l10nDoIsDo" class="l10n-do-footer text-center pt-3" style="font-size: 75%;"
+                 t-esc="order.config.name"/>
+        </xpath>
+        <xpath expr="//div[hasclass('footer-powered-by')]" position="attributes">
+            <attribute name="t-if">!order.l10nDoIsDo</attribute>
+        </xpath>
+
         <!--
             En Odoo 19 el recibo expone un ancla estable para contenido custom:
             <div class="before-footer"/>. Anclamos aquí en lugar de a clases del
@@ -18,9 +85,10 @@
                         <t t-else="">*** COMPROBANTE FISCAL ***</t>
                     </div>
                     <t t-if="order.partner_id">
-                        <div style="margin-bottom: 4px;">
+                        <!-- Consumidor final sin documento: sin línea "N/A". -->
+                        <div t-if="order.partner_id.vat" style="margin-bottom: 4px;">
                             <span style="font-weight: bold;">RNC/Cédula: </span>
-                            <span t-esc="order.partner_id.vat or 'N/A'"/>
+                            <span t-esc="order.partner_id.vat"/>
                         </div>
                         <div style="margin-bottom: 4px;">
                             <span style="font-weight: bold;">Cliente: </span>

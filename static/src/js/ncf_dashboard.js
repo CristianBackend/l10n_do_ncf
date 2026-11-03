@@ -225,11 +225,30 @@ export class NcfDashboard extends Component {
                 byKey[key] = { key, type, title: alert.title || "", messages: [] };
                 groups.push(byKey[key]);
             }
-            byKey[key].messages.push(alert.message || "");
+            // Un aviso puede llevar el registro al que se refiere (p. ej. la
+            // factura de una venta rechazada): el mensaje se vuelve un enlace.
+            byKey[key].messages.push({
+                text: alert.message || "",
+                model: alert.res_model || false,
+                id: alert.res_id || false,
+            });
         }
         // Primero lo más grave.
         const order = { danger: 0, warning: 1, info: 2, success: 3 };
         return groups.sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));
+    }
+
+    openAlertRecord(msg) {
+        if (!msg.model || !msg.id) {
+            return;
+        }
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: msg.model,
+            res_id: msg.id,
+            views: [[false, "form"]],
+            target: "current",
+        });
     }
 
     // Ancho de la barra de "por tipo", relativo al tipo con más comprobantes.

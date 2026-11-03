@@ -104,6 +104,10 @@ class TestPosNcf(NcfTestMixin, CommonPosTest):
         self.assertEqual(refund.l10n_do_ncf_number, 'B0400000001')
         self.assertEqual(refund.l10n_do_ncf_origin, order.l10n_do_ncf_number)
         self.assertEqual(self._current(self.seq_b02), 1, 'La devolución no consume B02')
+        # La nota apunta a la factura que corrige y, ya emitida, la marca
+        # (devolución total: Anulado).
+        self.assertEqual(credit_note.l10n_do_origin_move_id, order.account_move)
+        self.assertEqual(order.account_move.l10n_do_fiscal_status, 'annulled')
 
     def test_ncf_disabled_pos_does_not_consume(self):
         self.pos_config_usd.l10n_do_ncf_enabled = False

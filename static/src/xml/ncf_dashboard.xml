@@ -154,7 +154,9 @@
                                 <strong t-esc="group.title"/>
                                 <span class="ncfd-alert__msgs">
                                     <t t-foreach="group.messages" t-as="msg" t-key="msg_index">
-                                        <span class="ncfd-alert__msg" t-esc="msg"/>
+                                        <a t-if="msg.model and msg.id" href="#" class="ncfd-alert__msg ncfd-alert__link"
+                                           t-on-click.prevent="() => this.openAlertRecord(msg)" t-esc="msg.text"/>
+                                        <span t-else="" class="ncfd-alert__msg" t-esc="msg.text"/>
                                     </t>
                                 </span>
                             </li>

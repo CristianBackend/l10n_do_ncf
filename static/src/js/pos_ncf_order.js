@@ -70,4 +70,45 @@ patch(PosOrder.prototype, {
     hasNcf() {
         return !!this.l10n_do_ncf_number;
     },
+
+    /**
+     * Etiqueta de un grupo de impuestos en el ticket: el nombre de sus
+     * impuestos ("ITBIS 18%"), no el del grupo, que en algunas bases viene
+     * del plan genérico ("Tax 15%") aunque el impuesto sea el ITBIS 18 %.
+     * Sin nombre, la tasa. Fuera de República Dominicana, como siempre.
+     */
+    /** Ticket con el diseño de República Dominicana (pos_receipt_ncf.xml). */
+    get l10nDoIsDo() {
+        return this.company?.country_id?.code === "DO";
+    },
+
+    /** Municipio y provincia del emisor en una línea. */
+    get l10nDoCompanyLocality() {
+        const company = this.company;
+        return [company?.city, company?.state_id?.name].filter((part) => part).join(", ");
+    },
+
+    /** Fecha de emisión dd-MM-aaaa, como en el e-CF. */
+    get l10nDoIssueDate() {
+        const date = this.date_order;
+        if (date && typeof date.toFormat === "function") {
+            return date.toFormat("dd-MM-yyyy");
+        }
+        return date ? String(date).slice(0, 10).split("-").reverse().join("-") : "";
+    },
+
+    l10nDoTaxGroupLabel(taxGroup) {
+        if (!this.l10nDoIsDo) {
+            return taxGroup.group_name;
+        }
+        const taxes = (taxGroup.involved_tax_ids || [])
+            .map((id) => this.models["account.tax"].get(id))
+            .filter((tax) => tax);
+        if (!taxes.length) {
+            return taxGroup.group_name;
+        }
+        return taxes
+            .map((tax) => tax.name || `ITBIS ${tax.amount}%`)
+            .join(", ");
+    },
 });

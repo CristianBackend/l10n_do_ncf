@@ -56,6 +56,15 @@ class PosConfig(models.Model):
     # =========================================
     # CLIENTE POR DEFECTO (opcional, por POS)
     # =========================================
+    # El ticket de RD muestra el logo solo si la compañía tiene uno: la URL
+    # del logo de Odoo devuelve una imagen de relleno (ícono de cámara).
+    l10n_do_company_has_logo = fields.Boolean(compute='_compute_l10n_do_company_has_logo')
+
+    @api.depends('company_id.logo')
+    def _compute_l10n_do_company_has_logo(self):
+        for config in self:
+            config.l10n_do_company_has_logo = bool(config.company_id.logo)
+
     l10n_do_pos_default_partner_id = fields.Many2one(
         'res.partner',
         string='Cliente por Defecto',
@@ -351,6 +360,12 @@ class PosOrder(models.Model):
                     (m.l10n_do_ncf_number for m in originales if m.l10n_do_ncf_number),
                     False
                 )
+                # La factura que la nota corrige: con ella, al quedar emitida
+                # la nota, el origen pasa a Anulado o Parcialmente Acreditado
+                # (_l10n_do_update_origin_fiscal_status). El asistente de
+                # reversión la llena; la devolución del POS no lo hacía.
+                if originales:
+                    vals['l10n_do_origin_move_id'] = originales[:1].id
 
             if ncf_origen:
                 vals['l10n_do_ncf_origin'] = ncf_origen
@@ -443,7 +458,14 @@ class PosOrder(models.Model):
                     )
                     raise
 
-            # 2. Reflejar el B04 y el NCF afectado en la orden POS,
+            # 2. Estado fiscal del origen: el POS confirma con _post(), no con
+            #    action_post(), así que aquí se marca la factura original
+            #    (Anulado / Parcialmente Acreditado) cuando la nota ya está
+            #    emitida (B04 numerado). Una nota e-CF lo hace al aceptarse.
+            if order._l10n_do_is_refund():
+                move._l10n_do_update_origin_fiscal_status()
+
+            # 3. Reflejar el B04 y el NCF afectado en la orden POS,
             #    para que el recibo termico los pueda mostrar.
             if order._l10n_do_is_refund() and move.l10n_do_ncf_number:
                 order.sudo().write({
