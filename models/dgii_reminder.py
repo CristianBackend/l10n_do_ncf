@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import models, api, _
 from datetime import date
+from markupsafe import Markup
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class DgiiReminder(models.AbstractModel):
         
         month_name = months.get(date.today().month, '')
         
-        message_body = '''
+        message_body = Markup('''
         <div style="padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; margin: 10px 0;">
             <h3 style="color: #856404; margin-top: 0;">Recordatorio DGII - %s</h3>
             <p style="color: #856404;">Los reportes DGII deben enviarse <strong>antes del dia 15</strong>:</p>
@@ -39,20 +40,14 @@ class DgiiReminder(models.AbstractModel):
             </ul>
             <p style="color: #856404;">Accede a <strong>Contabilidad - Reportes - Reportes DGII</strong> para generarlos.</p>
         </div>
-        ''' % month_name
+        ''') % month_name
         
         sent_count = 0
-        
+        notified_users = self.env['res.users']
+
         for company in companies:
             try:
-                users = self.env['res.users'].search([
-                    ('company_id', '=', company.id),
-                    ('active', '=', True),
-                    '|',
-                    ('groups_id', 'in', self.env.ref('account.group_account_manager').id),
-                    ('groups_id', 'in', self.env.ref('base.group_system').id),
-                ])
-                
+                users = self._get_reminder_users(company) - notified_users
                 for user in users:
                     if user.partner_id:
                         user.partner_id.message_post(
@@ -62,14 +57,28 @@ class DgiiReminder(models.AbstractModel):
                             subtype_xmlid='mail.mt_note',
                         )
                         sent_count += 1
-                        _logger.info('Notificacion DGII enviada a %s' % user.name)
-                        
+                        _logger.info('Notificacion DGII enviada a %s', user.name)
+                notified_users |= users
+
             except Exception as e:
-                _logger.error('Error enviando notificacion a %s: %s' % (company.name, str(e)))
+                _logger.error('Error enviando notificacion a %s: %s', company.name, e)
                 continue
-        
+
         _logger.info('Notificaciones DGII enviadas: %s' % sent_count)
         return True
+
+    @api.model
+    def _get_reminder_users(self, company):
+        """Usuarios internos activos con acceso a la compania que son
+        contadores (administradores de contabilidad) o administradores."""
+        users = self.env['res.users'].search([
+            ('company_ids', 'in', company.id),
+            ('share', '=', False),
+        ])
+        return users.filtered(
+            lambda u: u.has_group('account.group_account_manager')
+            or u.has_group('base.group_system')
+        )
 
     @api.model
     def send_test_reminder(self):
