@@ -100,7 +100,10 @@ class AccountMove(models.Model):
         ('debited', 'Con ND'),
         ('rejected', 'Rechazado DGII'),
         ('error_reported', 'Error Reportado'),
-    ], string='Estado Fiscal', default='draft', tracking=True)
+    ], string='Estado Fiscal', default='draft', tracking=True,
+        # Una copia es un documento nuevo: nace en Borrador, no hereda
+        # "Válido", "Anulado" ni "Rechazado DGII" del original.
+        copy=False)
 
     l10n_do_reported_606 = fields.Boolean(string='Reportado 606', default=False, tracking=True)
     l10n_do_reported_607 = fields.Boolean(string='Reportado 607', default=False, tracking=True)

@@ -18,6 +18,20 @@ class TestCreditDebitOrigin(NcfCommon):
         cls._create_sales_ncf_sequences()
         cls.invoice = cls._create_invoice(cls.partner_taxpayer, post=True)
 
+    def test_copy_starts_with_initial_fiscal_status(self):
+        # Una factura anulada por su nota se copia: la copia es un documento
+        # nuevo y nace en Borrador, no "Anulado".
+        invoice = self._create_invoice(self.partner_taxpayer, post=True)
+        self.assertEqual(invoice.l10n_do_fiscal_status, 'valid')
+        refund = self._reverse(invoice)
+        refund.l10n_do_credit_note_reason = '01'
+        refund.action_post()
+        self.assertEqual(invoice.l10n_do_fiscal_status, 'annulled')
+        copy = invoice.copy()
+        self.assertEqual(copy.l10n_do_fiscal_status, 'draft')
+        self.assertEqual(copy.l10n_do_fiscal_status,
+                         self.env['account.move'].default_get(['l10n_do_fiscal_status'])['l10n_do_fiscal_status'])
+
     def _reverse(self, invoice):
         wizard = self.env['account.move.reversal'].with_context(
             active_model='account.move', active_ids=invoice.ids,
