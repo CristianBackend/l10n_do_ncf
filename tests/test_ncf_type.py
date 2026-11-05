@@ -46,6 +46,22 @@ class TestNcfType(NcfCommon):
     def test_foreign_customer_gets_b16(self):
         self._assert_type(self._create_invoice(self.partner_foreign), 'B16')
 
+    def test_foreign_special_regime_gets_b14(self):
+        """Un diplomático: extranjero marcado a mano como Régimen Especial
+        (Formato e-CF v1.0, pág. 12, nota 5). Se confirma: la regla del país
+        acepta B14 para él."""
+        self.partner_foreign.write({
+            'vat': 'P1234567', 'l10n_do_dgii_tax_payer_type': 'special_regime'})
+        invoice = self._create_invoice(self.partner_foreign)
+        self._assert_type(invoice, 'B14')
+        invoice.action_post()
+        self.assertTrue(invoice.l10n_do_ncf_number.startswith('B14'))
+
+    def test_foreign_governmental_still_gets_b16(self):
+        """Solo la marca de Régimen Especial cambia el tipo de un extranjero."""
+        self.partner_foreign.l10n_do_dgii_tax_payer_type = 'governmental'
+        self._assert_type(self._create_invoice(self.partner_foreign), 'B16')
+
     def test_type_follows_partner_change(self):
         invoice = self._create_invoice(self.partner_consumer)
         self._assert_type(invoice, 'B02')

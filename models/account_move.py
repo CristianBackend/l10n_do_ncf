@@ -25,6 +25,11 @@ ECF_PATTERN = r'^E(31|32|33|34|41|42|43|44|45|46|47)\d{10}$'
 GOV_RNC_PREFIXES = ('401', '402', '430', '431')
 NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41|42|43|44|45|46|47)\d{10})$'
 
+# Tipos electrónicos de venta que siguen las mismas reglas de coherencia
+# fiscal que su equivalente en papel (cliente extranjero, RNC obligatorio,
+# patrón gubernamental). Un conector de e-CF convierte 14/15/16 en 44/45/46.
+COHERENCE_PAPER_CODE = {'44': '14', '45': '15', '46': '16'}
+
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
@@ -596,15 +601,17 @@ class AccountMove(models.Model):
             # 1. Nota de Debito: siempre B03
             if self.l10n_do_is_debit_note:
                 return '03'  # B03 - Nota de Debito
-            # 2. Exportacion: cliente extranjero (pais != DO)
-            if partner_country and partner_country != 'DO':
-                return '16'  # B16 - Exportacion
-            # 3. Gubernamental
-            if client_type == 'governmental':
-                return '15'  # B15 - Gubernamental
-            # 4. Regimen Especial
+            # 2. Regimen Especial marcado a mano, aunque el cliente sea
+            #    extranjero: un diplomatico recibe B14/E44 con su
+            #    identificacion extranjera (Formato e-CF v1.0, pag. 12, nota 5).
             if client_type == 'special_regime':
                 return '14'  # B14 - Regimen Especial
+            # 3. Exportacion: cliente extranjero (pais != DO)
+            if partner_country and partner_country != 'DO':
+                return '16'  # B16 - Exportacion
+            # 4. Gubernamental
+            if client_type == 'governmental':
+                return '15'  # B15 - Gubernamental
             # 5. Contribuyente registrado que solicita credito fiscal
             if client_type == 'taxpayer':
                 return '01'  # B01 - Credito Fiscal
@@ -1111,6 +1118,7 @@ class AccountMove(models.Model):
             return
 
         ncf_code = self.l10n_do_ncf_type_id.code
+        ncf_code = COHERENCE_PAPER_CODE.get(ncf_code, ncf_code)
         partner_vat = (self.partner_id.vat or '').strip()
 
         # Validación B15 (Gubernamental) con RNC no gubernamental
@@ -1209,8 +1217,9 @@ class AccountMove(models.Model):
         """Validación fiscal según algoritmo unificado.
 
         Reglas:
-        - País != RD → la factura debe ser B16 (Exportación). No aplica a
-          notas de crédito (B04) ni de débito (B03), que llevan su propio tipo
+        - País != RD → la factura debe ser B16 (Exportación), o B14 si el
+          cliente está marcado como Régimen Especial (diplomático). No aplica
+          a notas de crédito (B04) ni de débito (B03), que llevan su propio tipo
         - B01 (Fiscal) → RNC obligatorio, país RD
         - B02 (Consumidor) → admite cédula; warning si es RNC de empresa
         - B14 (Especial) → RNC obligatorio, país RD, warning si parece normal
@@ -1238,6 +1247,8 @@ class AccountMove(models.Model):
             return {}
 
         ncf_code = ncf_type.code  # '01', '02', '14', '15', '16', etc.
+        # E44/E45/E46 se validan como B14/B15/B16.
+        ncf_code = COHERENCE_PAPER_CODE.get(ncf_code, ncf_code)
         partner_country = partner.country_id.code if partner.country_id else 'DO'
         partner_vat = (partner.vat or '').strip()
         client_type = partner.l10n_do_dgii_tax_payer_type or 'final_consumer'
@@ -1249,11 +1260,15 @@ class AccountMove(models.Model):
             # Cliente extranjero DEBE usar B16 en la factura. Las notas de
             # crédito (B04) y de débito (B03) que la corrigen no son B16.
             is_plain_invoice = self.move_type == 'out_invoice' and not self.l10n_do_is_debit_note
-            if is_plain_invoice and ncf_code != '16':
+            # Un extranjero marcado como Régimen Especial (diplomático) lleva
+            # B14/E44 con su identificación extranjera.
+            allowed = ('16', '14') if client_type == 'special_regime' else ('16',)
+            if is_plain_invoice and ncf_code not in allowed:
                 raise UserError(_(
                     "❌ ERROR FISCAL: Cliente Extranjero\n\n"
                     "El cliente '%s' es de %s (no RD).\n"
-                    "Para clientes extranjeros DEBE usar B16 (Exportación).\n\n"
+                    "Para clientes extranjeros DEBE usar B16 (Exportación), o B14 si el\n"
+                    "cliente está marcado como Régimen Especial (diplomático).\n\n"
                     "Tipo actual: %s\n\n"
                     "Corrija el tipo de comprobante o el país del cliente."
                 ) % (partner.name, partner_country, ncf_type.name))
