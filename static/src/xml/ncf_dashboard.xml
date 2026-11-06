@@ -169,22 +169,25 @@
                         <div class="ncfd-alerts__head">
                             <i class="fa fa-wrench"/>
                             <span>Configuración pendiente</span>
-                            <span class="ncfd-count" t-esc="state.config_pending.length"/>
+                            <span class="ncfd-count" t-esc="configTotal()"/>
                         </div>
-                        <ul class="ncfd-alerts__list">
-                            <li t-foreach="state.config_pending" t-as="group" t-key="group.key"
-                                class="ncfd-alert is-warning">
-                                <span class="ncfd-dot"/>
-                                <strong><t t-esc="group.title"/><t t-if="group.count">: <t t-esc="group.count"/></t></strong>
-                                <span class="ncfd-alert__msgs">
-                                    <span class="ncfd-alert__msg" t-esc="group.hint"/>
-                                </span>
-                                <button type="button" class="btn btn-sm btn-secondary"
-                                        t-on-click="() => this.openConfigPending(group)">
-                                    Completar
-                                </button>
-                            </li>
-                        </ul>
+                        <t t-foreach="[['danger', 'Bloquea la facturación'], ['warning', 'Afecta los reportes DGII']]"
+                           t-as="block" t-key="block[0]">
+                            <div t-if="configGroups(block[0]).length" class="ncfd-config__block">
+                                <span class="ncfd-pill" t-att-class="'is-' + block[0]" t-esc="block[1]"/>
+                                <ul class="ncfd-alerts__list">
+                                    <li t-foreach="configGroups(block[0])" t-as="group" t-key="group.key"
+                                        class="ncfd-alert" t-att-class="'is-' + group.severity">
+                                        <span class="ncfd-dot"/>
+                                        <span class="ncfd-config__text" t-esc="group.text"/>
+                                        <button type="button" class="btn btn-sm btn-secondary"
+                                                t-on-click="() => this.openConfigPending(group)">
+                                            Completar
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </t>
                     </section>
 
                     <!-- ================= INDICADORES ================= -->

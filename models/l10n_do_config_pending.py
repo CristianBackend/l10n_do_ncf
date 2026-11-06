@@ -58,24 +58,43 @@ class ResCompany(models.Model):
         return self.env['account.account'].union(*[account for account, in groups])
 
     def _l10n_do_config_pending(self):
-        """[{key, title, hint, count}] de lo que falta, solo grupos con algo."""
+        """Lo que falta, solo los grupos con algo:
+        [{key, severity, count, text}].
+
+        severity: 'danger' si BLOQUEA la emisión del e-CF, 'warning' si solo
+        afecta los reportes DGII (606/607). El texto va con el número delante.
+        """
         self.ensure_one()
+
+        def text(count, one, many):
+            return (one if count == 1 else many) % count
+
+        zero = len(self._l10n_do_pending_taxes_zero())
+        kind = len(self._l10n_do_pending_taxes_kind())
+        journals = len(self._l10n_do_pending_journals())
+        accounts = len(self._l10n_do_pending_accounts())
         groups = [
-            ('taxes_kind', _('Impuestos sin clase DGII'),
-             _('ITBIS, ISC, propina u otros: la casilla del 606/607 donde va cada uno.'),
-             self._l10n_do_pending_taxes_kind()),
-            ('taxes_zero', _('Impuestos de 0 % sin indicador'),
-             _('Indique si son ITBIS 0 % (tasa cero) o Exento: sin eso el e-CF se bloquea.'),
-             self._l10n_do_pending_taxes_zero()),
-            ('journals', _('Diarios sin forma de pago DGII'),
-             _('Forma de pago con que el 606/607 reporta los pagos de cada diario.'),
-             self._l10n_do_pending_journals()),
-            ('accounts', _('Cuentas de gasto usadas sin Tipo 606'),
-             _('Tipo de bienes y servicios con que se reportan las compras de cada cuenta.'),
-             self._l10n_do_pending_accounts()),
+            ('taxes_zero', 'danger', zero, text(
+                zero,
+                _('%s impuesto de 0 %% no indica si es Exento o tasa cero. '
+                  'Sin eso no se puede emitir el e-CF.'),
+                _('%s impuestos de 0 %% no indican si son Exentos o tasa cero. '
+                  'Sin eso no se puede emitir el e-CF.'))),
+            ('taxes_kind', 'warning', kind, text(
+                kind,
+                _('%s impuesto sin clasificar para el 606 y el 607.'),
+                _('%s impuestos sin clasificar para el 606 y el 607.'))),
+            ('journals', 'warning', journals, text(
+                journals,
+                _('%s diario sin forma de pago para el 606 y el 607.'),
+                _('%s diarios sin forma de pago para el 606 y el 607.'))),
+            ('accounts', 'warning', accounts, text(
+                accounts,
+                _('%s cuenta de gasto sin tipo de bienes y servicios para el 606.'),
+                _('%s cuentas de gasto sin tipo de bienes y servicios para el 606.'))),
         ]
-        return [{'key': key, 'title': title, 'hint': hint, 'count': len(records)}
-                for key, title, hint, records in groups if records]
+        return [{'key': key, 'severity': severity, 'count': count, 'text': message}
+                for key, severity, count, message in groups if count]
 
     def _l10n_do_config_pending_action(self, key):
         """Lista filtrada para completar un grupo de la tarjeta."""

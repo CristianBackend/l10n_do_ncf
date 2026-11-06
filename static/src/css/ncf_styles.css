@@ -54,8 +54,8 @@
    ========================================================================== */
 
 .ncfd {
-    --ncfd-fg: var(--bs-body-color, #1f2937);
-    --ncfd-bg: var(--bs-body-bg, #ffffff);
+    --ncfd-fg: var(--body-color, var(--bs-body-color, #1f2937));
+    --ncfd-bg: var(--body-bg, var(--bs-body-bg, #ffffff));
     --ncfd-surface: color-mix(in srgb, var(--ncfd-fg) 3.5%, var(--ncfd-bg));
     --ncfd-surface-2: color-mix(in srgb, var(--ncfd-fg) 7%, var(--ncfd-bg));
     --ncfd-border: color-mix(in srgb, var(--ncfd-fg) 13%, transparent);
@@ -329,9 +329,15 @@
 .ncfd-alert.is-danger .ncfd-dot { background: var(--ncfd-danger); }
 .ncfd-alert.is-success .ncfd-dot { background: var(--ncfd-success); }
 
-/* Configuración pendiente: misma tarjeta que Avisos, con el botón a la derecha */
+/* Configuración pendiente: misma tarjeta que Avisos. Primero lo que bloquea
+   la emisión (is-danger), luego lo que solo afecta reportes (is-warning). Solo
+   tokens del panel: sirve igual en modo claro y oscuro. */
+.ncfd-config { gap: 12px; }
+.ncfd-config .ncfd-alerts__head { color: var(--ncfd-fg); }
+.ncfd-config__block { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ncfd-config__block .ncfd-alerts__list { align-self: stretch; }
 .ncfd-config .ncfd-alert { align-items: center; }
-.ncfd-config .ncfd-alert__msg { white-space: normal; }
+.ncfd-config__text { color: var(--ncfd-fg); }
 .ncfd-config .ncfd-alert .btn { margin-left: auto; flex-shrink: 0; }
 
 /* --------------------------------------------------------------------------

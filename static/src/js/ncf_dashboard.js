@@ -293,8 +293,19 @@ export class NcfDashboard extends Component {
         writeGuideOpen(this.guide.open);
     }
 
-    // Tarjeta "Configuración pendiente": abre la lista filtrada del grupo (o
-    // la acción que mande el servidor, p. ej. cargar un rango e-CF).
+    // Tarjeta "Configuración pendiente": lo que bloquea la emisión (danger)
+    // va aparte y primero de lo que solo afecta los reportes (warning).
+    configGroups(severity) {
+        return (this.state.config_pending || []).filter((g) => g.severity === severity);
+    }
+
+    // Total de elementos pendientes (no de grupos).
+    configTotal() {
+        return (this.state.config_pending || []).reduce((sum, g) => sum + (g.count || 0), 0);
+    }
+
+    // Abre la lista filtrada del grupo (o la acción que mande el servidor,
+    // p. ej. cargar un rango e-CF).
     async openConfigPending(group) {
         const action = await this.orm.call(
             "l10n_do_ncf.dashboard", "l10n_do_open_config_pending", [group.key]

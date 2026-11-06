@@ -112,10 +112,28 @@ class TestAutoconfig(NcfCommon):
                 'account_id': account.id})],
         })
         bill.action_post()
-        counts = {g['key']: g['count'] for g in company._l10n_do_config_pending()}
+        pending = company._l10n_do_config_pending()
+        counts = {g['key']: g['count'] for g in pending}
         self.assertEqual(counts['taxes_kind'], 2)
         self.assertEqual(counts['taxes_zero'], 1)
         self.assertEqual(counts['journals'], 1)
+        # Lo que bloquea la emisión va marcado aparte de lo que solo afecta
+        # los reportes; el texto lleva el número delante y concuerda.
+        by_key = {g['key']: g for g in pending}
+        self.assertEqual(by_key['taxes_zero']['severity'], 'danger')
+        self.assertEqual(by_key['taxes_zero']['text'],
+                         '1 impuesto de 0 % no indica si es Exento o tasa cero. '
+                         'Sin eso no se puede emitir el e-CF.')
+        self.assertEqual(by_key['taxes_kind']['severity'], 'warning')
+        self.assertEqual(by_key['taxes_kind']['text'],
+                         '2 impuestos sin clasificar para el 606 y el 607.')
+        self.assertEqual(by_key['journals']['text'],
+                         '1 diario sin forma de pago para el 606 y el 607.')
+        self.assertEqual(by_key['accounts']['severity'], 'warning')
+        self.assertEqual(by_key['accounts']['text'],
+                         '%s cuenta%s de gasto sin tipo de bienes y servicios para el 606.' % (
+                             by_key['accounts']['count'],
+                             '' if by_key['accounts']['count'] == 1 else 's'))
         self.assertIn(account, company._l10n_do_pending_accounts())
         # Cada grupo abre su lista filtrada.
         action = self.env['l10n_do_ncf.dashboard'].l10n_do_open_config_pending('taxes_kind')
