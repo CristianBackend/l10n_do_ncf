@@ -495,24 +495,38 @@ class AccountMove(models.Model):
             move.l10n_do_606_monto_bienes = bienes
             move.l10n_do_606_monto_servicios = servicios
 
-    @api.depends('l10n_do_fiscal_type', 'amount_tax')
+    @api.depends('l10n_do_fiscal_type', 'line_ids.tax_line_id', 'line_ids.amount_currency')
     def _compute_606_itbis_costo(self):
         for move in self:
-            move.l10n_do_itbis_costo = abs(move.amount_tax) if move.l10n_do_fiscal_type == 'minor_expense' else 0
+            move.l10n_do_itbis_costo = (
+                move._l10n_do_itbis_amount() if move.l10n_do_fiscal_type == 'minor_expense' else 0)
 
-    @api.depends('amount_tax', 'l10n_do_itbis_costo', 'l10n_do_itbis_proporcionalidad', 'l10n_do_fiscal_type')
+    def _l10n_do_itbis_amount(self):
+        """ITBIS del asiento (sin ISC, propina, otros impuestos ni
+        retenciones), en la moneda de la factura: las líneas de impuesto de
+        clase ITBIS, o sin clase al 18 o 16 %."""
+        self.ensure_one()
+        total = 0.0
+        for line in self.line_ids.filtered(lambda l: l.tax_line_id and l.tax_line_id.amount > 0):
+            tax = line.tax_line_id
+            if tax.dgii_tax_kind == 'itbis' or (
+                    not tax.dgii_tax_kind and tax.amount_type == 'percent'
+                    and tax.amount in (18.0, 16.0)):
+                total += abs(line.amount_currency)
+        return total
+
+    @api.depends('line_ids.tax_line_id', 'line_ids.amount_currency', 'l10n_do_itbis_costo',
+                 'l10n_do_fiscal_type')
     def _compute_606_itbis(self):
         for move in self:
             if move.move_type not in ('in_invoice', 'in_refund'):
                 move.l10n_do_itbis_facturado = move.l10n_do_itbis_adelantar = 0
                 continue
-            move.l10n_do_itbis_facturado = abs(move.amount_tax or 0)
-            if move.l10n_do_fiscal_type in ('informal', 'minor_expense'):
-                move.l10n_do_itbis_adelantar = 0
-            else:
-                move.l10n_do_itbis_adelantar = max(
-                    move.l10n_do_itbis_facturado - move.l10n_do_itbis_costo - move.l10n_do_itbis_proporcionalidad, 0
-                )
+            move.l10n_do_itbis_facturado = move._l10n_do_itbis_amount()
+            # ITBIS por adelantar = facturado - llevado al costo (Norma General
+            # 07-2018, Anexo A, casilla 15; instructivo 606, julio 2025).
+            move.l10n_do_itbis_adelantar = max(
+                move.l10n_do_itbis_facturado - move.l10n_do_itbis_costo, 0)
 
     @api.depends('l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.dgii_606_bucket')
     def _compute_606_buckets(self):

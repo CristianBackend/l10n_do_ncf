@@ -167,32 +167,56 @@ class DgiiReportWizard(models.TransientModel):
             return ''
         return vat.replace('-', '').replace(' ', '')
 
-    def _pad_ncf(self, ncf, length=None):
-        """
-        Formatear NCF/e-CF a su longitud según el tipo.
+    # Longitudes de un comprobante en los formatos 606/607/608: 11 (serie B),
+    # 13 (e-CF, Aviso 24 de abril 2019) y 19 (NCF anterior a mayo 2018).
+    # Instructivo 606 (julio 2025), casillas 4 y 5; instructivo 607, casillas 3 y 4.
+    NCF_LENGTHS = (11, 13, 19)
 
-        NCF fiscal  (B01, B02, ...): 11 caracteres  -> B + 2 + 8
-        e-CF        (E31, E32, ...): 13 caracteres  -> E + 2 + 10
-
-        Cortar todo a 11 le quitaba los dos últimos dígitos a cada e-CF.
-        """
-        if not ncf:
+    def _ncf_checked(self, pending, move, ncf, what):
+        """El comprobante tal cual, o '' y un error en "Pendientes de
+        completar" si su longitud no es válida. Nunca se corta."""
+        ncf = (ncf or '').strip().upper()
+        if ncf and len(ncf) not in self.NCF_LENGTHS:
+            self._pending(pending, move, _(
+                'ERROR: %(what)s %(ncf)s tiene %(n)s caracteres (deben ser 11, 13 o 19)',
+                what=what, ncf=ncf, n=len(ncf)))
             return ''
-        ncf = ncf.strip().upper()
-        if length is None:
-            length = 13 if ncf.startswith('E') else 11
-        return ncf[:length]
+        return ncf
 
-    def _pad_ncf_modified(self, ncf):
-        """
-        Formatear NCF modificado (el comprobante que corrige una NC/ND).
+    def _tax_amounts(self, move, pending):
+        """ITBIS, ISC, otros impuestos y propina del asiento, en DOP.
 
-        Es un NCF como cualquier otro: 11 para B, 13 para e-CF. No se rellena
-        con espacios, que en un archivo separado por pipes quedan dentro del campo.
+        Salen de las líneas de impuesto (las retenciones, negativas, no
+        cuentan). Cada impuesto dice su clase en "Clase DGII"; uno sin clase
+        cuyo porcentaje es 18 o 16 es ITBIS (las dos tasas del ITBIS), y uno
+        de tasa 0 marcado como ITBIS 0 %/Exento también. Cualquier otro sin
+        clase queda pendiente: no se adivina en qué casilla va.
+        Los importes escritos a mano en la factura (ISC, otros, propina)
+        mandan sobre los calculados.
         """
-        if not ncf:
-            return ''
-        return self._pad_ncf(ncf)
+        totals = {'itbis': 0.0, 'isc': 0.0, 'other': 0.0, 'tip': 0.0}
+        unknown = set()
+        for line in move.line_ids.filtered(lambda l: l.tax_line_id and l.tax_line_id.amount > 0):
+            tax = line.tax_line_id
+            kind = tax.dgii_tax_kind
+            if not kind and tax.amount_type == 'percent' and tax.amount in (18.0, 16.0):
+                kind = 'itbis'
+            if not kind:
+                unknown.add(tax.name)
+                continue
+            totals[kind] += abs(line.balance)
+        for name in sorted(unknown):
+            self._pending(pending, move, _(
+                'el impuesto "%s" no tiene "Clase DGII" (ITBIS, ISC, propina u otros)', name))
+        manual = {
+            'isc': move.l10n_do_impuesto_selectivo,
+            'other': move.l10n_do_otros_impuestos,
+            'tip': move.l10n_do_propina_legal,
+        }
+        for kind, amount in manual.items():
+            if amount:
+                totals[kind] = abs(self._to_dop(move, amount))
+        return totals
 
     def _format_date(self, dt):
         """Formatear fecha YYYYMMDD"""
@@ -263,19 +287,21 @@ class DgiiReportWizard(models.TransientModel):
         23 columnas según especificación DGII
         Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
         """
-        # Buscar facturas de compra locales (excluir exterior -> van al 609)
+        # Facturas, notas de crédito y de débito de proveedores (Anexo A,
+        # casilla 4: "incluyendo las notas de crédito o débito"). Los pagos al
+        # exterior (B17/E47) también van en el 606 (instructivo 606, julio 2025,
+        # "Remisión de NCF especiales"; preguntas frecuentes e-CF 1.2.29); las
+        # demás compras a proveedores del exterior van solo en el 609.
         all_invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            ('move_type', '=', 'in_invoice'),  # Solo facturas, NO notas de credito de proveedor
+            ('move_type', 'in', ('in_invoice', 'in_refund')),
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
-            ('l10n_do_fiscal_type', '!=', 'exterior'),  # Exterior va al 609
         ], order='invoice_date')
-        
-        # Filtrar: solo proveedores dominicanos o sin pais (asume local)
         invoices = all_invoices.filtered(
-            lambda i: not i.partner_id.country_id or i.partner_id.country_id.code == 'DO'
+            lambda i: i.l10n_do_fiscal_type == 'exterior'
+            or not i.partner_id.country_id or i.partner_id.country_id.code == 'DO'
         )
 
         if not invoices:
@@ -302,8 +328,9 @@ class DgiiReportWizard(models.TransientModel):
             if inv.l10n_do_fiscal_type == 'informal':
                 rnc_supplier = self._clean_rnc(inv.l10n_do_informal_provider_cedula)
                 tipo_id = '2' if rnc_supplier else ''  # Cédula
-            elif inv.l10n_do_fiscal_type == 'minor_expense':
-                # B13 usa el RNC o la cédula de la propia empresa
+            elif inv.l10n_do_fiscal_type in ('minor_expense', 'exterior'):
+                # B13/E43 y B17/E47 llevan el RNC o la cédula del encabezado,
+                # el de la propia empresa (instructivo 606, julio 2025).
                 rnc_supplier = self._clean_rnc(self.company_id.vat)
                 tipo_id = self._id_type_by_length(rnc_supplier)
             elif rnc_supplier:
@@ -325,17 +352,29 @@ class DgiiReportWizard(models.TransientModel):
                     'falta el tipo de bienes y servicios: indíquelo en la factura o en el '
                     '"Tipo 606" de la cuenta de gasto'))
 
-            # Columna 4: NCF
-            if inv.l10n_do_fiscal_type in ('informal', 'minor_expense'):
-                ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
+            # Columna 4: NCF (el propio en B11/B13/B17 y sus e-CF; el del
+            # proveedor en los demás)
+            exterior = inv.l10n_do_fiscal_type == 'exterior'
+            if inv.l10n_do_fiscal_type in ('informal', 'minor_expense') or exterior:
+                ncf = inv.l10n_do_ncf_number or inv.l10n_do_vendor_ncf
             else:
-                ncf = self._pad_ncf(inv.l10n_do_vendor_ncf or '')
+                ncf = inv.l10n_do_vendor_ncf
+            ncf = self._ncf_checked(pending, inv, ncf, _('el NCF'))
+            if not ncf:
+                self._pending(pending, inv, _('falta el NCF'))
 
-            # Columna 5: NCF Modificado (para NC)
+            # Columna 5: NCF modificado por una nota de crédito o de débito
             ncf_modificado = ''
-            if inv.move_type == 'in_refund' and inv.reversed_entry_id:
-                ncf_mod = inv.reversed_entry_id.l10n_do_vendor_ncf or ''
-                ncf_modificado = self._pad_ncf_modified(ncf_mod)
+            is_note = inv.move_type == 'in_refund' or inv.l10n_do_is_vendor_debit_note
+            if inv.move_type == 'in_refund':
+                origin = inv.reversed_entry_id
+                ncf_modificado = (inv.l10n_do_ncf_origin or origin.l10n_do_ncf_number
+                                  or origin.l10n_do_vendor_ncf)
+            elif inv.l10n_do_is_vendor_debit_note:
+                ncf_modificado = inv.l10n_do_vendor_debit_ncf_origin
+            ncf_modificado = self._ncf_checked(pending, inv, ncf_modificado, _('el NCF modificado'))
+            if is_note and not ncf_modificado:
+                self._pending(pending, inv, _('falta el NCF que modifica la nota'))
 
             # Columna 6: Fecha del comprobante
             fecha_comprobante = self._format_date(inv.invoice_date)
@@ -362,8 +401,11 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 10: Monto total (base imponible)
             monto_total = monto_bienes + monto_servicios
 
-            # Columna 11: ITBIS Facturado (CONVERTIDO A DOP)
-            itbis_facturado = abs(self._to_dop(inv, inv.l10n_do_itbis_facturado or inv.amount_tax or 0.0))
+            # Columnas 11, 20, 21 y 22: ITBIS, ISC, otros impuestos y propina,
+            # cada uno en su casilla (Anexo A: los montos van "sin incluir
+            # ITBIS, ISC, propina, otros"). Ya están en DOP (balance).
+            taxes = self._tax_amounts(inv, pending)
+            itbis_facturado = taxes['itbis']
 
             # Columna 12: ITBIS Retenido (CONVERTIDO A DOP)
             itbis_retenido = abs(self._to_dop(inv, inv.l10n_do_itbis_retenido or inv.l10n_do_total_itbis_retention or 0.0))
@@ -373,22 +415,22 @@ class DgiiReportWizard(models.TransientModel):
 
             # Columna 14: ITBIS llevado al costo (CONVERTIDO A DOP)
             itbis_costo = abs(self._to_dop(inv, inv.l10n_do_itbis_costo or 0.0))
-            
+
             # Para B13, todo el ITBIS va al costo
             if inv.l10n_do_fiscal_type == 'minor_expense' and itbis_costo == 0:
                 itbis_costo = itbis_facturado
 
-            # Columna 15: ITBIS a adelantar (CONVERTIDO A DOP)
-            itbis_adelantar = abs(self._to_dop(inv, inv.l10n_do_itbis_adelantar or 0.0))
-            if itbis_adelantar == 0 and inv.l10n_do_fiscal_type not in ('informal', 'minor_expense'):
-                itbis_adelantar = max(itbis_facturado - itbis_costo - itbis_proporcionalidad, 0)
+            # Columna 15: ITBIS por adelantar = facturado - llevado al costo
+            # (Anexo A casilla 15; instructivo 606 casilla 15; la herramienta
+            # 606 lo recalcula igual: ItbisFacturado - ItbisAgregado).
+            itbis_adelantar = max(round(itbis_facturado - itbis_costo, 2), 0.0)
 
             # Columna 16: ITBIS percibido en compras (CONVERTIDO A DOP)
             itbis_percibido = abs(self._to_dop(inv, inv.l10n_do_itbis_percibido or 0.0))
 
             # Columna 17: Tipo de retención en ISR
             tipo_retencion_isr = inv.l10n_do_tipo_retencion_isr or ''
-            
+
             # Columna 18: Monto retención renta (ISR) (CONVERTIDO A DOP)
             isr_retenido = abs(self._to_dop(inv, inv.l10n_do_isr_retenido or inv.l10n_do_total_isr_retention or 0.0))
             if isr_retenido > 0 and not tipo_retencion_isr:
@@ -397,14 +439,16 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 19: ISR percibido en compras (CONVERTIDO A DOP)
             isr_percibido = abs(self._to_dop(inv, inv.l10n_do_isr_percibido or 0.0))
 
-            # Columna 20: Impuesto Selectivo al Consumo (CONVERTIDO A DOP)
-            isc = abs(self._to_dop(inv, inv.l10n_do_impuesto_selectivo or 0.0))
+            isc = taxes['isc']
+            otros_impuestos = taxes['other']
+            propina_legal = taxes['tip']
 
-            # Columna 21: Otros impuestos/tasas (CONVERTIDO A DOP)
-            otros_impuestos = abs(self._to_dop(inv, inv.l10n_do_otros_impuestos or 0.0))
-
-            # Columna 22: Monto propina legal (CONVERTIDO A DOP)
-            propina_legal = abs(self._to_dop(inv, inv.l10n_do_propina_legal or 0.0))
+            # B17/E47: el instructivo 606 (julio 2025) dice que no llevan ITBIS
+            # retenido, proporcionalidad, ITBIS al costo, ISR percibido, ISC,
+            # otros impuestos ni propina.
+            if exterior:
+                itbis_retenido = itbis_proporcionalidad = itbis_costo = 0.0
+                isr_percibido = isc = otros_impuestos = propina_legal = 0.0
 
             # Columna 23: Forma de pago
             # Del pago real (diario del pago, nota de crédito aplicada o saldo a
@@ -422,11 +466,13 @@ class DgiiReportWizard(models.TransientModel):
                 self._pending(pending, inv, _(
                     'tiene retenciones pero no fecha de pago (casilla 7): registre el pago'))
 
-            # Acumuladores
-            total_monto += monto_total
-            total_itbis += itbis_facturado
-            total_itbis_ret += itbis_retenido
-            total_isr_ret += isr_retenido
+            # Acumuladores: una nota de crédito resta (herramienta 606 2025,
+            # CalcularMontoTotal).
+            sign = -1 if inv.move_type == 'in_refund' else 1
+            total_monto += sign * monto_total
+            total_itbis += sign * itbis_facturado
+            total_itbis_ret += sign * itbis_retenido
+            total_isr_ret += sign * isr_retenido
 
             # Construir línea (23 columnas)
             campos = [
@@ -480,9 +526,10 @@ class DgiiReportWizard(models.TransientModel):
         23 columnas según especificación DGII
         Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
         """
+        # Facturas, notas de débito y notas de crédito (Anexo B, casilla 3).
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
-            ('move_type', '=', 'out_invoice'),  # Solo facturas, NO notas de crédito (B04)
+            ('move_type', 'in', ('out_invoice', 'out_refund')),
             ('state', '=', 'posted'),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
@@ -516,26 +563,43 @@ class DgiiReportWizard(models.TransientModel):
             rnc_client = self._clean_rnc(inv.partner_id.vat)
 
             # Columna 2: Tipo de identificación
+            # Columna 4: NCF modificado por una nota de crédito o de débito
+            is_credit_note = inv.move_type == 'out_refund'
+            is_note = is_credit_note or inv.l10n_do_is_debit_note
+            origin = self.env['account.move']
+            ncf_modificado = ''
+            if is_credit_note:
+                origin = inv.l10n_do_origin_move_id or inv.reversed_entry_id
+                ncf_modificado = inv.l10n_do_ncf_origin or origin.l10n_do_ncf_number
+            elif inv.l10n_do_is_debit_note:
+                origin = inv.l10n_do_debit_origin_move_id
+                ncf_modificado = inv.l10n_do_debit_ncf_origin or origin.l10n_do_ncf_number
+            ncf_modificado = self._ncf_checked(pending, inv, ncf_modificado, _('el NCF modificado'))
+            if is_note and not ncf_modificado:
+                self._pending(pending, inv, _('falta el NCF que modifica la nota'))
+
             # 1 RNC, 2 Cédula, 3 Pasaporte o ID tributaria (instructivo 607,
-            # casilla 2). Sin identificación queda pendiente, sin tipo.
+            # casilla 2). Una nota sobre una factura de consumo menor de
+            # RD$250,000 no necesita identificación (herramienta 607 2023.1.1,
+            # ValidarIdentificacion); en los demás casos, sin ella queda pendiente.
+            id_optional = (
+                is_note and ncf_modificado[-10:-8] == '02' and origin
+                and abs(self._to_dop(origin, origin.amount_total)) < self.CONSUMER_607_THRESHOLD)
             if rnc_client:
                 tipo_id = self._get_rnc_type(inv.partner_id.vat)
             else:
                 tipo_id = ''
-                self._pending(pending, inv, _('falta el RNC, la cédula o el ID del cliente'))
+                if not id_optional:
+                    self._pending(pending, inv, _('falta el RNC, la cédula o el ID del cliente'))
 
             # Columna 3: NCF
-            ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
-
-            # Columna 4: NCF Modificado (para NC)
-            ncf_modificado = ''
-            if inv.move_type == 'out_refund':
-                ncf_origin = inv.l10n_do_ncf_origin or ''
-                ncf_modificado = self._pad_ncf_modified(ncf_origin)
+            ncf = self._ncf_checked(pending, inv, inv.l10n_do_ncf_number, _('el NCF'))
 
             # Columna 5: Tipo de ingreso
             # El mismo dato que el TipoIngresos del e-CF (Anexo B, casilla 5).
-            income = inv.l10n_do_ecf_income_type
+            # Una nota lleva el de la factura que modifica (la nota e-CF no lo
+            # declara: E33/E34 usan 01).
+            income = (origin.l10n_do_ecf_income_type if is_note else False)                 or inv.l10n_do_ecf_income_type
             tipo_ingreso = ('0' + income) if income else ''
             if not tipo_ingreso:
                 self._pending(pending, inv, _('falta el tipo de ingreso'))
@@ -549,17 +613,19 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 8: Monto facturado (CONVERTIDO A DOP)
             monto_facturado = abs(self._to_dop(inv, inv.amount_untaxed))
 
-            # Columna 9: ITBIS Facturado (CONVERTIDO A DOP)
-            itbis_facturado = abs(self._to_dop(inv, inv.amount_tax))
+            # Columnas 9, 14, 15 y 16: ITBIS, ISC, otros impuestos y propina,
+            # cada uno en su casilla (ya en DOP).
+            taxes = self._tax_amounts(inv, pending)
+            itbis_facturado = taxes['itbis']
 
             # Columnas 10-16: Retenciones por terceros (CONVERTIDAS A DOP)
             itbis_retenido_terceros = abs(self._to_dop(inv, inv.l10n_do_third_party_retention_itbis or 0.0))
             itbis_percibido = 0.0
             retencion_renta_terceros = abs(self._to_dop(inv, inv.l10n_do_third_party_retention_isr or 0.0))
             isr_percibido = 0.0
-            isc = 0.0
-            otros_impuestos = 0.0
-            propina_legal = 0.0
+            isc = taxes['isc']
+            otros_impuestos = taxes['other']
+            propina_legal = taxes['tip']
 
             # Columnas 17-23: Formas de pago (CONVERTIDAS A DOP)
             efectivo = abs(self._to_dop(inv, inv.l10n_do_payment_cash or 0.0))
@@ -574,8 +640,10 @@ class DgiiReportWizard(models.TransientModel):
 
             # Sin importes por forma de pago en la factura, se toman de los
             # pagos reales; lo que no tiene forma conocida queda pendiente.
+            # Una nota de crédito no lleva formas de pago (herramienta 607:
+            # la suma de las casillas 17-23 puede ser 0 solo en un B04).
             total_formas = efectivo + cheque + tarjeta + credito + bonos + permuta + otras
-            if total_formas == 0:
+            if total_formas == 0 and not is_credit_note:
                 amounts, unknown = inv._l10n_do_payment_amounts()
                 efectivo = amounts.get('01', 0.0)
                 cheque = amounts.get('02', 0.0)
@@ -594,9 +662,10 @@ class DgiiReportWizard(models.TransientModel):
                 self._pending(pending, inv, _(
                     'tiene retenciones de terceros pero no fecha de retención (casilla 7)'))
 
-            # Acumuladores
-            total_monto += monto_facturado
-            total_itbis += itbis_facturado
+            # Acumuladores: una nota de crédito resta (herramienta 607).
+            sign = -1 if is_credit_note else 1
+            total_monto += sign * monto_facturado
+            total_itbis += sign * itbis_facturado
 
             # Construir línea (23 columnas)
             campos = [
@@ -686,7 +755,7 @@ class DgiiReportWizard(models.TransientModel):
 
         for inv in invoices:
             # Columna 1: NCF
-            ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
+            ncf = self._ncf_checked(pending, inv, inv.l10n_do_ncf_number, _('el NCF'))
 
             # Columna 2: fecha en que se anuló (Anexo C)
             fecha = self._format_date(inv.l10n_do_annulment_date)
@@ -901,7 +970,7 @@ class DgiiReportWizard(models.TransientModel):
 
             tipo_ret = inv.l10n_do_tipo_retencion_isr or ''
             rnc_prov = self._clean_rnc(inv.partner_id.vat)
-            
+
             # Para B11 usar cédula
             if inv.l10n_do_fiscal_type == 'informal':
                 rnc_prov = self._clean_rnc(inv.l10n_do_informal_provider_cedula) or ''

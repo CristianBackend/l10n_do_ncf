@@ -22,6 +22,18 @@ class AccountTax(models.Model):
         store=True
     )
 
+    # En qué casilla del 606/607 va este impuesto (Norma General 07-2018,
+    # Anexos A y B: ITBIS, ISC, otros impuestos/tasas y propina legal van
+    # separados). Un impuesto sin clase cuyo porcentaje es 18 o 16 se toma
+    # como ITBIS (las dos tasas del ITBIS); cualquier otro sin clase queda
+    # pendiente en el reporte.
+    dgii_tax_kind = fields.Selection([
+        ('itbis', 'ITBIS'),
+        ('isc', 'Impuesto Selectivo al Consumo'),
+        ('other', 'Otros impuestos / tasas'),
+        ('tip', 'Propina legal'),
+    ], string='Clase DGII')
+
     dgii_itbis_zero_type = fields.Selection([
         ('zero_rated', 'ITBIS 0 % (gravado a tasa cero)'),
         ('exempt', 'Exento de ITBIS'),

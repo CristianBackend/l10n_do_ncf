@@ -8,6 +8,7 @@
             <xpath expr="//sheet" position="inside">
                 <group string="DGII República Dominicana" name="dgii_rd">
                     <group>
+                        <field name="dgii_tax_kind" invisible="amount &lt; 0"/>
                         <field name="dgii_retention_type"/>
                         <field name="dgii_606_bucket"/>
                     </group>

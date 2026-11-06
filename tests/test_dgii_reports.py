@@ -324,3 +324,140 @@ class TestDgiiReports(NcfCommon):
         line = validator.format_606_line({}).split('|')
         self.assertEqual((line[1], line[2], line[22]), ('', '', ''))
         self.assertEqual(validator.format_607_line({}).split('|')[4], '')
+
+    # ---------------------------------------------------------------
+    # Grupo 3: documentos y montos
+    # ---------------------------------------------------------------
+    def _tax(self, name, amount, use='purchase', **vals):
+        return self.env['account.tax'].create({
+            'name': name, 'amount': amount, 'amount_type': 'percent',
+            'type_tax_use': use, 'company_id': self.company.id, **vals})
+
+    def _line(self, price, taxes=(), **vals):
+        return Command.create({'name': 'Línea', 'quantity': 1, 'price_unit': price,
+                               'tax_ids': [Command.set([t.id for t in taxes])], **vals})
+
+    def test_606_vendor_credit_and_debit_notes_with_their_modified_ncf(self):
+        service = self.env['product.product'].create({'name': 'Servicio', 'type': 'service'})
+        lines = lambda price: [self._line(price, product_id=service.id)]  # noqa: E731
+        self._bill(l10n_do_vendor_ncf='B0100000041', invoice_line_ids=lines(1000.0))
+        refund = self.env['account.move'].create({
+            'move_type': 'in_refund', 'partner_id': self.supplier.id, 'invoice_date': self.today,
+            'l10n_do_vendor_ncf': 'B0400000041', 'l10n_do_ncf_origin': 'B0100000041',
+            'invoice_line_ids': lines(200.0)})
+        refund.action_post()
+        self._bill(l10n_do_vendor_ncf='B0300000042', l10n_do_is_vendor_debit_note=True,
+                   l10n_do_vendor_debit_ncf_origin='B0100000041', invoice_line_ids=lines(1000.0))
+        wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0400000041')[4], 'B0100000041')
+        self.assertEqual(self._row(lines, 'B0300000042')[4], 'B0100000041')
+        # La nota de crédito resta del total (herramienta 606).
+        self.assertAlmostEqual(wizard.total_amount, 1000.0 - 200.0 + 1000.0, places=2)
+
+    def test_606_note_without_modified_ncf_is_pending(self):
+        refund = self.env['account.move'].create({
+            'move_type': 'in_refund', 'partner_id': self.supplier.id, 'invoice_date': self.today,
+            'l10n_do_vendor_ncf': 'B0400000043', 'invoice_line_ids': [self._line(200.0)]})
+        refund.action_post()
+        wizard, _lines = self._report('606')
+        self.assertIn('B0400000043: falta el NCF que modifica la nota', wizard.pending_message)
+
+    def test_606_includes_own_foreign_payments_and_minor_expenses(self):
+        """Instructivo 606 (julio 2025) y preguntas frecuentes e-CF 1.2.29:
+        B17/E47 y B13/E43 van en el 606 con el RNC del encabezado."""
+        foreign = self.env['res.partner'].create({
+            'name': 'Foreign Inc.', 'country_id': self.env.ref('base.us').id, 'vat': 'EIN1'})
+        isr_ext = self.env['l10n_do_ncf.retention.type'].search([('code', '=', 'ISR_EXT')], limit=1)
+        bill = self._bill(foreign, retentions=[(isr_ext, 1000.0)], l10n_do_fiscal_type='exterior',
+                          l10n_do_vendor_ncf=False)
+        self._set(bill, l10n_do_ncf_number='E470000000001', l10n_do_propina_legal=50.0,
+                  l10n_do_itbis_proporcionalidad=10.0)
+        wizard, lines = self._report('606')
+        row = self._row(lines, 'E470000000001')
+        self.assertEqual(row[:2], [RNC_EMPRESA, '1'])
+        # Sin ITBIS retenido, proporcionalidad, costo, ISR percibido, ISC,
+        # otros ni propina.
+        for index in (11, 12, 13, 15, 18, 19, 20, 21):
+            self.assertEqual(row[index], '', index)
+
+    def test_606_itbis_to_advance_is_billed_minus_cost(self):
+        itbis = self._tax('ITBIS compras 18 %', 18.0)
+        bill = self._bill(invoice_line_ids=[self._line(1000.0, [itbis])],
+                          l10n_do_vendor_ncf='B0100000044')
+        self._set(bill, l10n_do_itbis_proporcionalidad=50.0, l10n_do_itbis_costo=30.0)
+        _wizard, lines = self._report('606')
+        row = self._row(lines, 'B0100000044')
+        # 11 facturado, 13 proporcionalidad, 14 costo, 15 por adelantar
+        self.assertEqual([row[10], row[12], row[13], row[14]], ['180.00', '50.00', '30.00', '150.00'])
+
+    def test_606_and_607_taxes_in_their_own_columns(self):
+        itbis = self._tax('ITBIS compras 18 %', 18.0)
+        isc = self._tax('ISC alcohol', 10.0, dgii_tax_kind='isc')
+        tip = self._tax('Propina legal', 10.0, dgii_tax_kind='tip')
+        loose = self._tax('Tasa sin clase', 2.0)
+        self._bill(invoice_line_ids=[self._line(1000.0, [itbis, isc, tip])],
+                   l10n_do_vendor_ncf='B0100000045')
+        self._bill(invoice_line_ids=[self._line(1000.0, [loose])], l10n_do_vendor_ncf='B0100000046')
+        wizard, lines = self._report('606')
+        row = self._row(lines, 'B0100000045')
+        self.assertEqual([row[10], row[19], row[20], row[21]], ['180.00', '100.00', '', '100.00'])
+        self.assertEqual(self._row(lines, 'B0100000046')[10], '')
+        self.assertIn('el impuesto "Tasa sin clase" no tiene "Clase DGII"', wizard.pending_message)
+
+        sale_itbis = self._tax('ITBIS ventas 18 %', 18.0, use='sale')
+        sale_tip = self._tax('Propina ventas', 10.0, use='sale', dgii_tax_kind='tip')
+        invoice = self.env['account.move'].create({
+            'move_type': 'out_invoice', 'partner_id': self.partner_taxpayer.id,
+            'invoice_date': self.today, 'l10n_do_ecf_income_type': '1',
+            'invoice_line_ids': [self._line(1000.0, [sale_itbis, sale_tip])]})
+        invoice.action_post()
+        _wizard, lines = self._report('607')
+        row = self._row(lines, invoice.l10n_do_ncf_number)
+        # 8 monto, 9 ITBIS, 14 ISC, 15 otros, 16 propina
+        self.assertEqual([row[7], row[8], row[13], row[14], row[15]],
+                         ['1000.00', '180.00', '', '', '100.00'])
+
+    def test_ncf_longer_than_allowed_is_an_error_not_cut(self):
+        self._bill(l10n_do_vendor_ncf='B0100000047')
+        bill = self._bill(l10n_do_vendor_ncf='B0100000048')
+        self._set(bill, l10n_do_vendor_ncf='B01000000489')
+        wizard, lines = self._report('606')
+        body = '\n'.join(lines)
+        self.assertNotIn('B0100000048|', body)
+        self.assertIn('ERROR: el NCF B01000000489 tiene 12 caracteres', wizard.pending_message)
+
+    def test_607_credit_and_debit_notes(self):
+        invoice = self._sale(self.partner_taxpayer, price=1000.0, l10n_do_ecf_income_type='3')
+        refund = self.env['account.move'].create({
+            'move_type': 'out_refund', 'partner_id': self.partner_taxpayer.id,
+            'invoice_date': self.today, 'l10n_do_origin_move_id': invoice.id,
+            'l10n_do_ncf_origin': invoice.l10n_do_ncf_number, 'l10n_do_credit_note_reason': '03',
+            'invoice_line_ids': [self._line(300.0)]})
+        refund.action_post()
+        debit = self._sale(self.partner_taxpayer, price=100.0, l10n_do_is_debit_note=True,
+                           l10n_do_debit_ncf_origin=invoice.l10n_do_ncf_number,
+                           l10n_do_debit_note_reason='01', l10n_do_ecf_income_type='3')
+        wizard, lines = self._report('607')
+        refund_row = self._row(lines, refund.l10n_do_ncf_number)
+        self.assertEqual(refund_row[3], invoice.l10n_do_ncf_number)
+        # La nota lleva el tipo de ingreso de la factura y no lleva formas de pago.
+        self.assertEqual(refund_row[4], '03')
+        self.assertEqual(refund_row[16:23], [''] * 7)
+        self.assertEqual(self._row(lines, debit.l10n_do_ncf_number)[3], invoice.l10n_do_ncf_number)
+        self.assertNotIn(refund.l10n_do_ncf_number, wizard.pending_message or '')
+        self.assertAlmostEqual(wizard.total_amount, 1000.0 - 300.0 + 100.0, places=2)
+
+    def test_607_note_on_small_consumer_invoice_needs_no_id(self):
+        """Herramienta 607: una NC/ND sobre una factura de consumo menor de
+        RD$250,000 no exige identificación."""
+        anonymous = self.env['res.partner'].create({'name': 'Cliente', 'country_id': self.country_do.id})
+        small = self._sale(anonymous, price=500.0)
+        self.assertEqual(small.l10n_do_ncf_type_id.code, '02')
+        refund = self.env['account.move'].create({
+            'move_type': 'out_refund', 'partner_id': anonymous.id, 'invoice_date': self.today,
+            'l10n_do_origin_move_id': small.id, 'l10n_do_ncf_origin': small.l10n_do_ncf_number,
+            'l10n_do_credit_note_reason': '03', 'invoice_line_ids': [self._line(100.0)]})
+        refund.action_post()
+        wizard, lines = self._report('607')
+        self.assertEqual(self._row(lines, refund.l10n_do_ncf_number)[:2], ['', ''])
+        self.assertNotIn('falta el RNC', wizard.pending_message or '')
