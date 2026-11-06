@@ -27,7 +27,7 @@
                 <div class="alert alert-info" role="alert">
                     <strong>Nota:</strong>
                     <ul>
-                        <li><b>Anular Directamente:</b> La factura se cancela y el NCF queda ocupado. Se reportará como "Anulado" en el 607.</li>
+                        <li><b>Anular Directamente:</b> La factura se cancela y el NCF queda ocupado. Se reportará como anulado en el 608.</li>
                         <li><b>Crear Nota de Crédito:</b> Se genera un documento B04 que reversa fiscalmente la factura original.</li>
                     </ul>
                 </div>

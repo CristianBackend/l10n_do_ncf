@@ -106,7 +106,7 @@ class InvoiceAnnulWizard(models.TransientModel):
             'params': {
                 'title': _('Factura Anulada'),
                 'message': _('La factura %s con NCF %s ha sido anulada.\n'
-                            'El NCF permanece ocupado y se reportará como anulado en el 607.') % (
+                            'El NCF permanece ocupado y se reportará como anulado en el 608.') % (
                     move.name, move.l10n_do_ncf_number
                 ),
                 'type': 'success',

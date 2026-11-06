@@ -54,7 +54,7 @@ class TestDgii609(NcfCommon):
             'date_from': self.today.replace(day=1), 'date_to': self.today,
         })
         wizard.action_generate_report()
-        lines = base64.b64decode(wizard.file_data).decode().split('\n')
+        lines = base64.b64decode(wizard.file_data).decode().split('\r\n')
         return wizard, lines
 
     def test_row_with_official_codes(self):

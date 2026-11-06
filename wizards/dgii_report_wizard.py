@@ -240,6 +240,19 @@ class DgiiReportWizard(models.TransientModel):
         solo admite esos dos; cualquier otra longitud queda vacía."""
         return {9: '1', 11: '2'}.get(len(number or ''), '')
 
+    def _write_file(self, report, lines, rnc, period, extension='txt'):
+        """Guarda el archivo como lo genera la herramienta oficial de la DGII.
+
+        Las cuatro herramientas (606 versión 2025, 607 2023.1.1, 608 2018.2.1 y
+        609 2018.5.0) escriben cada línea con "Print #1", que termina en CRLF,
+        y la última con "Print #1, ...;", sin salto final. El nombre es
+        DGII_F_<formato>_<RNC>_<período>, con extensión .TXT en el 606 y .txt
+        en los demás.
+        """
+        content = '\r\n'.join(lines)
+        self.file_data = base64.b64encode(content.encode('utf-8'))
+        self.file_name = 'DGII_F_%s_%s_%s.%s' % (report, rnc, period, extension)
+
     @staticmethod
     def _pending(pending, move, message):
         """Anota un dato que falta: va vacío en el archivo (no se inventa) y se
@@ -503,9 +516,7 @@ class DgiiReportWizard(models.TransientModel):
             lines.append('|'.join(campos))
 
         # Generar archivo
-        content = '\n'.join(lines)
-        self.file_data = base64.b64encode(content.encode('utf-8'))
-        self.file_name = f"DGII_606_{rnc}_{period}.txt"
+        self._write_file('606', lines, rnc, period, extension='TXT')
         self.state = 'generated'
         self.record_count = len(invoices)
         self.total_amount = total_monto
@@ -599,8 +610,11 @@ class DgiiReportWizard(models.TransientModel):
             # El mismo dato que el TipoIngresos del e-CF (Anexo B, casilla 5).
             # Una nota lleva el de la factura que modifica (la nota e-CF no lo
             # declara: E33/E34 usan 01).
-            income = (origin.l10n_do_ecf_income_type if is_note else False)                 or inv.l10n_do_ecf_income_type
-            tipo_ingreso = ('0' + income) if income else ''
+            income = ((origin.l10n_do_ecf_income_type if is_note else False)
+                      or inv.l10n_do_ecf_income_type)
+            # La herramienta 607 (2023.1.1) escribe un dígito: Mid(celda, 2, 1)
+            # sobre "01 - Ingresos por ...", es decir "1". Lo mismo aquí.
+            tipo_ingreso = income or ''
             if not tipo_ingreso:
                 self._pending(pending, inv, _('falta el tipo de ingreso'))
 
@@ -696,9 +710,7 @@ class DgiiReportWizard(models.TransientModel):
             lines.append('|'.join(campos))
 
         # Generar archivo
-        content = '\n'.join(lines)
-        self.file_data = base64.b64encode(content.encode('utf-8'))
-        self.file_name = f"DGII_607_{rnc}_{period}.txt"
+        self._write_file('607', lines, rnc, period)
         self.state = 'generated'
         self.record_count = len(invoices)
         self.total_amount = total_monto
@@ -771,9 +783,7 @@ class DgiiReportWizard(models.TransientModel):
             lines.append('|'.join(campos))
 
         # Generar archivo
-        content = '\n'.join(lines)
-        self.file_data = base64.b64encode(content.encode('utf-8'))
-        self.file_name = f"DGII_608_{rnc}_{period}.txt"
+        self._write_file('608', lines, rnc, period)
         self.state = 'generated'
         self.record_count = len(invoices)
         self.pending_message = '\n'.join(pending) or False
@@ -903,9 +913,7 @@ class DgiiReportWizard(models.TransientModel):
             lines.append('|'.join(campos))
 
         # Generar archivo
-        content = '\n'.join(lines)
-        self.file_data = base64.b64encode(content.encode('utf-8'))
-        self.file_name = f"DGII_609_{rnc}_{period}.txt"
+        self._write_file('609', lines, rnc, period)
         self.state = 'generated'
         self.record_count = len(invoices)
         self.total_amount = total_monto

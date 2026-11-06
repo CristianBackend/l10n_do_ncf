@@ -259,7 +259,7 @@ class TestDgiiReports(NcfCommon):
         untyped = self._sale(self.partner_taxpayer)
         self._set(untyped, l10n_do_ecf_income_type=None)
         wizard, lines = self._report('607')
-        self.assertEqual(self._row(lines, typed.l10n_do_ncf_number)[4], '02')
+        self.assertEqual(self._row(lines, typed.l10n_do_ncf_number)[4], '2')
         self.assertEqual(self._row(lines, untyped.l10n_do_ncf_number)[4], '')
         self.assertIn('%s: falta el tipo de ingreso' % untyped.l10n_do_ncf_number,
                       wizard.pending_message)
@@ -441,7 +441,7 @@ class TestDgiiReports(NcfCommon):
         refund_row = self._row(lines, refund.l10n_do_ncf_number)
         self.assertEqual(refund_row[3], invoice.l10n_do_ncf_number)
         # La nota lleva el tipo de ingreso de la factura y no lleva formas de pago.
-        self.assertEqual(refund_row[4], '03')
+        self.assertEqual(refund_row[4], '3')
         self.assertEqual(refund_row[16:23], [''] * 7)
         self.assertEqual(self._row(lines, debit.l10n_do_ncf_number)[3], invoice.l10n_do_ncf_number)
         self.assertNotIn(refund.l10n_do_ncf_number, wizard.pending_message or '')
@@ -461,3 +461,56 @@ class TestDgiiReports(NcfCommon):
         wizard, lines = self._report('607')
         self.assertEqual(self._row(lines, refund.l10n_do_ncf_number)[:2], ['', ''])
         self.assertNotIn('falta el RNC', wizard.pending_message or '')
+
+    # ---------------------------------------------------------------
+    # Grupo 4: formato igual a la herramienta oficial
+    # ---------------------------------------------------------------
+    def _raw(self, report_type):
+        wizard = self.env['l10n_do_ncf.dgii.report.wizard'].create({
+            'company_id': self.company.id, 'report_type': report_type,
+            'date_from': self.today.replace(day=1), 'date_to': self.today,
+        })
+        wizard.action_generate_report()
+        return wizard, base64.b64decode(wizard.file_data).decode()
+
+    def test_files_as_the_official_tools_write_them(self):
+        """Herramientas 606 (2025), 607 (2023.1.1) y 608 (2018.2.1): líneas con
+        CRLF, sin salto al final, y nombre DGII_F_<formato>_<RNC>_<período>."""
+        period = self.today.strftime('%Y%m')
+        self._bill(l10n_do_vendor_ncf='B0100000051')
+        self._bill(l10n_do_vendor_ncf='B0100000052')
+        sale = self._sale(self.partner_taxpayer)
+        self._sale(self.partner_taxpayer)
+        cancelled = self._sale(self.partner_taxpayer)
+        self._annul(cancelled)
+        names = {'606': 'TXT', '607': 'txt', '608': 'txt'}
+        for report, extension in names.items():
+            wizard, content = self._raw(report)
+            self.assertEqual(wizard.file_name, 'DGII_F_%s_%s_%s.%s' % (
+                report, RNC_EMPRESA, period, extension))
+            self.assertNotIn('\n', content.replace('\r\n', ''), report)
+            self.assertFalse(content.endswith('\n'), report)
+            self.assertGreaterEqual(content.count('\r\n'), 1, report)
+        self.assertTrue(sale.l10n_do_ncf_number)
+
+    def test_607_income_type_has_one_digit_like_the_tool(self):
+        """Herramienta 607: Mid(celda, 2, 1) sobre "01 - Ingresos ..." = "1"."""
+        invoice = self._sale(self.partner_taxpayer, l10n_do_ecf_income_type='6')
+        _wizard, lines = self._report('607')
+        self.assertEqual(self._row(lines, invoice.l10n_do_ncf_number)[4], '6')
+
+    def test_606_and_608_codes_keep_two_digits_like_the_tool(self):
+        """Herramientas 606 y 608: Mid(celda, 1, 2) sobre "01-..." = "01"."""
+        invoice = self._sale(self.partner_taxpayer)
+        self._annul(invoice, '04')
+        _wizard, lines = self._report('608')
+        self.assertTrue(lines[1].endswith('|04'))
+
+    def test_annul_notification_names_the_608(self):
+        invoice = self._sale(self.partner_taxpayer)
+        wizard = self.env['l10n_do_ncf.invoice.annul.wizard'].with_context(
+            active_id=invoice.id).create({
+                'annul_reason': 'x', 'action_type': 'annul', 'annulment_type': '04'})
+        result = wizard.action_confirm()
+        self.assertIn('en el 608', result['params']['message'])
+        self.assertNotIn('607', result['params']['message'])
