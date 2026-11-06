@@ -55,7 +55,7 @@ class TestDgii609(NcfCommon):
             'date_from': self.today.replace(day=1), 'date_to': self.today,
         })
         wizard.action_generate_report()
-        lines = base64.b64decode(wizard.file_data).decode().split('\r\n')
+        lines = base64.b64decode(wizard.file_data).decode('cp1252').split('\r\n')
         return wizard, lines
 
     def test_row_with_official_codes(self):
@@ -151,3 +151,11 @@ class TestDgii609(NcfCommon):
             '05': (False, False),
             '06': (False, False),
         })
+
+    def test_name_outside_windows_1252_is_pending_not_replaced(self):
+        partner = self.supplier.copy({'name': 'Łódź Software Sp.'})
+        self._bill(partner=partner, retention_base=10000.0, l10n_do_609_service_type='2',
+                   l10n_do_609_service_detail='21')
+        wizard, lines = self._report()
+        self.assertEqual(lines[1].split('|')[0], '')
+        self.assertIn('no existen en Windows-1252', wizard.pending_message)

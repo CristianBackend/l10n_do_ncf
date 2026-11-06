@@ -44,7 +44,7 @@ class TestDgiiReports(NcfCommon):
             'date_from': self.today.replace(day=1), 'date_to': self.today,
         })
         wizard.action_generate_report()
-        content = base64.b64decode(wizard.file_data).decode()
+        content = base64.b64decode(wizard.file_data).decode('cp1252')
         return wizard, content.replace('\r\n', '\n').split('\n')
 
     def _sale(self, partner, price=1000.0, **vals):
@@ -300,22 +300,39 @@ class TestDgiiReports(NcfCommon):
         self.assertEqual(invoice.l10n_do_annulment_type, '05')
         self.assertEqual(invoice.l10n_do_annulment_date, fields.Date.context_today(invoice))
         _wizard, lines = self._report('608')
+        # Casilla 2: fecha de emisión (instructivo 608, septiembre 2020).
         self.assertEqual(lines[1], '%s|%s|05' % (
-            invoice.l10n_do_ncf_number, invoice.l10n_do_annulment_date.strftime('%Y%m%d')))
+            invoice.l10n_do_ncf_number, invoice.invoice_date.strftime('%Y%m%d')))
 
-    def test_608_uses_the_annulment_date_not_the_invoice_date(self):
+    def test_608_period_by_annulment_date_column_with_issue_date(self):
+        """El PERÍODO lo decide la fecha de anulación (Norma General 07-2018,
+        Anexo C); la casilla 2 lleva la fecha de emisión del comprobante
+        (instructivo 608, septiembre 2020)."""
         from dateutil.relativedelta import relativedelta
+        issued = self.today - relativedelta(months=2)
         old = self._sale(self.partner_taxpayer)
-        self._set(old, invoice_date=self.today - relativedelta(months=2))
+        self._set(old, invoice_date=issued)
         self._annul(old)
-        _wizard, lines = self._report('608')
-        self.assertTrue(lines[1].startswith(old.l10n_do_ncf_number + '|'))
+        self.assertEqual(old.l10n_do_annulment_date, fields.Date.context_today(old))
+        # Se reporta en el mes de la anulación...
+        wizard, lines = self._report('608')
+        self.assertEqual(lines[1], '%s|%s|04' % (old.l10n_do_ncf_number, issued.strftime('%Y%m%d')))
+        self.assertFalse(wizard.pending_message)
+        # ...y no en el mes en que se emitió.
+        wizard = self.env['l10n_do_ncf.dgii.report.wizard'].create({
+            'company_id': self.company.id, 'report_type': '608',
+            'date_from': issued.replace(day=1),
+            'date_to': issued.replace(day=1) + relativedelta(months=1, days=-1),
+        })
+        with self.assertRaises(UserError):
+            wizard.action_generate_report()
 
     def test_608_legacy_annulment_without_data_is_pending(self):
         legacy = self._sale(self.partner_taxpayer)
         self._set(legacy, state='cancel')
         wizard, lines = self._report('608')
-        self.assertEqual(lines[1], '%s||' % legacy.l10n_do_ncf_number)
+        self.assertEqual(lines[1], '%s|%s|' % (
+            legacy.l10n_do_ncf_number, legacy.invoice_date.strftime('%Y%m%d')))
         self.assertIn('no tiene fecha de anulación', wizard.pending_message)
         self.assertIn('falta el tipo de anulación', wizard.pending_message)
 
@@ -471,7 +488,7 @@ class TestDgiiReports(NcfCommon):
             'date_from': self.today.replace(day=1), 'date_to': self.today,
         })
         wizard.action_generate_report()
-        return wizard, base64.b64decode(wizard.file_data).decode()
+        return wizard, base64.b64decode(wizard.file_data).decode('cp1252')
 
     def test_files_as_the_official_tools_write_them(self):
         """Herramientas 606 (2025), 607 (2023.1.1) y 608 (2018.2.1): líneas con
@@ -514,3 +531,43 @@ class TestDgiiReports(NcfCommon):
         result = wizard.action_confirm()
         self.assertIn('en el 608', result['params']['message'])
         self.assertNotIn('607', result['params']['message'])
+
+    # ---------------------------------------------------------------
+    # Decisiones: codificación y retenciones
+    # ---------------------------------------------------------------
+    def test_files_are_windows_1252(self):
+        """Las herramientas oficiales escriben con "Print #" (Windows-1252)."""
+        person = self.env['res.partner'].create({
+            'name': 'Peña', 'country_id': self.country_do.id, 'vat': CEDULA})
+        self._bill(person, l10n_do_vendor_ncf='B0100000061')
+        self._sale(self.partner_taxpayer)
+        cancelled = self._sale(self.partner_taxpayer)
+        self._annul(cancelled)
+        for report in ('606', '607', '608'):
+            wizard = self.env['l10n_do_ncf.dgii.report.wizard'].create({
+                'company_id': self.company.id, 'report_type': report,
+                'date_from': self.today.replace(day=1), 'date_to': self.today})
+            wizard.action_generate_report()
+            raw = base64.b64decode(wizard.file_data)
+            self.assertEqual(raw.decode('cp1252').encode('cp1252'), raw, report)
+
+    def test_character_outside_windows_1252_is_pending_not_replaced(self):
+        bill = self._bill(l10n_do_vendor_ncf='B0100000062')
+        self._set(bill, l10n_do_vendor_ncf='B01000000Ł2')
+        wizard, lines = self._report('606')
+        self.assertNotIn('Ł', '\n'.join(lines))
+        self.assertNotIn('?', '\n'.join(lines))
+        self.assertIn('no existen en Windows-1252 (Ł)', wizard.pending_message)
+
+    def test_withholding_taxes_are_never_itbis(self):
+        """La regla "18 % o 16 % = ITBIS" solo mira impuestos positivos: una
+        retención (negativa) al 18 % no es ITBIS facturado."""
+        itbis = self._tax('ITBIS compras 18 % (r)', 18.0)
+        withholding = self._tax('Retención ITBIS 100 % (18)', -18.0)
+        bill = self._bill(invoice_line_ids=[self._line(1000.0, [itbis, withholding])],
+                          l10n_do_vendor_ncf='B0100000063')
+        self.assertAlmostEqual(bill.l10n_do_itbis_facturado, 180.0, places=2)
+        wizard, lines = self._report('606')
+        row = self._row(lines, 'B0100000063')
+        self.assertEqual(row[10], '180.00')
+        self.assertNotIn('Retención ITBIS 100 % (18)', wizard.pending_message or '')

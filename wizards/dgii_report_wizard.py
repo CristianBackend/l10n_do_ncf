@@ -247,11 +247,40 @@ class DgiiReportWizard(models.TransientModel):
         609 2018.5.0) escriben cada línea con "Print #1", que termina en CRLF,
         y la última con "Print #1, ...;", sin salto final. El nombre es
         DGII_F_<formato>_<RNC>_<período>, con extensión .TXT en el 606 y .txt
-        en los demás.
+        en los demás. La codificación es Windows-1252, la de "Print #" en
+        Windows; cada registro ya pasó por _cp1252_fields, así que aquí no se
+        reemplaza ningún carácter.
         """
         content = '\r\n'.join(lines)
-        self.file_data = base64.b64encode(content.encode('utf-8'))
+        self.file_data = base64.b64encode(content.encode('cp1252'))
         self.file_name = 'DGII_F_%s_%s_%s.%s' % (report, rnc, period, extension)
+
+    def _cp1252_fields(self, pending, move, campos):
+        """Los campos del registro, comprobando que existen en Windows-1252.
+
+        Un campo con un carácter que no existe en esa codificación no se
+        reemplaza en silencio: va vacío y el registro queda pendiente, con el
+        texto y los caracteres que sobran, para corregirlo en el origen.
+        """
+        result = []
+        for value in campos:
+            try:
+                value.encode('cp1252')
+            except UnicodeEncodeError:
+                bad = []
+                for char in value:
+                    try:
+                        char.encode('cp1252')
+                    except UnicodeEncodeError:
+                        if char not in bad:
+                            bad.append(char)
+                self._pending(pending, move, _(
+                    '"%(text)s" tiene caracteres que no existen en Windows-1252 (%(chars)s): '
+                    'corríjalo en el documento o el contacto',
+                    text=value, chars=' '.join(bad)))
+                value = ''
+            result.append(value)
+        return result
 
     @staticmethod
     def _pending(pending, move, message):
@@ -513,7 +542,7 @@ class DgiiReportWizard(models.TransientModel):
                 self._format_amount(propina_legal),        # 22 - Propina Legal
                 forma_pago,                                # 23 - Forma Pago
             ]
-            lines.append('|'.join(campos))
+            lines.append('|'.join(self._cp1252_fields(pending, inv, campos)))
 
         # Generar archivo
         self._write_file('606', lines, rnc, period, extension='TXT')
@@ -707,7 +736,7 @@ class DgiiReportWizard(models.TransientModel):
                 self._format_amount(permuta),                  # 22
                 self._format_amount(otras),                    # 23
             ]
-            lines.append('|'.join(campos))
+            lines.append('|'.join(self._cp1252_fields(pending, inv, campos)))
 
         # Generar archivo
         self._write_file('607', lines, rnc, period)
@@ -769,10 +798,17 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 1: NCF
             ncf = self._ncf_checked(pending, inv, inv.l10n_do_ncf_number, _('el NCF'))
 
-            # Columna 2: fecha en que se anuló (Anexo C)
-            fecha = self._format_date(inv.l10n_do_annulment_date)
+            # Columna 2: fecha de emisión del comprobante (instructivo 608,
+            # septiembre 2020, casilla 2: "la fecha en que fue emitida la
+            # factura"; más reciente que el Anexo C, que decía la de anulación).
+            # El PERÍODO sí lo decide la fecha de anulación (búsqueda de arriba).
+            fecha = self._format_date(inv.invoice_date)
             if not fecha:
-                self._pending(pending, inv, _('no tiene fecha de anulación'))
+                self._pending(pending, inv, _('no tiene fecha de emisión'))
+            if not inv.l10n_do_annulment_date:
+                self._pending(pending, inv, _(
+                    'no tiene fecha de anulación: se incluyó por la fecha de la factura; '
+                    'confirme el período en que se anuló'))
 
             # Columna 3: tipo de anulación (Anexo C, tabla 01-10)
             tipo_anulacion = inv.l10n_do_annulment_type or ''
@@ -780,7 +816,7 @@ class DgiiReportWizard(models.TransientModel):
                 self._pending(pending, inv, _('falta el tipo de anulación'))
 
             campos = [ncf, fecha, tipo_anulacion]
-            lines.append('|'.join(campos))
+            lines.append('|'.join(self._cp1252_fields(pending, inv, campos)))
 
         # Generar archivo
         self._write_file('608', lines, rnc, period)
@@ -913,7 +949,7 @@ class DgiiReportWizard(models.TransientModel):
                 self._format_amount_required(renta_presunta),  # 12
                 self._format_amount_required(isr_retenido),    # 13
             ]
-            lines.append('|'.join(campos))
+            lines.append('|'.join(self._cp1252_fields(pending, inv, campos)))
 
         # Generar archivo
         self._write_file('609', lines, rnc, period)
