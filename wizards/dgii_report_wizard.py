@@ -200,6 +200,29 @@ class DgiiReportWizard(models.TransientModel):
             return ''
         return dt.strftime('%Y%m%d')
 
+    # Facturas de consumo: desde el período julio 2018 solo se remiten en el
+    # 607 las de RD$250,000.00 o más (Norma General 10-18, citada en el
+    # instructivo "Llenado del Formato 607", septiembre 2020).
+    CONSUMER_607_THRESHOLD = 250000.0
+
+    @staticmethod
+    def _is_ecf(ncf):
+        """True si el número es un e-CF (E + 12 caracteres)."""
+        return bool(ncf) and ncf.strip().upper().startswith('E')
+
+    def _id_type_by_length(self, number):
+        """Tipo de identificación del 606 por su longitud: 1 RNC (9), 2 Cédula
+        (11). La herramienta oficial 606 (2025, ValidarTipoIdentificacion)
+        solo admite esos dos; cualquier otra longitud queda vacía."""
+        return {9: '1', 11: '2'}.get(len(number or ''), '')
+
+    @staticmethod
+    def _pending(pending, move, message):
+        """Anota un dato que falta: va vacío en el archivo (no se inventa) y se
+        lista en "Pendientes de completar"."""
+        pending.append('%s: %s' % (move.l10n_do_ncf_number or move.l10n_do_vendor_ncf
+                                   or move.ref or move.name, message))
+
     def _validate_tipo_bienes(self, tipo):
         """Validar tipo de bienes/servicios"""
         valid_tipos = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11']
@@ -255,6 +278,7 @@ class DgiiReportWizard(models.TransientModel):
             raise UserError(_('No hay facturas de compra locales en el periodo seleccionado. Las compras a proveedores extranjeros van en el reporte 609.'))
 
         lines = []
+        pending = []
         total_monto = 0.0
         total_itbis = 0.0
         total_itbis_ret = 0.0
@@ -275,14 +299,18 @@ class DgiiReportWizard(models.TransientModel):
                 rnc_supplier = self._clean_rnc(inv.l10n_do_informal_provider_cedula) or '00000000000'
                 tipo_id = '2'  # Cédula
             elif inv.l10n_do_fiscal_type == 'minor_expense':
-                # B13 usa RNC de la propia empresa
+                # B13 usa el RNC o la cédula de la propia empresa
                 rnc_supplier = self._clean_rnc(self.company_id.vat)
-                tipo_id = '1'  # RNC
+                tipo_id = self._id_type_by_length(rnc_supplier)
             elif rnc_supplier:
-                tipo_id = self._get_rnc_type(inv.partner_id.vat)
+                tipo_id = self._id_type_by_length(rnc_supplier)
             else:
                 rnc_supplier = '00000000000'
                 tipo_id = '2'
+            if not tipo_id:
+                # Herramienta 606 (2025): solo 1 (RNC, 9 dígitos) o 2 (Cédula, 11).
+                self._pending(pending, inv, _(
+                    'la identificación %s no tiene 9 dígitos (RNC) ni 11 (cédula)') % rnc_supplier)
 
             # Columna 3: Tipo de Bienes/Servicios
             tipo_bienes = self._validate_tipo_bienes(
@@ -305,15 +333,12 @@ class DgiiReportWizard(models.TransientModel):
             fecha_comprobante = self._format_date(inv.invoice_date)
 
             # Columna 7: Fecha de pago
+            # Nunca la fecha de la factura: si no hay pago, va vacía.
             fecha_pago = ''
             if inv.payment_state in ('paid', 'in_payment'):
-                try:
-                    payments = inv._get_reconciled_payments()
-                    if payments:
-                        pay_date = max(p.date for p in payments)
-                        fecha_pago = self._format_date(pay_date)
-                except Exception:
-                    fecha_pago = fecha_comprobante
+                payments = inv._get_reconciled_payments()
+                if payments:
+                    fecha_pago = self._format_date(max(p.date for p in payments))
 
             # Columnas 8-9: Monto bienes y servicios (CONVERTIDOS A DOP)
             monto_servicios = abs(self._to_dop(inv, inv.l10n_do_606_monto_servicios or 0.0))
@@ -380,6 +405,13 @@ class DgiiReportWizard(models.TransientModel):
                 else:
                     forma_pago = '04'
 
+            # Instructivo 606 (julio 2025), casillas 12, 17 y 18: con ITBIS
+            # retenido, tipo o monto de retención de ISR, la fecha de pago
+            # (casilla 7) es obligatoria.
+            if not fecha_pago and (itbis_retenido or tipo_retencion_isr or isr_retenido):
+                self._pending(pending, inv, _(
+                    'tiene retenciones pero no fecha de pago (casilla 7): registre el pago'))
+
             # Acumuladores
             total_monto += monto_total
             total_itbis += itbis_facturado
@@ -424,6 +456,7 @@ class DgiiReportWizard(models.TransientModel):
         self.total_itbis = total_itbis
         self.total_itbis_retenido = total_itbis_ret
         self.total_isr_retenido = total_isr_ret
+        self.pending_message = '\n'.join(pending) or False
 
         return self._return_wizard()
 
@@ -445,11 +478,20 @@ class DgiiReportWizard(models.TransientModel):
             ('invoice_date', '<=', self.date_to),
             ('l10n_do_ncf_number', '!=', False),
         ], order='invoice_date')
+        # - Los e-CF no se remiten en el 607 (Preguntas frecuentes e-CF de la
+        #   DGII, 1.4.13).
+        # - Facturas de consumo (B02): solo desde RD$250,000.00 (NG 10-18).
+        invoices = invoices.filtered(lambda i: not self._is_ecf(i.l10n_do_ncf_number) and not (
+            i.l10n_do_ncf_type_id.code == '02'
+            and abs(self._to_dop(i, i.amount_total)) < self.CONSUMER_607_THRESHOLD))
 
         if not invoices:
-            raise UserError(_('No hay facturas de venta con NCF en el período seleccionado.'))
+            raise UserError(_(
+                'No hay facturas de venta para el 607 en el período seleccionado. Los e-CF '
+                'no se remiten en el 607 y las facturas de consumo solo desde RD$250,000.00.'))
 
         lines = []
+        pending = []
         total_monto = 0.0
         total_itbis = 0.0
 
@@ -489,9 +531,7 @@ class DgiiReportWizard(models.TransientModel):
             fecha_comprobante = self._format_date(inv.invoice_date)
 
             # Columna 7: Fecha de retención (solo si aplica)
-            fecha_retencion = ''
-            if inv.l10n_do_is_credit_sale and inv.l10n_do_retention_date:
-                fecha_retencion = self._format_date(inv.l10n_do_retention_date)
+            fecha_retencion = self._format_date(inv.l10n_do_retention_date)
 
             # Columna 8: Monto facturado (CONVERTIDO A DOP)
             monto_facturado = abs(self._to_dop(inv, inv.amount_untaxed))
@@ -533,6 +573,12 @@ class DgiiReportWizard(models.TransientModel):
                 else:
                     credito = monto_total
 
+            # Instructivo 607 (septiembre 2020), casillas 10 y 12: con ITBIS o
+            # ISR retenido por terceros, la fecha de retención es obligatoria.
+            if not fecha_retencion and (itbis_retenido_terceros or retencion_renta_terceros):
+                self._pending(pending, inv, _(
+                    'tiene retenciones de terceros pero no fecha de retención (casilla 7)'))
+
             # Acumuladores
             total_monto += monto_facturado
             total_itbis += itbis_facturado
@@ -573,6 +619,7 @@ class DgiiReportWizard(models.TransientModel):
         self.record_count = len(invoices)
         self.total_amount = total_monto
         self.total_itbis = total_itbis
+        self.pending_message = '\n'.join(pending) or False
 
         return self._return_wizard()
 
@@ -595,6 +642,17 @@ class DgiiReportWizard(models.TransientModel):
             ('invoice_date', '<=', self.date_to),
             ('l10n_do_ncf_number', '!=', False),
         ], order='invoice_date')
+        # Los e-CF no van en el 608: se anulan con nota de crédito o con el
+        # servicio de anulación (Preguntas frecuentes e-CF de la DGII, 1.4.13).
+        invoices = invoices.filtered(lambda i: not self._is_ecf(i.l10n_do_ncf_number))
+        if not invoices:
+            # Herramienta 608 (2018.2.1): de 1 a 5,000 registros. Sin anulados,
+            # se presenta en la Oficina Virtual como "Declaración en cero"
+            # (instructivo 608, septiembre 2020).
+            raise UserError(_(
+                'No hay comprobantes en papel anulados en el período. Un 608 sin '
+                'registros no se envía como archivo: preséntelo en la Oficina Virtual '
+                'de la DGII como "Declaración en cero".'))
 
         lines = []
         rnc = self._clean_rnc(self.company_id.vat)
