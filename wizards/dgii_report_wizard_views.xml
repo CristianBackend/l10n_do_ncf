@@ -32,6 +32,13 @@
                         <p class="mb-0">El archivo esta listo para descargar y enviar a DGII.</p>
                     </div>
 
+                    <div class="alert alert-warning mb-3" role="alert" invisible="not pending_message">
+                        <strong>Pendientes de completar.</strong>
+                        Estos datos faltan y se dejaron vacíos (no se inventan): la herramienta de
+                        la DGII rechazará esos registros hasta que se completen en las facturas.
+                        <field name="pending_message" nolabel="1" readonly="1" class="d-block mt-2"/>
+                    </div>
+
                     <group string="Resumen del Reporte">
                         <group>
                             <field name="file_name" string="Archivo" readonly="1"/>

@@ -10,6 +10,11 @@ from datetime import date
 import re
 import logging
 
+from .dgii_609_codes import (
+    DETALLE_SERVICIO as DETALLE_SERVICIO_609,
+    TIPO_SERVICIO as TIPO_SERVICIO_609,
+)
+
 _logger = logging.getLogger(__name__)
 
 # =========================================
@@ -189,6 +194,9 @@ class AccountMove(models.Model):
     l10n_do_minor_expense_document = fields.Char(string='Documento Soporte')
 
     # B17 - PAGO EXTERIOR
+    # Clasificación anterior, que no era la del Formato 609. Se conserva solo
+    # como dato histórico: la migración 19.0.3.3.0 la pasó a los dos campos
+    # oficiales donde la equivalencia era clara. No se usa en ningún reporte.
     l10n_do_exterior_service_type = fields.Selection([
         ('01', '01 - Servicios técnicos'),
         ('02', '02 - Servicios profesionales'),
@@ -196,7 +204,31 @@ class AccountMove(models.Model):
         ('04', '04 - Intereses'),
         ('05', '05 - Dividendos'),
         ('06', '06 - Otros'),
-    ], string='Tipo Servicio Exterior')
+    ], string='Tipo Servicio Exterior (anterior)', readonly=True)
+    # Formato 609, columnas 5 y 6 (Norma General 07-2018, Anexo D).
+    l10n_do_609_service_type = fields.Selection(
+        TIPO_SERVICIO_609, string='Tipo de Servicio Adquirido (609)',
+        help='Tabla de Tipos de Servicios del Formato 609 (Norma General 07-2018, Anexo D).')
+    l10n_do_609_service_detail = fields.Selection(
+        DETALLE_SERVICIO_609, string='Detalle del Servicio Adquirido (609)',
+        help='Tabla de detalles del servicio adquirido del Formato 609. El primer '
+             'dígito del detalle es su Tipo de Servicio.')
+
+    @api.constrains('l10n_do_609_service_type', 'l10n_do_609_service_detail')
+    def _check_609_service_detail(self):
+        for move in self:
+            detail = move.l10n_do_609_service_detail
+            if detail and detail[0] != move.l10n_do_609_service_type:
+                raise ValidationError(_(
+                    'El detalle %(detail)s del Formato 609 no pertenece al Tipo de '
+                    'Servicio %(type)s: el primer dígito del detalle es su tipo.',
+                    detail=detail, type=move.l10n_do_609_service_type or _('(vacío)')))
+
+    @api.onchange('l10n_do_609_service_type')
+    def _onchange_609_service_type(self):
+        detail = self.l10n_do_609_service_detail
+        if detail and detail[0] != self.l10n_do_609_service_type:
+            self.l10n_do_609_service_detail = False
 
     # =========================================
     # MULTIMONEDA

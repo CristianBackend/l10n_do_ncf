@@ -9,3 +9,4 @@ from . import test_demo_data
 from . import test_extension_points
 from . import test_move_form_view
 from . import test_dgii_reminder
+from . import test_dgii_609

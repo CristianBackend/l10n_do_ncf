@@ -21,6 +21,8 @@ from odoo.exceptions import UserError
 import base64
 from datetime import date, timedelta
 
+from ..models.dgii_609_codes import PAIS_CODIGO
+
 
 class DgiiReportWizard(models.TransientModel):
     _name = 'l10n_do_ncf.dgii.report.wizard'
@@ -73,6 +75,11 @@ class DgiiReportWizard(models.TransientModel):
     ir17_total = fields.Monetary(string='Total a Pagar DGII', readonly=True, currency_field='currency_id')
 
     currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
+    pending_message = fields.Text(
+        string='Pendientes de completar', readonly=True,
+        help='Datos que faltan en las facturas del reporte. Se dejaron vacíos (no se '
+             'inventan) y la herramienta de la DGII rechazará esos registros hasta '
+             'completarlos.')
 
     @api.onchange('date_from')
     def _onchange_date_from(self):
@@ -623,10 +630,17 @@ class DgiiReportWizard(models.TransientModel):
     # =========================================
 
     def _generate_609(self):
-        """
-        Generar reporte 609 - Pagos al Exterior
-        13 columnas según especificación DGII
-        Todos los montos se convierten a DOP usando la tasa de la fecha de la factura.
+        """Formato 609 - Pagos por servicios al exterior.
+
+        Norma General 07-2018, Anexo D: encabezado de 4 campos y detalle de 13
+        columnas separadas por "|". Los códigos de Tipo y Detalle del servicio
+        y del país son los de la herramienta oficial de la DGII (ver
+        models/dgii_609_codes.py). Los montos van en DOP con la tasa con la que
+        se asentó la factura.
+
+        Nada se inventa: un dato que falta va vacío y el asistente lo lista
+        como pendiente en "Pendientes de completar" (la herramienta de la DGII
+        rechazaría ese registro hasta que se complete).
         """
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
@@ -645,6 +659,7 @@ class DgiiReportWizard(models.TransientModel):
             raise UserError(_('No hay pagos al exterior en el período seleccionado.'))
 
         lines = []
+        pending = []
         total_monto = 0.0
         total_isr = 0.0
         rnc = self._clean_rnc(self.company_id.vat)
@@ -654,63 +669,79 @@ class DgiiReportWizard(models.TransientModel):
         lines.append(f"609|{rnc}|{period}|{len(invoices)}")
 
         for inv in invoices:
-            # Columna 1: Razón Social
-            razon_social = (inv.partner_id.name or '')[:50]
+            partner = inv.commercial_partner_id
+            label = inv.ref or inv.name
+            missing = []
 
-            # Columna 2: Tipo de identificación (1=PF, 2=PJ)
-            tipo_id = '2' if inv.partner_id.company_type == 'company' else '1'
-
-            # Columna 3: Identificación tributaria
-            id_tributaria = self._clean_rnc(inv.partner_id.vat) or 'N/A'
-
-            # Columna 4: País
-            pais = inv.partner_id.country_id.code or 'US'
-
-            # Columna 5: Tipo de servicio
-            tipo_servicio = inv.l10n_do_exterior_service_type or '02'
-
-            # Columna 6: Detalle del servicio
-            detalle_servicio = tipo_servicio
-
-            # Columna 7: Parte relacionada (0=No, 1=Sí)
+            # 1. Razón Social (A 50)
+            razon_social = (partner.name or '')[:50]
+            # 2. Tipo Id Tributaria (A 1): 1 persona física, 2 persona jurídica
+            tipo_id = '2' if partner.is_company else '1'
+            # 3. Id Tributaria (A 50)
+            id_tributaria = self._clean_rnc(partner.vat)[:50]
+            if not id_tributaria:
+                missing.append(_('identificación tributaria del proveedor'))
+            # 4. País destino (A 3): código ISO 3166 numérico de la lista oficial
+            country = partner.country_id
+            pais = PAIS_CODIGO.get(country.code or '', '')
+            if not country:
+                missing.append(_('país del proveedor'))
+            elif not pais:
+                missing.append(_('el país %s no está en la lista del 609 de la DGII', country.name))
+            # 5 y 6. Tipo y Detalle del Servicio Adquirido (A 2 cada uno)
+            tipo_servicio = inv.l10n_do_609_service_type or ''
+            detalle_servicio = inv.l10n_do_609_service_detail or ''
+            if not tipo_servicio:
+                missing.append(_('Tipo de Servicio Adquirido'))
+            if not detalle_servicio:
+                missing.append(_('Detalle del Servicio Adquirido'))
+            # 7. Parte relacionada (A 1): 0 no relacionado, 1 relacionado.
             parte_relacionada = '0'
-
-            # Columna 8: Número del documento
-            numero_doc = (inv.ref or inv.name or '')[:30]
-
-            # Columna 9: Fecha del documento
+            # 8. Número de documento (A 30): el comprobante de la operación (el
+            # e-NCF del pago al exterior, el NCF del proveedor) o el número de
+            # factura del proveedor. No el nombre interno de Odoo
+            # (BILL/2026/11/0003), que no es un documento y lleva "/", que la
+            # herramienta de la DGII no admite.
+            numero_doc = (inv.l10n_do_ncf_number or inv.l10n_do_vendor_ncf or inv.ref or '').strip()[:30]
+            if not numero_doc:
+                missing.append(_('número de documento (comprobante o número de factura del proveedor)'))
+            # 9. Fecha documento (AAAAMMDD)
             fecha_doc = self._format_date(inv.invoice_date)
-
-            # Columna 10: Monto pagado (CONVERTIDO A DOP)
+            # 10. Monto facturado (DOP)
             monto = abs(self._to_dop(inv, inv.amount_total))
 
-            # Columna 11: Fecha de retención
-            fecha_retencion = fecha_doc
-
-            # Columna 12: Renta presunta
-            renta_presunta = monto
-
-            # Columna 13: ISR retenido (CONVERTIDO A DOP)
+            # 11-13. Retención de ISR: la registrada en la factura. Si no hay,
+            # el ISR va en 0 y la Renta Presunta (base del ISR retenido, Art.
+            # 305) también; sin renta presunta la herramienta no exige fecha.
+            isr_lines = inv.l10n_do_retention_ids.filtered(
+                lambda r: r.retention_type_id.retention_type == 'isr'
+                and not r.retention_type_id.is_perceived)
             isr_retenido = abs(self._to_dop(inv, inv.l10n_do_total_isr_retention or 0.0))
-            if isr_retenido == 0:
-                # Por defecto 27% para exterior (ya convertido)
-                isr_retenido = monto * 0.27
+            renta_presunta = abs(self._to_dop(inv, sum(isr_lines.mapped('base_amount'))))
+            if not isr_retenido:
+                pending.append(_('%s: no tiene retención de ISR registrada; se reporta ISR 0.00.', label))
+            elif not renta_presunta:
+                missing.append(_('base (renta presunta) de la retención de ISR'))
+            fecha_retencion = fecha_doc if renta_presunta else ''
+
+            if missing:
+                pending.append(_('%(doc)s: falta %(what)s.', doc=label, what=', '.join(missing)))
 
             total_monto += monto
             total_isr += isr_retenido
 
             campos = [
-                razon_social,                              # 1
-                tipo_id,                                   # 2
-                id_tributaria,                             # 3
-                pais,                                      # 4
-                tipo_servicio,                             # 5
-                detalle_servicio,                          # 6
-                parte_relacionada,                         # 7
-                numero_doc,                                # 8
-                fecha_doc,                                 # 9
-                self._format_amount_required(monto),       # 10
-                fecha_retencion,                           # 11
+                razon_social,                                  # 1
+                tipo_id,                                       # 2
+                id_tributaria,                                 # 3
+                pais,                                          # 4
+                tipo_servicio,                                 # 5
+                detalle_servicio,                              # 6
+                parte_relacionada,                             # 7
+                numero_doc,                                    # 8
+                fecha_doc,                                     # 9
+                self._format_amount_required(monto),           # 10
+                fecha_retencion,                               # 11
                 self._format_amount_required(renta_presunta),  # 12
                 self._format_amount_required(isr_retenido),    # 13
             ]
@@ -724,6 +755,7 @@ class DgiiReportWizard(models.TransientModel):
         self.record_count = len(invoices)
         self.total_amount = total_monto
         self.total_isr_retenido = total_isr
+        self.pending_message = '\n'.join(pending) or False
 
         return self._return_wizard()
 
@@ -863,5 +895,6 @@ class DgiiReportWizard(models.TransientModel):
             'ir17_total_isr': 0,
             'ir17_total_itbis': 0,
             'ir17_total': 0,
+            'pending_message': False,
         })
         return self._return_wizard()

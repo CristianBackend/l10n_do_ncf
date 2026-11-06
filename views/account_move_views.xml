@@ -182,7 +182,14 @@
                     <separator string="Pago al Exterior (B17)" 
                                invisible="l10n_do_fiscal_type != 'exterior'"/>
                     <group invisible="l10n_do_fiscal_type != 'exterior'">
-                        <field name="l10n_do_exterior_service_type"/>
+                        <group>
+                            <field name="l10n_do_609_service_type"/>
+                            <field name="l10n_do_609_service_detail"/>
+                        </group>
+                        <group>
+                            <field name="l10n_do_exterior_service_type"
+                                   invisible="not l10n_do_exterior_service_type"/>
+                        </group>
                     </group>
 
                     <separator string="Nota de Débito Proveedor" 
