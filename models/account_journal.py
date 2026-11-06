@@ -4,7 +4,7 @@
 Los reportes no inventan códigos: los toman de aquí. Sin configurar, el dato
 queda vacío y el asistente de reportes lo lista en "Pendientes de completar".
 """
-from odoo import fields, models
+from odoo import api, fields, models
 
 # Tabla "Tipo de bienes y servicios comprados" del 606 (Norma General 07-2018,
 # Anexo A, casilla 3; instructivo 606, julio 2025).
@@ -25,6 +25,18 @@ TIPO_BIENES_606 = [
 
 class AccountJournal(models.Model):
     _inherit = 'account.journal'
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Un diario nuevo de efectivo, banco o tarjeta nace con su forma de
+        pago DGII (l10n_do_autoconfig.JOURNAL_PAYMENT_FORM), si no se indica."""
+        from .l10n_do_autoconfig import JOURNAL_PAYMENT_FORM, is_dominican
+        journals = super().create(vals_list)
+        for journal in journals:
+            if (not journal.l10n_do_payment_form and journal.type in JOURNAL_PAYMENT_FORM
+                    and is_dominican(journal.company_id)):
+                journal.l10n_do_payment_form = JOURNAL_PAYMENT_FORM[journal.type]
+        return journals
 
     # Instructivo 606 (julio 2025), casilla 23 "Forma de pago". Solo las formas
     # que corresponden a un pago registrado en un diario: 04 (crédito), 06 (nota

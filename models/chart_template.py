@@ -14,6 +14,16 @@ _logger = logging.getLogger(__name__)
 class AccountChartTemplate(models.AbstractModel):
     _inherit = 'account.chart.template'
 
+    def _load(self, template_code, company, install_demo, force_create=True):
+        """Al cargar el plan dominicano, dejar la compañía lista para facturar
+        y declarar: clasificación DGII de los impuestos del plan, ITBIS 0 %
+        de exportación y forma de pago de los diarios (l10n_do_autoconfig)."""
+        result = super()._load(template_code, company, install_demo, force_create=force_create)
+        if template_code == 'do':
+            from . import l10n_do_autoconfig
+            l10n_do_autoconfig.autoconfigure(self.env, company)
+        return result
+
     def _post_load_demo_data(self, company=False):
         """Preparar las facturas demo antes de que Odoo las confirme.
 

@@ -52,6 +52,11 @@ def post_init_hook(env):
     # 2. Configurar etiqueta VAT y impuestos
     configure_vat_and_taxes(env)
 
+    # 3. Lo que se deduce del plan contable l10n_do (impuestos por xmlid,
+    #    diarios por tipo). Solo llena lo vacío.
+    from .models import l10n_do_autoconfig
+    l10n_do_autoconfig.autoconfigure(env)
+
     _logger.info('l10n_do_ncf: Configuración post-instalación completada')
 
 

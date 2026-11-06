@@ -8,6 +8,7 @@ from . import res_partner
 from . import res_company
 from . import license_config
 from . import ncf_dashboard
+from . import l10n_do_config_pending
 from . import ncf_alert
 from . import dgii_reminder
 from . import pos_order

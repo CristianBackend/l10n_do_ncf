@@ -293,6 +293,17 @@ export class NcfDashboard extends Component {
         writeGuideOpen(this.guide.open);
     }
 
+    // Tarjeta "Configuración pendiente": abre la lista filtrada del grupo (o
+    // la acción que mande el servidor, p. ej. cargar un rango e-CF).
+    async openConfigPending(group) {
+        const action = await this.orm.call(
+            "l10n_do_ncf.dashboard", "l10n_do_open_config_pending", [group.key]
+        );
+        if (action) {
+            await this.action.doAction(action, { onClose: () => this.refresh() });
+        }
+    }
+
     // Ficha de la compañía, pestaña "Facturación electrónica" (método del
     // conector; el botón solo sale cuando el conector manda ecf_setup_issue).
     async openEcfSetup() {

@@ -163,6 +163,30 @@
                         </ul>
                     </section>
 
+                    <!-- Configuración pendiente: solo lo que no se pudo deducir solo -->
+                    <section t-if="state.config_pending and state.config_pending.length"
+                             class="ncfd-card ncfd-alerts ncfd-config">
+                        <div class="ncfd-alerts__head">
+                            <i class="fa fa-wrench"/>
+                            <span>Configuración pendiente</span>
+                            <span class="ncfd-count" t-esc="state.config_pending.length"/>
+                        </div>
+                        <ul class="ncfd-alerts__list">
+                            <li t-foreach="state.config_pending" t-as="group" t-key="group.key"
+                                class="ncfd-alert is-warning">
+                                <span class="ncfd-dot"/>
+                                <strong><t t-esc="group.title"/><t t-if="group.count">: <t t-esc="group.count"/></t></strong>
+                                <span class="ncfd-alert__msgs">
+                                    <span class="ncfd-alert__msg" t-esc="group.hint"/>
+                                </span>
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        t-on-click="() => this.openConfigPending(group)">
+                                    Completar
+                                </button>
+                            </li>
+                        </ul>
+                    </section>
+
                     <!-- ================= INDICADORES ================= -->
                     <div class="ncfd-kpis">
                         <t t-if="state.ecf_active">

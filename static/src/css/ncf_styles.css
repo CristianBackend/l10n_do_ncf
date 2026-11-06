@@ -329,6 +329,11 @@
 .ncfd-alert.is-danger .ncfd-dot { background: var(--ncfd-danger); }
 .ncfd-alert.is-success .ncfd-dot { background: var(--ncfd-success); }
 
+/* Configuración pendiente: misma tarjeta que Avisos, con el botón a la derecha */
+.ncfd-config .ncfd-alert { align-items: center; }
+.ncfd-config .ncfd-alert__msg { white-space: normal; }
+.ncfd-config .ncfd-alert .btn { margin-left: auto; flex-shrink: 0; }
+
 /* --------------------------------------------------------------------------
    INDICADORES
    -------------------------------------------------------------------------- */

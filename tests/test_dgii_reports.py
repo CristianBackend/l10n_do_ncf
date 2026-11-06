@@ -236,6 +236,9 @@ class TestDgiiReports(NcfCommon):
     def test_payment_form_comes_from_the_real_payment(self):
         bank = self.company_data['default_journal_bank']
         cash = self.company_data['default_journal_cash']
+        # El plan l10n_do ya le pone 02 al banco; aquí se prueba uno sin forma.
+        bank.l10n_do_payment_form = False
+        cash.l10n_do_payment_form = False
         unpaid = self._bill(l10n_do_vendor_ncf='B0100000031')
         by_bank = self._bill(l10n_do_vendor_ncf='B0100000032')
         by_cash = self._bill(l10n_do_vendor_ncf='B0100000033')
