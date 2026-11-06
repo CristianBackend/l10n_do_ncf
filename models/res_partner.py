@@ -98,6 +98,16 @@ class ResPartner(models.Model):
         help='Estado del contribuyente en DGII'
     )
 
+    # Formato 609, casilla 7 "Parte relacionada" (Norma General 07-2018,
+    # Anexo D: 0 no relacionado, 1 relacionado). Sin valor por defecto: si
+    # falta, el 609 lo marca como pendiente.
+    l10n_do_609_related_party = fields.Selection(
+        [('0', '0 - No relacionado'), ('1', '1 - Relacionado')],
+        string='Parte relacionada (609)',
+        help='Si el proveedor del exterior es parte relacionada de la empresa. Va '
+             'en la casilla 7 del Formato 609 (Pagos por servicios al exterior).',
+    )
+
     l10n_do_dgii_activity = fields.Char(
         string='Actividad Economica',
         readonly=True,

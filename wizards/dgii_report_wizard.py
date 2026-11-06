@@ -860,8 +860,11 @@ class DgiiReportWizard(models.TransientModel):
                 missing.append(_('Tipo de Servicio Adquirido'))
             if not detalle_servicio:
                 missing.append(_('Detalle del Servicio Adquirido'))
-            # 7. Parte relacionada (A 1): 0 no relacionado, 1 relacionado.
-            parte_relacionada = '0'
+            # 7. Parte relacionada (A 1): 0 no relacionado, 1 relacionado. Del
+            # contacto; la herramienta 609 no admite la casilla en blanco.
+            parte_relacionada = partner.l10n_do_609_related_party or ''
+            if not parte_relacionada:
+                missing.append(_('si el proveedor es parte relacionada (en el contacto)'))
             # 8. Número de documento (A 30): el comprobante de la operación (el
             # e-NCF del pago al exterior, el NCF del proveedor) o el número de
             # factura del proveedor. No el nombre interno de Odoo

@@ -26,6 +26,7 @@ class TestDgii609(NcfCommon):
         cls.supplier = cls.env['res.partner'].create({
             'name': 'Foreign Supplier Inc.', 'is_company': True,
             'country_id': cls.env.ref('base.us').id, 'vat': 'EIN-12-3456789',
+            'l10n_do_609_related_party': '0',
         })
         cls.isr_ext = cls.env['l10n_do_ncf.retention.type'].search([('code', '=', 'ISR_EXT')], limit=1)
         cls.today = fields.Date.today()
@@ -94,6 +95,21 @@ class TestDgii609(NcfCommon):
         self.assertEqual(lines[1].split('|')[7], '')
         self.assertNotIn(bill.name, lines[1])
         self.assertIn('número de documento', wizard.pending_message)
+
+    def test_related_party_comes_from_the_contact(self):
+        """Anexo D, casilla 7: 0 no relacionado, 1 relacionado. La herramienta
+        609 no la admite en blanco; sin dato queda pendiente, nunca 0."""
+        related = self.supplier.copy({'name': 'Casa Matriz Inc.', 'l10n_do_609_related_party': '1'})
+        unknown = self.supplier.copy({'name': 'Sin dato Inc.', 'l10n_do_609_related_party': False})
+        self._bill(partner=related, retention_base=10000.0, ref='REL-1',
+                   l10n_do_609_service_type='2', l10n_do_609_service_detail='21')
+        self._bill(partner=unknown, retention_base=10000.0, ref='UNK-1',
+                   l10n_do_609_service_type='2', l10n_do_609_service_detail='21')
+        wizard, lines = self._report()
+        rows = {l.split('|')[7]: l.split('|') for l in lines[1:]}
+        self.assertEqual(rows['REL-1'][6], '1')
+        self.assertEqual(rows['UNK-1'][6], '')
+        self.assertIn('UNK-1: falta si el proveedor es parte relacionada', wizard.pending_message)
 
     def test_detail_must_belong_to_its_type(self):
         with self.assertRaises(ValidationError):
