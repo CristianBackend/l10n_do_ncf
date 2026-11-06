@@ -18,6 +18,8 @@
                 <separator string="Opciones de Anulación"/>
                 <group>
                     <field name="action_type" widget="radio"/>
+                    <field name="annulment_type" invisible="action_type != 'annul'"
+                           required="action_type == 'annul'"/>
                 </group>
                 <group>
                     <field name="annul_reason" placeholder="Indique el motivo de la anulación..."/>

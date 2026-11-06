@@ -298,7 +298,7 @@ class L10nDoDGIITxtValidator(models.TransientModel):
 
         # Tipo ingreso
         tipo_ingreso = line.get('tipo_ingreso', '')
-        if tipo_ingreso and tipo_ingreso not in ('01', '02', '03', '04'):
+        if tipo_ingreso and tipo_ingreso not in ('01', '02', '03', '04', '05', '06'):
             errors.append(_('Línea %s: Tipo ingreso inválido: %s') % (line_num, tipo_ingreso))
 
         # Formas de pago (deben sumar el total)
@@ -355,8 +355,7 @@ class L10nDoDGIITxtValidator(models.TransientModel):
 
     @api.model
     def format_606_line(self, data):
-        """
-        Formatear línea para archivo TXT 606.
+        """Formatear línea para archivo TXT 606. Sin valores por defecto: un dato que falta va vacío (no se inventa).
         
         Args:
             data: dict con datos de la línea
@@ -366,8 +365,8 @@ class L10nDoDGIITxtValidator(models.TransientModel):
         """
         fields = [
             self._format_rnc(data.get('rnc', '')),
-            data.get('tipo_id', '1'),
-            data.get('tipo_bienes_servicios', '02').zfill(2),
+            data.get('tipo_id', '') or '',
+            data.get('tipo_bienes_servicios', '') or '',
             self._format_ncf(data.get('ncf', '')),
             self._format_ncf(data.get('ncf_modificado', '')),
             self._format_date(data.get('fecha')),
@@ -387,7 +386,7 @@ class L10nDoDGIITxtValidator(models.TransientModel):
             self._format_amount(data.get('impuesto_selectivo', 0)),
             self._format_amount(data.get('otros_impuestos', 0)),
             self._format_amount(data.get('propina_legal', 0)),
-            (data.get('forma_pago', '04') or '04').zfill(2),
+            data.get('forma_pago', '') or '',
         ]
         
         return '|'.join(fields)
@@ -402,7 +401,7 @@ class L10nDoDGIITxtValidator(models.TransientModel):
             data.get('tipo_id', '') or '',
             self._format_ncf(data.get('ncf', '')),
             self._format_ncf(data.get('ncf_modificado', '')),
-            (data.get('tipo_ingreso', '01') or '01').zfill(2),
+            data.get('tipo_ingreso', '') or '',
             self._format_date(data.get('fecha_comprobante')),
             self._format_date(data.get('fecha_retencion')),
             self._format_amount(data.get('monto_facturado', 0)),

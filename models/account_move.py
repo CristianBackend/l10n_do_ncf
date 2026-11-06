@@ -242,6 +242,41 @@ class AccountMove(models.Model):
     # =========================================
     # FORMA DE PAGO
     # =========================================
+    # Tipo de ingresos: el mismo dato para el e-CF (TipoIngresos, Formato e-CF
+    # v1.0, pág. 7, campo 8) y el 607 (Norma General 07-2018, Anexo B, casilla
+    # 5). Sin valor por defecto: si falta, el 607 lo marca como pendiente.
+    l10n_do_ncf_is_electronic = fields.Boolean(related='l10n_do_ncf_type_id.is_electronic')
+
+    l10n_do_ecf_income_type = fields.Selection(
+        [
+            ('1', '01 - Ingresos por operaciones (no financieros)'),
+            ('2', '02 - Ingresos financieros'),
+            ('3', '03 - Ingresos extraordinarios'),
+            ('4', '04 - Ingresos por arrendamientos'),
+            ('5', '05 - Ingresos por venta de activo depreciable'),
+            ('6', '06 - Otros ingresos'),
+        ],
+        string='Tipo de ingreso',
+    )
+
+    # Anulación de un comprobante en papel (608, Norma General 07-2018, Anexo C).
+    l10n_do_annulment_type = fields.Selection(
+        [
+            ('01', '01 - Deterioro de factura preimpresa'),
+            ('02', '02 - Errores de impresión (factura preimpresa)'),
+            ('03', '03 - Impresión defectuosa'),
+            ('04', '04 - Corrección de la información'),
+            ('05', '05 - Cambio de productos'),
+            ('06', '06 - Devolución de productos'),
+            ('07', '07 - Omisión de productos'),
+            ('08', '08 - Errores en secuencias de NCF'),
+            ('09', '09 - Por cese de operaciones'),
+            ('10', '10 - Pérdida o hurto de talonarios'),
+        ],
+        string='Tipo de anulación (608)', copy=False, readonly=True,
+    )
+    l10n_do_annulment_date = fields.Date(string='Fecha de anulación', copy=False, readonly=True)
+
     l10n_do_payment_cash = fields.Monetary(string='Efectivo', currency_field='currency_id', default=0.0)
     l10n_do_payment_bank = fields.Monetary(string='Cheque/Transferencia', currency_field='currency_id', default=0.0)
     l10n_do_payment_card = fields.Monetary(string='Tarjeta', currency_field='currency_id', default=0.0)
@@ -288,7 +323,10 @@ class AccountMove(models.Model):
         ('09', '09 - Costo de Venta'),
         ('10', '10 - Adquisición Activos'),
         ('11', '11 - Gastos de Seguros'),
-    ], string='Tipo Gasto', default='02')
+    ], string='Tipo Gasto',
+        help='Tipo de bienes y servicios comprados del 606 (Norma General 07-2018, '
+             'Anexo A, casilla 3). Si se deja vacío, se toma de la cuenta de gasto de '
+             'las líneas (campo "Tipo 606" de la cuenta).')
 
     l10n_do_purchase_type = fields.Selection([
         ('01', '01 - Gastos personal'),
@@ -302,7 +340,10 @@ class AccountMove(models.Model):
         ('09', '09 - Costo venta'),
         ('10', '10 - Adquisición activos'),
         ('11', '11 - Seguros'),
-    ], string='Tipo Compra (606)', default='02')
+    ], string='Tipo Compra (606)',
+        help='Tipo de bienes y servicios comprados del 606 (Norma General 07-2018, '
+             'Anexo A, casilla 3). Si se deja vacío, se toma de la cuenta de gasto de '
+             'las líneas (campo "Tipo 606" de la cuenta).')
 
     l10n_do_606_monto_bienes = fields.Monetary(
         compute='_compute_606_split_bienes_servicios', store=True, readonly=False, currency_field='currency_id'
@@ -442,12 +483,15 @@ class AccountMove(models.Model):
                 move.l10n_do_606_monto_bienes = move.l10n_do_606_monto_servicios = 0
                 continue
             bienes = servicios = 0.0
-            for line in move.invoice_line_ids.filtered(lambda l: not l.display_type):
-                subtotal = line.price_subtotal
-                if line.product_id and line.product_id.type in ('consu', 'product'):
-                    bienes += subtotal
+            for line in move.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
+                # Sin producto no se sabe si es bien o servicio: no se cuenta y
+                # el 606 lo marca como pendiente (se puede escribir a mano).
+                if not line.product_id:
+                    continue
+                if line.product_id.type == 'service':
+                    servicios += line.price_subtotal
                 else:
-                    servicios += subtotal
+                    bienes += line.price_subtotal
             move.l10n_do_606_monto_bienes = bienes
             move.l10n_do_606_monto_servicios = servicios
 
@@ -537,26 +581,71 @@ class AccountMove(models.Model):
 
     @api.depends('l10n_do_payment_cash', 'l10n_do_payment_bank', 'l10n_do_payment_card',
                  'l10n_do_payment_credit', 'l10n_do_payment_bond', 'l10n_do_payment_swap',
-                 'l10n_do_payment_other', 'payment_state')
+                 'l10n_do_payment_other', 'payment_state', 'amount_residual')
     def _compute_forma_pago(self):
         for move in self:
-            payments = {
-                '01': move.l10n_do_payment_cash or 0,
-                '02': move.l10n_do_payment_bank or 0,
-                '03': move.l10n_do_payment_card or 0,
-                '04': move.l10n_do_payment_credit or 0,
-                '05': move.l10n_do_payment_swap or 0,
-                '07': move.l10n_do_payment_other or 0,
-            }
-            active = [k for k, v in payments.items() if v > 0]
-            if len(active) > 1:
-                move.l10n_do_forma_pago = '07'
-            elif active:
-                move.l10n_do_forma_pago = active[0]
-            elif move.payment_state == 'paid':
-                move.l10n_do_forma_pago = '02'
-            else:
-                move.l10n_do_forma_pago = '04'
+            move.l10n_do_forma_pago = move._l10n_do_payment_form_code()
+
+    # Formas de pago del 606/607 (instructivo 606, julio 2025, casilla 23):
+    # 01 Efectivo, 02 Cheques/Transferencias/Depósito, 03 Tarjeta crédito/débito,
+    # 04 Compra a crédito, 05 Permuta, 06 Notas de crédito, 07 Mixto.
+    def _l10n_do_payment_amounts(self):
+        """(importe por forma de pago, importe sin forma conocida), en DOP.
+
+        Sale de los pagos reales conciliados con la factura: el diario de cada
+        pago dice su forma (campo "Forma de pago DGII" del diario; un diario de
+        tipo Efectivo es 01). Una nota de crédito aplicada es 06 y lo que queda
+        por pagar es 04 (a crédito). Un pago cuyo diario no tiene forma va como
+        "sin forma conocida": no se adivina.
+        """
+        self.ensure_one()
+        amounts, unknown = {}, 0.0
+        terms = self.line_ids.filtered(
+            lambda l: l.account_id.account_type in ('asset_receivable', 'liability_payable'))
+        for line in terms:
+            for partial in line.matched_debit_ids | line.matched_credit_ids:
+                counterpart = (partial.debit_move_id if partial.credit_move_id == line
+                               else partial.credit_move_id)
+                origin = counterpart.move_id
+                if origin.move_type in ('out_refund', 'in_refund'):
+                    code = '06'
+                else:
+                    journal = counterpart.journal_id
+                    code = journal.l10n_do_payment_form or ('01' if journal.type == 'cash' else False)
+                if code:
+                    amounts[code] = amounts.get(code, 0.0) + partial.amount
+                else:
+                    unknown += partial.amount
+        residual = abs(self.amount_residual_signed or 0.0)
+        if residual:
+            amounts['04'] = amounts.get('04', 0.0) + residual
+        return amounts, unknown
+
+    def _l10n_do_payment_form_code(self):
+        """Forma de pago del 606 (un código), o False si no se puede saber.
+
+        Primero lo que el usuario haya indicado en los importes por forma de
+        pago de la factura; si no hay, los pagos reales. Varias formas son 07
+        (Mixto). "Otras formas" no tiene código en la tabla: queda sin forma.
+        """
+        self.ensure_one()
+        manual = {
+            '01': self.l10n_do_payment_cash, '02': self.l10n_do_payment_bank,
+            '03': self.l10n_do_payment_card, '04': self.l10n_do_payment_credit,
+            '05': self.l10n_do_payment_swap,
+        }
+        active = [code for code, amount in manual.items() if amount and amount > 0]
+        if self.l10n_do_payment_other and self.l10n_do_payment_other > 0:
+            return '07' if active else False
+        if active:
+            return active[0] if len(active) == 1 else '07'
+        if self.move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund') \
+                or self.state != 'posted':
+            return False
+        amounts, unknown = self._l10n_do_payment_amounts()
+        if unknown or not amounts:
+            return False
+        return next(iter(amounts)) if len(amounts) == 1 else '07'
 
     @api.depends('l10n_do_is_credit_sale', 'l10n_do_retention_date', 'l10n_do_retention_reported',
                  'l10n_do_third_party_retention_itbis', 'l10n_do_third_party_retention_isr')

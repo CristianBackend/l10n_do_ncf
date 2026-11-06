@@ -223,12 +223,16 @@ class DgiiReportWizard(models.TransientModel):
         pending.append('%s: %s' % (move.l10n_do_ncf_number or move.l10n_do_vendor_ncf
                                    or move.ref or move.name, message))
 
-    def _validate_tipo_bienes(self, tipo):
-        """Validar tipo de bienes/servicios"""
-        valid_tipos = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11']
-        if tipo in valid_tipos:
+    def _606_tipo_bienes(self, inv):
+        """Tipo de bienes y servicios del 606 (Anexo A, casilla 3), o '' si no
+        se sabe: el de la factura, o el "Tipo 606" de la cuenta de gasto si
+        todas las líneas lo tienen y es el mismo. Nunca uno por defecto."""
+        tipo = inv.l10n_do_purchase_type or inv.l10n_do_expense_type
+        if tipo:
             return tipo
-        return '02'  # Default: Gastos por trabajos
+        codes = set(inv.invoice_line_ids.filtered(
+            lambda l: l.display_type == 'product').mapped('account_id.l10n_do_606_expense_type'))
+        return codes.pop() if len(codes) == 1 and False not in codes else ''
 
     # =========================================
     # ACCIÓN PRINCIPAL
@@ -296,8 +300,8 @@ class DgiiReportWizard(models.TransientModel):
 
             # Para B11 informal, usar cédula del proveedor informal
             if inv.l10n_do_fiscal_type == 'informal':
-                rnc_supplier = self._clean_rnc(inv.l10n_do_informal_provider_cedula) or '00000000000'
-                tipo_id = '2'  # Cédula
+                rnc_supplier = self._clean_rnc(inv.l10n_do_informal_provider_cedula)
+                tipo_id = '2' if rnc_supplier else ''  # Cédula
             elif inv.l10n_do_fiscal_type == 'minor_expense':
                 # B13 usa el RNC o la cédula de la propia empresa
                 rnc_supplier = self._clean_rnc(self.company_id.vat)
@@ -305,17 +309,21 @@ class DgiiReportWizard(models.TransientModel):
             elif rnc_supplier:
                 tipo_id = self._id_type_by_length(rnc_supplier)
             else:
-                rnc_supplier = '00000000000'
-                tipo_id = '2'
-            if not tipo_id:
+                tipo_id = ''
+            if not rnc_supplier:
+                # Nunca 00000000000: sin RNC/cédula el registro queda pendiente.
+                self._pending(pending, inv, _('falta el RNC o la cédula del proveedor'))
+            elif not tipo_id:
                 # Herramienta 606 (2025): solo 1 (RNC, 9 dígitos) o 2 (Cédula, 11).
                 self._pending(pending, inv, _(
                     'la identificación %s no tiene 9 dígitos (RNC) ni 11 (cédula)') % rnc_supplier)
 
             # Columna 3: Tipo de Bienes/Servicios
-            tipo_bienes = self._validate_tipo_bienes(
-                inv.l10n_do_purchase_type or inv.l10n_do_expense_type or '02'
-            )
+            tipo_bienes = self._606_tipo_bienes(inv)
+            if not tipo_bienes:
+                self._pending(pending, inv, _(
+                    'falta el tipo de bienes y servicios: indíquelo en la factura o en el '
+                    '"Tipo 606" de la cuenta de gasto'))
 
             # Columna 4: NCF
             if inv.l10n_do_fiscal_type in ('informal', 'minor_expense'):
@@ -343,10 +351,13 @@ class DgiiReportWizard(models.TransientModel):
             # Columnas 8-9: Monto bienes y servicios (CONVERTIDOS A DOP)
             monto_servicios = abs(self._to_dop(inv, inv.l10n_do_606_monto_servicios or 0.0))
             monto_bienes = abs(self._to_dop(inv, inv.l10n_do_606_monto_bienes or 0.0))
-            
-            # Si no hay split, todo va a servicios por defecto
-            if monto_bienes == 0 and monto_servicios == 0:
-                monto_servicios = abs(self._to_dop(inv, inv.amount_untaxed or 0.0))
+            # Bienes y servicios salen del tipo de producto de cada línea (o de lo
+            # que se escriba a mano). Si no cubren el monto de la factura, una
+            # línea no tiene producto y no se supone que sea un servicio.
+            base_dop = abs(self._to_dop(inv, inv.amount_untaxed or 0.0))
+            if abs(round(monto_bienes + monto_servicios - base_dop, 2)) > 0.01:
+                self._pending(pending, inv, _(
+                    'hay líneas sin producto: indique los montos de bienes y de servicios'))
 
             # Columna 10: Monto total (base imponible)
             monto_total = monto_bienes + monto_servicios
@@ -381,7 +392,7 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 18: Monto retención renta (ISR) (CONVERTIDO A DOP)
             isr_retenido = abs(self._to_dop(inv, inv.l10n_do_isr_retenido or inv.l10n_do_total_isr_retention or 0.0))
             if isr_retenido > 0 and not tipo_retencion_isr:
-                tipo_retencion_isr = '02'  # Default: Honorarios
+                self._pending(pending, inv, _('falta el tipo de retención de ISR'))
 
             # Columna 19: ISR percibido en compras (CONVERTIDO A DOP)
             isr_percibido = abs(self._to_dop(inv, inv.l10n_do_isr_percibido or 0.0))
@@ -396,14 +407,13 @@ class DgiiReportWizard(models.TransientModel):
             propina_legal = abs(self._to_dop(inv, inv.l10n_do_propina_legal or 0.0))
 
             # Columna 23: Forma de pago
-            forma_pago = inv.l10n_do_forma_pago or ''
+            # Del pago real (diario del pago, nota de crédito aplicada o saldo a
+            # crédito); si no se puede saber, pendiente.
+            forma_pago = inv._l10n_do_payment_form_code() or ''
             if not forma_pago:
-                if inv.payment_state == 'paid':
-                    forma_pago = '02'  # Cheque/Transferencia
-                elif inv.payment_state == 'not_paid':
-                    forma_pago = '04'  # Crédito
-                else:
-                    forma_pago = '04'
+                self._pending(pending, inv, _(
+                    'no se puede saber la forma de pago: configure "Forma de pago DGII" '
+                    'en el diario del pago'))
 
             # Instructivo 606 (julio 2025), casillas 12, 17 y 18: con ITBIS
             # retenido, tipo o monto de retención de ISR, la fecha de pago
@@ -506,11 +516,13 @@ class DgiiReportWizard(models.TransientModel):
             rnc_client = self._clean_rnc(inv.partner_id.vat)
 
             # Columna 2: Tipo de identificación
+            # 1 RNC, 2 Cédula, 3 Pasaporte o ID tributaria (instructivo 607,
+            # casilla 2). Sin identificación queda pendiente, sin tipo.
             if rnc_client:
                 tipo_id = self._get_rnc_type(inv.partner_id.vat)
             else:
-                tipo_id = '3'  # Sin identificación
-                rnc_client = ''
+                tipo_id = ''
+                self._pending(pending, inv, _('falta el RNC, la cédula o el ID del cliente'))
 
             # Columna 3: NCF
             ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
@@ -522,10 +534,11 @@ class DgiiReportWizard(models.TransientModel):
                 ncf_modificado = self._pad_ncf_modified(ncf_origin)
 
             # Columna 5: Tipo de ingreso
-            tipo_ingreso = '01'  # Ingresos por operaciones
-            ncf_type = inv.l10n_do_ncf_type_id
-            if ncf_type and ncf_type.code in ('16',):  # Exportación
-                tipo_ingreso = '02'
+            # El mismo dato que el TipoIngresos del e-CF (Anexo B, casilla 5).
+            income = inv.l10n_do_ecf_income_type
+            tipo_ingreso = ('0' + income) if income else ''
+            if not tipo_ingreso:
+                self._pending(pending, inv, _('falta el tipo de ingreso'))
 
             # Columna 6: Fecha del comprobante
             fecha_comprobante = self._format_date(inv.invoice_date)
@@ -559,19 +572,21 @@ class DgiiReportWizard(models.TransientModel):
 
             monto_total = abs(self._to_dop(inv, inv.amount_total))
 
-            # Si no hay formas de pago específicas, usar default
+            # Sin importes por forma de pago en la factura, se toman de los
+            # pagos reales; lo que no tiene forma conocida queda pendiente.
             total_formas = efectivo + cheque + tarjeta + credito + bonos + permuta + otras
             if total_formas == 0:
-                if inv.payment_state == 'paid':
-                    cheque = monto_total
-                elif inv.payment_state == 'not_paid':
-                    credito = monto_total
-                elif inv.payment_state == 'partial':
-                    pagado = monto_total - abs(self._to_dop(inv, inv.amount_residual))
-                    cheque = pagado
-                    credito = abs(self._to_dop(inv, inv.amount_residual))
-                else:
-                    credito = monto_total
+                amounts, unknown = inv._l10n_do_payment_amounts()
+                efectivo = amounts.get('01', 0.0)
+                cheque = amounts.get('02', 0.0)
+                tarjeta = amounts.get('03', 0.0)
+                credito = amounts.get('04', 0.0)
+                permuta = amounts.get('05', 0.0)
+                if unknown or amounts.get('06'):
+                    self._pending(pending, inv, _(
+                        'parte del cobro no tiene forma de pago conocida (diario sin "Forma '
+                        'de pago DGII" o nota de crédito aplicada): indique los importes por '
+                        'forma de pago en la factura'))
 
             # Instructivo 607 (septiembre 2020), casillas 10 y 12: con ITBIS o
             # ISR retenido por terceros, la fecha de retención es obligatoria.
@@ -635,12 +650,19 @@ class DgiiReportWizard(models.TransientModel):
         """
         # Buscar SOLO facturas canceladas (no entregadas)
         # Las facturas revertidas por NC van al 607, no al 608
+        # Por la fecha en que se anuló (Anexo C, casilla 2). Una anulación
+        # anterior a este campo no tiene fecha: entra por la de la factura y
+        # queda pendiente.
         invoices = self.env['account.move'].search([
             ('company_id', '=', self.company_id.id),
             ('state', '=', 'cancel'),
+            ('l10n_do_ncf_number', '!=', False),
+            '|',
+            '&', ('l10n_do_annulment_date', '>=', self.date_from),
+            ('l10n_do_annulment_date', '<=', self.date_to),
+            '&', '&', ('l10n_do_annulment_date', '=', False),
             ('invoice_date', '>=', self.date_from),
             ('invoice_date', '<=', self.date_to),
-            ('l10n_do_ncf_number', '!=', False),
         ], order='invoice_date')
         # Los e-CF no van en el 608: se anulan con nota de crédito o con el
         # servicio de anulación (Preguntas frecuentes e-CF de la DGII, 1.4.13).
@@ -655,6 +677,7 @@ class DgiiReportWizard(models.TransientModel):
                 'de la DGII como "Declaración en cero".'))
 
         lines = []
+        pending = []
         rnc = self._clean_rnc(self.company_id.vat)
         period = self.date_from.strftime('%Y%m')
 
@@ -665,11 +688,15 @@ class DgiiReportWizard(models.TransientModel):
             # Columna 1: NCF
             ncf = self._pad_ncf(inv.l10n_do_ncf_number or '')
 
-            # Columna 2: Fecha
-            fecha = self._format_date(inv.invoice_date)
+            # Columna 2: fecha en que se anuló (Anexo C)
+            fecha = self._format_date(inv.l10n_do_annulment_date)
+            if not fecha:
+                self._pending(pending, inv, _('no tiene fecha de anulación'))
 
-            # Columna 3: Tipo de anulación
-            tipo_anulacion = '05'  # Default: Corrección de información
+            # Columna 3: tipo de anulación (Anexo C, tabla 01-10)
+            tipo_anulacion = inv.l10n_do_annulment_type or ''
+            if not tipo_anulacion:
+                self._pending(pending, inv, _('falta el tipo de anulación'))
 
             campos = [ncf, fecha, tipo_anulacion]
             lines.append('|'.join(campos))
@@ -680,6 +707,7 @@ class DgiiReportWizard(models.TransientModel):
         self.file_name = f"DGII_608_{rnc}_{period}.txt"
         self.state = 'generated'
         self.record_count = len(invoices)
+        self.pending_message = '\n'.join(pending) or False
 
         return self._return_wizard()
 

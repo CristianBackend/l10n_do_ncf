@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Republica Dominicana - Comprobantes Fiscales (NCF)',
-    'version': '19.0.3.3.2',
+    'version': '19.0.3.3.3',
     'summary': 'Gestion completa de NCF para Republica Dominicana segun normativa DGII',
     'description': 'Modulo de Comprobantes Fiscales para Republica Dominicana. Compatible con Odoo 19.',
     'author': 'NewPlain',
@@ -34,6 +34,7 @@
         'views/retention_views.xml',
         'views/account_move_views.xml',
         'views/account_tax_views.xml',
+        'views/account_config_views.xml',
         'views/res_partner_views.xml',
         'views/res_company_views.xml',
         'views/ncf_dashboard_views.xml',

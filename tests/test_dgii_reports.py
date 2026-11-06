@@ -168,3 +168,159 @@ class TestDgiiReports(NcfCommon):
         self.assertEqual(lines[1].split('|')[6], '')
         self.assertIn('no fecha de pago', wizard.pending_message)
         self.assertIn(bill.l10n_do_vendor_ncf, wizard.pending_message)
+
+    # ---------------------------------------------------------------
+    # Grupo 2: nunca inventar ni poner valores por defecto sin dato
+    # ---------------------------------------------------------------
+    def _pay(self, move, journal, amount=None):
+        wizard = self.env['account.payment.register'].with_context(
+            active_model='account.move', active_ids=move.ids).create({
+                'journal_id': journal.id,
+                **({'amount': amount} if amount is not None else {}),
+            })
+        wizard._create_payments()
+        move.invalidate_recordset()
+
+    def _row(self, lines, ncf):
+        for line in lines[1:]:
+            columns = line.split('|')
+            if ncf in columns:
+                return columns
+        self.fail('%s no está en el reporte' % ncf)
+
+    def test_606_no_supplier_id_is_pending_never_zeros(self):
+        nobody = self.env['res.partner'].create({'name': 'Sin RNC', 'country_id': self.country_do.id})
+        self._bill(nobody, l10n_do_vendor_ncf='B0100000021')
+        wizard, lines = self._report('606')
+        self.assertNotIn('00000000000', '\n'.join(lines))
+        self.assertEqual(self._row(lines, 'B0100000021')[:2], ['', ''])
+        self.assertIn('falta el RNC o la cédula del proveedor', wizard.pending_message)
+
+    def test_606_goods_and_services_type_from_the_expense_account(self):
+        bill = self._bill(l10n_do_vendor_ncf='B0100000022')
+        wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000022')[2], '')
+        self.assertIn('falta el tipo de bienes y servicios', wizard.pending_message)
+        bill.invoice_line_ids.account_id.l10n_do_606_expense_type = '03'
+        _wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000022')[2], '03')
+        # El de la factura manda sobre el de la cuenta.
+        self._set(bill, l10n_do_expense_type='11')
+        _wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000022')[2], '11')
+
+    def test_606_lines_without_product_are_not_assumed_services(self):
+        self._bill(l10n_do_vendor_ncf='B0100000023')
+        wizard, lines = self._report('606')
+        row = self._row(lines, 'B0100000023')
+        self.assertEqual(row[7:9], ['', ''])
+        self.assertIn('hay líneas sin producto', wizard.pending_message)
+        service = self.env['product.product'].create({'name': 'Servicio', 'type': 'service'})
+        bill = self.env['account.move'].create({
+            'move_type': 'in_invoice', 'partner_id': self.supplier.id, 'invoice_date': self.today,
+            'l10n_do_vendor_ncf': 'B0100000024',
+            'invoice_line_ids': [Command.create({
+                'product_id': service.id, 'quantity': 1, 'price_unit': 500.0, 'tax_ids': []})],
+        })
+        bill.action_post()
+        wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000024')[7:10], ['500.00', '', '500.00'])
+
+    def test_606_isr_type_is_never_assumed(self):
+        bill = self._bill(retentions=[(self.isr_prof, 1000.0)], l10n_do_vendor_ncf='B0100000025')
+        self._pay(bill, self.company_data['default_journal_bank'])
+        wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000025')[16], '')
+        self.assertIn('falta el tipo de retención de ISR', wizard.pending_message)
+
+    def test_payment_form_comes_from_the_real_payment(self):
+        bank = self.company_data['default_journal_bank']
+        cash = self.company_data['default_journal_cash']
+        unpaid = self._bill(l10n_do_vendor_ncf='B0100000031')
+        by_bank = self._bill(l10n_do_vendor_ncf='B0100000032')
+        by_cash = self._bill(l10n_do_vendor_ncf='B0100000033')
+        mixed = self._bill(l10n_do_vendor_ncf='B0100000034')
+        self._pay(by_bank, bank)
+        self._pay(by_cash, cash)
+        self._pay(mixed, cash, amount=400.0)
+        self.assertEqual(unpaid._l10n_do_payment_form_code(), '04')
+        self.assertFalse(by_bank._l10n_do_payment_form_code())
+        self.assertEqual(by_cash._l10n_do_payment_form_code(), '01')
+        self.assertEqual(mixed._l10n_do_payment_form_code(), '07')
+        wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000032')[22], '')
+        self.assertIn('Forma de pago DGII', wizard.pending_message)
+        bank.l10n_do_payment_form = '03'
+        _wizard, lines = self._report('606')
+        self.assertEqual(self._row(lines, 'B0100000032')[22], '03')
+
+    def test_607_income_type_is_the_ecf_field(self):
+        typed = self._sale(self.partner_taxpayer, l10n_do_ecf_income_type='2')
+        untyped = self._sale(self.partner_taxpayer)
+        self._set(untyped, l10n_do_ecf_income_type=None)
+        wizard, lines = self._report('607')
+        self.assertEqual(self._row(lines, typed.l10n_do_ncf_number)[4], '02')
+        self.assertEqual(self._row(lines, untyped.l10n_do_ncf_number)[4], '')
+        self.assertIn('%s: falta el tipo de ingreso' % untyped.l10n_do_ncf_number,
+                      wizard.pending_message)
+
+    def test_607_without_customer_id_is_pending(self):
+        large = self._sale(self.partner_consumer, price=300000.0)
+        self._set(self.partner_consumer, vat=None)
+        wizard, lines = self._report('607')
+        self.assertEqual(self._row(lines, large.l10n_do_ncf_number)[:2], ['', ''])
+        self.assertIn('falta el RNC, la cédula o el ID del cliente', wizard.pending_message)
+
+    def test_607_payment_columns_from_the_real_payments(self):
+        cash = self.company_data['default_journal_cash']
+        invoice = self._sale(self.partner_taxpayer, price=1000.0, l10n_do_ecf_income_type='1')
+        self._pay(invoice, cash, amount=600.0)
+        wizard, lines = self._report('607')
+        row = self._row(lines, invoice.l10n_do_ncf_number)
+        # 17 efectivo, 18 cheque, 19 tarjeta, 20 crédito
+        self.assertEqual(row[16:20], ['600.00', '', '', '400.00'])
+        self.assertFalse(wizard.pending_message)
+
+    def _annul(self, invoice, annulment_type='04'):
+        wizard = self.env['l10n_do_ncf.invoice.annul.wizard'].with_context(
+            active_id=invoice.id).create({
+                'annul_reason': 'Error en el cliente', 'action_type': 'annul',
+                'annulment_type': annulment_type})
+        wizard.action_confirm()
+        invoice.invalidate_recordset()
+
+    def test_annul_wizard_asks_the_608_code_and_stores_the_date(self):
+        invoice = self._sale(self.partner_taxpayer)
+        wizard = self.env['l10n_do_ncf.invoice.annul.wizard'].with_context(
+            active_id=invoice.id).create({'annul_reason': 'x', 'action_type': 'annul'})
+        with self.assertRaises(UserError):
+            wizard.action_confirm()
+        self._annul(invoice, '05')
+        self.assertEqual(invoice.state, 'cancel')
+        self.assertEqual(invoice.l10n_do_annulment_type, '05')
+        self.assertEqual(invoice.l10n_do_annulment_date, fields.Date.context_today(invoice))
+        _wizard, lines = self._report('608')
+        self.assertEqual(lines[1], '%s|%s|05' % (
+            invoice.l10n_do_ncf_number, invoice.l10n_do_annulment_date.strftime('%Y%m%d')))
+
+    def test_608_uses_the_annulment_date_not_the_invoice_date(self):
+        from dateutil.relativedelta import relativedelta
+        old = self._sale(self.partner_taxpayer)
+        self._set(old, invoice_date=self.today - relativedelta(months=2))
+        self._annul(old)
+        _wizard, lines = self._report('608')
+        self.assertTrue(lines[1].startswith(old.l10n_do_ncf_number + '|'))
+
+    def test_608_legacy_annulment_without_data_is_pending(self):
+        legacy = self._sale(self.partner_taxpayer)
+        self._set(legacy, state='cancel')
+        wizard, lines = self._report('608')
+        self.assertEqual(lines[1], '%s||' % legacy.l10n_do_ncf_number)
+        self.assertIn('no tiene fecha de anulación', wizard.pending_message)
+        self.assertIn('falta el tipo de anulación', wizard.pending_message)
+
+    def test_txt_formatter_has_no_defaults(self):
+        validator = self.env['l10n_do_ncf.dgii.txt.validator']
+        line = validator.format_606_line({}).split('|')
+        self.assertEqual((line[1], line[2], line[22]), ('', '', ''))
+        self.assertEqual(validator.format_607_line({}).split('|')[4], '')

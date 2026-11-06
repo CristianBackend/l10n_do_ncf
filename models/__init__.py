@@ -3,6 +3,7 @@ from . import ncf_type
 from . import ncf_sequence
 from . import retention
 from . import account_move
+from . import account_journal
 from . import res_partner
 from . import res_company
 from . import license_config

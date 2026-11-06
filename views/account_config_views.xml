@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Datos que los formatos 606 y 607 toman de la contabilidad en vez de
+         inventarlos: la forma de pago de cada diario y el tipo 606 de cada
+         cuenta de gasto. -->
+    <record id="view_account_journal_form_l10n_do" model="ir.ui.view">
+        <field name="name">account.journal.form.l10n_do</field>
+        <field name="model">account.journal</field>
+        <field name="inherit_id" ref="account.view_account_journal_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet//field[@name='type']" position="after">
+                <field name="l10n_do_payment_form" invisible="type not in ('bank', 'cash', 'credit')"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_account_form_l10n_do" model="ir.ui.view">
+        <field name="name">account.account.form.l10n_do</field>
+        <field name="model">account.account</field>
+        <field name="inherit_id" ref="account.view_account_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='account_type']" position="after">
+                <field name="l10n_do_606_expense_type"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

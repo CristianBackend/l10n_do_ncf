@@ -15,6 +15,12 @@ class InvoiceAnnulWizard(models.TransientModel):
     
     annul_reason = fields.Text(string='Motivo de Anulación', required=True,
         help='Indique el motivo por el cual se anula esta factura')
+    # Tabla tipo de anulación del 608 (Norma General 07-2018, Anexo C): es el
+    # código que va en el reporte, así que se pide aquí y no se supone.
+    annulment_type = fields.Selection(
+        selection=lambda self: self.env['account.move']._fields['l10n_do_annulment_type'].selection,
+        string='Tipo de anulación (608)',
+        help='Código del 608 (Norma General 07-2018, Anexo C).')
     
     action_type = fields.Selection([
         ('annul', 'Anular Directamente'),
@@ -53,6 +59,8 @@ class InvoiceAnnulWizard(models.TransientModel):
             ) % (self.move_id.l10n_do_report_period or 'anterior'))
         
         if self.action_type == 'annul':
+            if not self.annulment_type:
+                raise UserError(_('Indique el tipo de anulación: es el código que va en el 608.'))
             return self._action_annul_direct()
         else:
             return self._action_create_credit_note()
@@ -77,6 +85,9 @@ class InvoiceAnnulWizard(models.TransientModel):
         # Marcar como anulada fiscalmente
         move.write({
             'l10n_do_fiscal_status': 'annulled',
+            'l10n_do_annulment_type': self.annulment_type,
+            # La fecha en que se anula, que es la que lleva el 608 (Anexo C).
+            'l10n_do_annulment_date': fields.Date.context_today(self),
         })
         
         # Cancelar la factura (cambiar estado a cancel)
