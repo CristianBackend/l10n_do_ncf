@@ -198,6 +198,8 @@ class TestDgiiReports(NcfCommon):
 
     def test_606_goods_and_services_type_from_the_expense_account(self):
         bill = self._bill(l10n_do_vendor_ncf='B0100000022')
+        # El plan l10n_do ya trae el tipo en sus cuentas; aquí se parte de una vacía.
+        bill.invoice_line_ids.account_id.l10n_do_606_expense_type = False
         wizard, lines = self._report('606')
         self.assertEqual(self._row(lines, 'B0100000022')[2], '')
         self.assertIn('falta el tipo de bienes y servicios', wizard.pending_message)

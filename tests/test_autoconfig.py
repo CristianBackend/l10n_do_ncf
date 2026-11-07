@@ -141,3 +141,30 @@ class TestAutoconfig(NcfCommon):
         self.assertEqual(len(action['domain'][0][2]), 2)
         data = self.env['l10n_do_ncf.dashboard'].get_dashboard_data()
         self.assertEqual({g['key'] for g in data['config_pending']} >= {'taxes_kind', 'taxes_zero', 'journals', 'accounts'}, True)
+
+    def test_expense_accounts_get_their_606_type(self):
+        """Mapeo aprobado (docs/mapeo_cuentas_606.md): solo cuentas de
+        categoría clara; las dudosas y las cinco de revisión quedan vacías."""
+        company = self._new_do_company('Cuentas 606 SRL')
+
+        def account(code):
+            return self.env.ref('account.%s_l10n_do_%s' % (company.id, code))
+
+        expected = {
+            '61010900': '01', '61020100': '02', '61030211': '02', '61020800': '03',
+            '61050100': '04', '61060200': '05', '61070400': '07', '51010100': '09',
+            '12010202': '10', '61021100': '11',
+        }
+        for code, tipo in expected.items():
+            self.assertEqual(account(code).l10n_do_606_expense_type, tipo, code)
+        # Pendientes de revisión del contador y dudosas: vacías.
+        for code in ('61060400', '61060500', '61060300', '61021500', '61070200',
+                     '61010100', '61010102', '61021400', '61060700', '61040100'):
+            self.assertFalse(account(code).l10n_do_606_expense_type, code)
+
+    def test_account_606_type_set_by_the_user_is_kept(self):
+        company = self._new_do_company('Cuenta del Usuario SRL')
+        rent = self.env.ref('account.%s_l10n_do_61020800' % company.id)
+        rent.l10n_do_606_expense_type = '02'
+        l10n_do_autoconfig.autoconfigure(self.env, company)
+        self.assertEqual(rent.l10n_do_606_expense_type, '02')

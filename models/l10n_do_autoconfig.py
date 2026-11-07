@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Configuración fiscal que se deduce sin ambigüedad del plan contable l10n_do.
 
-Se ejecuta al instalar o actualizar el módulo (hooks.py y la migración
+Impuestos, diarios y Tipo 606 de las cuentas. Se ejecuta al instalar o
+actualizar el módulo (hooks.py y la migración
 19.0.3.4.0) y al cargar el plan contable dominicano en una compañía
 (chart_template.py). Es idempotente y solo llena lo que está vacío: un valor
 puesto por el usuario nunca se sobrescribe.
@@ -71,6 +72,94 @@ JOURNAL_PAYMENT_FORM = {
     'cash': '01',
     'bank': '02',
     'credit': '03',
+}
+
+
+# Plantilla de cuenta de l10n_do (account.account-do.csv) -> "Tipo 606".
+# Norma General 07-2018, Anexo A, "Tabla de clasificación de Costos y Gastos";
+# instructivo 606 (julio 2025), casilla 3. Solo las cuentas de categoría clara;
+# las demás quedan vacías a propósito (ver docs/mapeo_cuentas_606.md).
+ACCOUNT_TEMPLATE_606 = {
+    # 01 Gastos de personal (pagos a terceros por beneficios a empleados)
+    'l10n_do_61010900': '01',  # Comidas o Dietas al Personal
+    'l10n_do_61011000': '01',  # Cursos y Entrenamientos
+    'l10n_do_61011400': '01',  # Uniformes
+    'l10n_do_61011500': '01',  # Otros Gastos de Personal
+    # 02 Gastos por trabajos, suministros y servicios
+    'l10n_do_61020100': '02',  # Energía Eléctrica
+    'l10n_do_61020200': '02',  # Comunicaciones
+    'l10n_do_61020300': '02',  # Suministros de Oficina (Papelería y útiles)
+    'l10n_do_61020400': '02',  # Útiles de Aseo y Limpieza
+    'l10n_do_61020500': '02',  # Agua y Basura
+    'l10n_do_61020700': '02',  # Combustibles y Lubricantes
+    'l10n_do_61021200': '02',  # Servicios de Mensajería
+    'l10n_do_61021300': '02',  # Flete y Carga
+    'l10n_do_61030101': '02',  # Legales (P. Física)
+    'l10n_do_61030102': '02',  # Contabilidad y Auditoría (P. Física)
+    'l10n_do_61030103': '02',  # Tecnología (P. Física)
+    'l10n_do_61030107': '02',  # Asesorías (P. Física)
+    'l10n_do_61030108': '02',  # Fumigaciones (P. Física)
+    'l10n_do_61030109': '02',  # Copias y Escaneos (P. Física)
+    'l10n_do_61030110': '02',  # Servicios de Vigilancia (P. Física)
+    'l10n_do_61030111': '02',  # Otros Servicios Profesionales (P. Física)
+    'l10n_do_61030201': '02',  # Legales (P. Jurídica)
+    'l10n_do_61030202': '02',  # Contabilidad y Auditoría (P. Jurídica)
+    'l10n_do_61030203': '02',  # Tecnología (P. Jurídica)
+    'l10n_do_61030207': '02',  # Asesorías (P. Jurídica)
+    'l10n_do_61030208': '02',  # Fumigaciones (P. Jurídica)
+    'l10n_do_61030209': '02',  # Copias y Escaneos (P. Jurídica)
+    'l10n_do_61030210': '02',  # Servicios de Vigilancia (P. Jurídica)
+    'l10n_do_61030211': '02',  # Otros Servicios Profesionales  (P. Jurídica)
+    'l10n_do_61030301': '02',  # Honorarios por Servicios del Exterior - Relacionadas
+    'l10n_do_61030302': '02',  # Honorarios por Servicios del Exterior - Terceros
+    # 03 Arrendamientos
+    'l10n_do_61020800': '03',  # Alquileres / Arrendamientos
+    # 04 Gastos de activos fijos (reparación y mantenimiento)
+    'l10n_do_61030104': '04',  # Mantenimientos de Planta (P. Física)
+    'l10n_do_61030106': '04',  # Mantenimientos Mobiliarios y Equipos (P. Física)
+    'l10n_do_61030204': '04',  # Mantenimiento de Planta (P. Jurídica)
+    'l10n_do_61030206': '04',  # Mantenimiento Mobiliario y Equipos (P. Jurídica)
+    'l10n_do_61050100': '04',  # Gastos por Reparación de Edificios
+    'l10n_do_61050200': '04',  # Gastos por Reparación de Equipo de Transporte
+    'l10n_do_61050300': '04',  # Gastos por Reparación de Mobiliario y Equipos
+    'l10n_do_61050400': '04',  # Gastos por Reparación de Maquinaria
+    'l10n_do_61050500': '04',  # Gastos por Reparación de Herramientas
+    'l10n_do_61050600': '04',  # Gastos por Reparación de Instalaciones
+    # 05 Gastos de representación
+    'l10n_do_61060100': '05',  # Relaciones Públicas
+    'l10n_do_61060200': '05',  # Publicidad
+    'l10n_do_61060600': '05',  # Promociones
+    # 07 Gastos financieros
+    'l10n_do_61070100': '07',  # Financial Loan Expenses
+    'l10n_do_61070300': '07',  # Intereses Bancarios
+    'l10n_do_61070400': '07',  # Comisiones Bancarias
+    'l10n_do_61070500': '07',  # Comisiones de Tarjeta de Crédito
+    'l10n_do_61070600': '07',  # Cargos Bancarios
+    'l10n_do_61070900': '07',  # Otro Gastos Financieros
+    # 09 Compras y gastos que formarán parte del costo de venta
+    'l10n_do_51010100': '09',  # Costos de Bienes
+    'l10n_do_51010200': '09',  # Costos de Servicios
+    'l10n_do_51020100': '09',  # Costos de Materia Prima
+    'l10n_do_51020300': '09',  # Costos Indirectos
+    'l10n_do_51020400': '09',  # Costos de Importación
+    # 10 Adquisiciones de activos
+    'l10n_do_12010101': '10',  # Terrenos
+    'l10n_do_12010102': '10',  # Edificaciones
+    'l10n_do_12010103': '10',  # Mejoras en Edificaciones
+    'l10n_do_12010104': '10',  # Mejoras en Edificaciones y Locales Arrendados
+    'l10n_do_12010201': '10',  # Equipos de Transporte Liviano
+    'l10n_do_12010202': '10',  # Mobiliarios y Equipos de Oficina
+    'l10n_do_12010301': '10',  # Maquinarias
+    'l10n_do_12010302': '10',  # Herramientas
+    'l10n_do_12010303': '10',  # Instalaciones
+    'l10n_do_12010304': '10',  # Sistemas de Cámara y Seguridad
+    'l10n_do_12010305': '10',  # Misceláneos u otros activos
+    'l10n_do_12040100': '10',  # Marcas y Patentes
+    'l10n_do_12040200': '10',  # Licencias y Programas Informáticos
+    # 11 Gastos de seguros
+    'l10n_do_61020600': '11',  # Seguro de Edificio y Locales
+    'l10n_do_61021100': '11',  # Seguros
+    'l10n_do_61070700': '11',  # Seguro sobre Préstamos Bancarios
 }
 
 
@@ -154,6 +243,24 @@ def autoconfigure_journals(env, company):
     return len(journals)
 
 
+def autoconfigure_accounts(env, company):
+    """Tipo 606 de las cuentas del plan l10n_do cuya categoría es clara."""
+    imd = env['ir.model.data'].sudo().search([
+        ('module', '=', 'account'),
+        ('model', '=', 'account.account'),
+        ('name', 'in', ['%s_%s' % (company.id, tpl) for tpl in ACCOUNT_TEMPLATE_606]),
+    ])
+    Account = env['account.account'].with_context(active_test=False)
+    prefix = '%s_' % company.id
+    changed = 0
+    for data in imd:
+        account = Account.browse(data.res_id).exists()
+        code = ACCOUNT_TEMPLATE_606[data.name[len(prefix):]]
+        if account and _fill_empty(account, {'l10n_do_606_expense_type': code}):
+            changed += 1
+    return changed
+
+
 def autoconfigure(env, companies=None):
     """Todo lo deducible para las compañías dominicanas (o las indicadas)."""
     companies = companies if companies is not None else env['res.company'].sudo().search([])
@@ -162,6 +269,8 @@ def autoconfigure(env, companies=None):
         taxes = autoconfigure_taxes(env, company)
         export = ensure_export_tax(env, company) if company.chart_template else None
         journals = autoconfigure_journals(env, company)
+        accounts = autoconfigure_accounts(env, company)
         _logger.info(
-            'l10n_do_ncf: configuración DGII de %s: %s impuestos y %s diarios completados%s',
-            company.name, taxes, journals, ', ITBIS 0 % de exportación listo' if export else '')
+            'l10n_do_ncf: configuración DGII de %s: %s impuestos, %s diarios y %s cuentas '
+            'completados%s', company.name, taxes, journals, accounts,
+            ', ITBIS 0 % de exportación listo' if export else '')
