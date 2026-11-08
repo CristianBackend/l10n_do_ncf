@@ -227,8 +227,9 @@
                         </list>
                     </field>
                     <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'informal'">
-                        Retenciones sugeridas para un proveedor informal: el 100 % del ITBIS
-                        facturado y el ISR según el tipo de servicio. Puede cambiarlas o borrarlas.
+                        Las retenciones al proveedor informal van como impuesto de retención en la
+                        línea (por ejemplo "-100% ITBIS" y la de ISR): así entran en el asiento y
+                        reducen lo que se le paga. Lo que se escriba aquí no genera asiento.
                     </p>
                     <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'minor_expense'">
                         Un gasto menor no lleva retenciones.

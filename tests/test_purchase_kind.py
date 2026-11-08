@@ -141,23 +141,8 @@ class TestPurchaseKind(NcfCommon):
             bill.action_post()
 
     # ---------------------------------------------------------------
-    # Proveedor informal: retenciones sugeridas, editables
+    # Proveedor informal
     # ---------------------------------------------------------------
-    def test_informal_supplier_gets_suggested_retentions(self):
-        form = self._bill_form(self.partner_informal)
-        with form.invoice_line_ids.new() as line:
-            line.product_id = self.product
-            line.price_unit = 1000.0
-        codes = {r.retention_type_id.code: r.base_amount for r in form.l10n_do_retention_ids.records} \
-            if hasattr(form.l10n_do_retention_ids, 'records') else None
-        bill = form.save()
-        codes = {r.retention_type_id.code: r.base_amount for r in bill.l10n_do_retention_ids}
-        self.assertEqual(codes, {'ITBIS_100': 180.0, 'ISR_PROF': 1000.0})
-        # Editables: se cambian o se borran.
-        bill.l10n_do_retention_ids.filtered(
-            lambda r: r.retention_type_id.code == 'ITBIS_100').unlink()
-        self.assertEqual(bill.l10n_do_retention_ids.retention_type_id.code, 'ISR_PROF')
-
     def test_informal_supplier_posts_with_contact_data(self):
         self._create_ncf_sequence('11')
         bill = self._bill(self.partner_informal)

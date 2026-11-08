@@ -57,6 +57,18 @@ class ResCompany(models.Model):
         ], ['account_id'])
         return self.env['account.account'].union(*[account for account, in groups])
 
+    def _l10n_do_pending_retentions(self):
+        """Facturas de proveedor confirmadas cuyas retenciones no cuadran con
+        el asiento: en la pestaña y no en el asiento, distintas, o en un
+        impuesto sin tipo DGII. Las ajusta el contador a mano."""
+        self.ensure_one()
+        return self.env['account.move'].search([
+            ('company_id', '=', self.id),
+            ('move_type', 'in', ('in_invoice', 'in_refund')),
+            ('state', '=', 'posted'),
+            ('l10n_do_retention_check', '!=', False),
+        ])
+
     def _l10n_do_config_pending(self):
         """Lo que falta, solo los grupos con algo:
         [{key, severity, count, text}].
@@ -73,6 +85,7 @@ class ResCompany(models.Model):
         kind = len(self._l10n_do_pending_taxes_kind())
         journals = len(self._l10n_do_pending_journals())
         accounts = len(self._l10n_do_pending_accounts())
+        retentions = len(self._l10n_do_pending_retentions())
         groups = [
             ('taxes_zero', 'danger', zero, text(
                 zero,
@@ -92,6 +105,12 @@ class ResCompany(models.Model):
                 accounts,
                 _('%s cuenta de gasto sin tipo de bienes y servicios para el 606.'),
                 _('%s cuentas de gasto sin tipo de bienes y servicios para el 606.'))),
+            ('retentions', 'warning', retentions, text(
+                retentions,
+                _('%s factura de proveedor con retenciones sin asiento o que no coinciden: '
+                  'el contador debe ajustarla.'),
+                _('%s facturas de proveedor con retenciones sin asiento o que no coinciden: '
+                  'el contador debe ajustarlas.'))),
         ]
         return [{'key': key, 'severity': severity, 'count': count, 'text': message}
                 for key, severity, count, message in groups if count]
@@ -109,6 +128,17 @@ class ResCompany(models.Model):
             'accounts': ('account.account', _('Cuentas de gasto sin Tipo 606'),
                          self._l10n_do_pending_accounts()),
         }
+        if key == 'retentions':
+            return {
+                'type': 'ir.actions.act_window',
+                'name': _('Retenciones sin asiento / que no coinciden'),
+                'res_model': 'account.move',
+                'domain': [('id', 'in', self._l10n_do_pending_retentions().ids)],
+                'views': [[self.env.ref('l10n_do_ncf.view_move_tree_retention_check').id, 'list'],
+                          [False, 'form']],
+                'context': {'create': False},
+                'target': 'current',
+            }
         if key not in lists:
             return False
         model, name, records = lists[key]
