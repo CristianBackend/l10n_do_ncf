@@ -41,6 +41,7 @@
                             <field name="retention_type"/>
                             <field name="rate"/>
                             <field name="apply_on"/>
+                            <field name="tax_ids" widget="many2many_tags" options="{'no_create': True}"/>
                         </group>
                         <group string="Aplicabilidad">
                             <field name="partner_type"/>

@@ -32,6 +32,23 @@ class ResCompany(models.Model):
         help='Diario para compras a proveedores informales'
     )
 
+    # Retenciones que se agregan solas a las líneas según el "Tipo de compra".
+    # Vacías hasta que el contador las confirme (docs/retenciones_tabla.md):
+    # la configuración automática no las elige.
+    l10n_do_informal_retention_tax_ids = fields.Many2many(
+        'account.tax', 'l10n_do_company_informal_ret_tax_rel', 'company_id', 'tax_id',
+        string='Retenciones al proveedor informal',
+        domain="[('type_tax_use', '=', 'purchase'), ('amount', '<', 0), ('company_id', '=', id)]",
+        help='Impuestos de retención que se agregan a las líneas de una compra a un '
+             'proveedor informal: los de ITBIS a las líneas con ITBIS y los de ISR a los '
+             'servicios. Se pueden quitar en cada línea.')
+    l10n_do_exterior_retention_tax_ids = fields.Many2many(
+        'account.tax', 'l10n_do_company_exterior_ret_tax_rel', 'company_id', 'tax_id',
+        string='Retenciones del pago al exterior',
+        domain="[('type_tax_use', '=', 'purchase'), ('amount', '<', 0), ('company_id', '=', id)]",
+        help='Impuestos de retención que se agregan a las líneas de un pago al exterior '
+             '(por ejemplo la retención de ISR del 27 %).')
+
     l10n_do_minor_expense_partner_id = fields.Many2one(
         'res.partner', string='Contacto "Gastos menores"',
         help='Contacto genérico (sin RNC) de las facturas de gastos menores: peajes, '
@@ -96,3 +113,7 @@ class ResConfigSettings(models.TransientModel):
         related='company_id.l10n_do_informal_vendor_journal_id',
         readonly=False
     )
+    l10n_do_informal_retention_tax_ids = fields.Many2many(
+        related='company_id.l10n_do_informal_retention_tax_ids', readonly=False)
+    l10n_do_exterior_retention_tax_ids = fields.Many2many(
+        related='company_id.l10n_do_exterior_retention_tax_ids', readonly=False)

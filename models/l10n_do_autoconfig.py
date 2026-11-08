@@ -52,8 +52,11 @@ TAX_TEMPLATE_VALUES = {
     'ret_30_tax_freelance': _RET_ITBIS,
     'ret_75_tax_nonformal': _RET_ITBIS,
     # Retenciones de ISR (grupo ISR) que hace la empresa
-    'ret_15_income_person': _RET_ISR,
-    'ret_15_income_rent': _RET_ISR,
+    # Tipo de retención ISR del 606 (casilla 17) solo donde el impuesto de la
+    # plantilla lo dice sin ambigüedad: honorarios (02) y alquileres (01).
+    # Los demás los confirma el contador (docs/retenciones_tabla.md).
+    'ret_15_income_person': dict(_RET_ISR, dgii_isr_retention_type='02'),
+    'ret_15_income_rent': dict(_RET_ISR, dgii_isr_retention_type='01'),
     'ret_10_income_dividend': _RET_ISR,
     'ret_3_income_person': _RET_ISR,
     'ret_2_income_transfer': _RET_ISR,

@@ -28,10 +28,17 @@ class TestDgii609(NcfCommon):
             'country_id': cls.env.ref('base.us').id, 'vat': 'EIN-12-3456789',
             'l10n_do_609_related_party': '0',
         })
-        cls.isr_ext = cls.env['l10n_do_ncf.retention.type'].search([('code', '=', 'ISR_EXT')], limit=1)
+        # La retención es el impuesto de la línea (desde 19.0.4).
+        cls.isr_ext_tax = cls.env['account.tax'].create({
+            'name': '-27% ISR exterior (prueba)', 'amount': -27.0, 'amount_type': 'percent',
+            'type_tax_use': 'purchase', 'company_id': cls.company.id,
+            'dgii_retention_type': 'isr', 'dgii_606_bucket': 'isr_retenido',
+        })
         cls.today = fields.Date.today()
 
     def _bill(self, partner=None, retention_base=None, **vals):
+        # retention_base: con retención de ISR del 27 % sobre la línea.
+        taxes = self.isr_ext_tax if retention_base is not None else self.env['account.tax']
         bill = self.env['account.move'].create({
             'move_type': 'in_invoice',
             'partner_id': (partner or self.supplier).id,
@@ -39,13 +46,11 @@ class TestDgii609(NcfCommon):
             'ref': 'INV-001',
             'l10n_do_fiscal_type': 'fiscal',
             'invoice_line_ids': [Command.create({
-                'name': 'Licencia de software', 'quantity': 1, 'price_unit': 10000.0, 'tax_ids': [],
+                'name': 'Licencia de software', 'quantity': 1, 'price_unit': 10000.0,
+                'tax_ids': [Command.set(taxes.ids)],
             })],
             **vals,
         })
-        if retention_base is not None:
-            bill.l10n_do_retention_ids = [Command.create({
-                'retention_type_id': self.isr_ext.id, 'base_amount': retention_base})]
         bill.action_post()
         return bill
 

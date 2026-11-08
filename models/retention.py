@@ -82,6 +82,19 @@ class L10nDoRetentionType(models.Model):
     )
     description = fields.Text(string='Descripción/Base Legal')
     active = fields.Boolean(default=True)
+    tax_ids = fields.Many2many(
+        'account.tax', 'l10n_do_ncf_retention_type_tax_rel', 'retention_type_id', 'tax_id',
+        string='Impuesto de retención equivalente',
+        domain=[('type_tax_use', '=', 'purchase'), ('amount', '<', 0)],
+        help='El impuesto de retención (uno por compañía) que reemplaza a esta '
+             'retención en las facturas en borrador que aún la tienen en la pestaña. '
+             'Lo indica el contador; al guardarlo se convierten esos borradores.')
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'tax_ids' in vals:
+            self.env['account.move']._l10n_do_convert_tab_retentions(retention_types=self)
+        return res
 
     @api.depends('rate')
     def _compute_rate_decimal(self):
@@ -121,11 +134,17 @@ class AccountMoveRetention(models.Model):
         ondelete='cascade'
     )
 
+    # Vacío en las filas que copian un impuesto de retención de la línea
+    # (tax_id): desde la versión 19.0.4 la retención es el impuesto.
     retention_type_id = fields.Many2one(
         'l10n_do_ncf.retention.type',
         string='Tipo de Retención',
-        required=True
     )
+    tax_id = fields.Many2one(
+        'account.tax', string='Impuesto de retención', readonly=True,
+        help='El impuesto de la línea del que sale esta retención (y su asiento).')
+    tax_amount = fields.Monetary(
+        string='Monto del impuesto', currency_field='currency_id', readonly=True)
 
     # Monto sobre el que se aplica
     base_amount = fields.Monetary(
@@ -134,10 +153,10 @@ class AccountMoveRetention(models.Model):
         help='Monto sobre el que se calcula la retención'
     )
 
-    # Rate viene del tipo
+    # Del impuesto (fila copiada) o del tipo de retención (fila anterior).
     rate = fields.Float(
         string='Tasa (%)',
-        related='retention_type_id.rate',
+        compute='_compute_from_source',
         store=True
     )
 
@@ -151,10 +170,26 @@ class AccountMoveRetention(models.Model):
 
     # Para reporting
     dgii_606_bucket = fields.Selection(
-        related='retention_type_id.dgii_606_bucket',
+        selection=[
+            ('itbis_retenido', 'ITBIS Retenido (col 12)'),
+            ('itbis_percibido', 'ITBIS Percibido (col 16)'),
+            ('isr_retenido', 'ISR Retenido (col 18)'),
+            ('isr_percibido', 'ISR Percibido (col 19)'),
+        ],
+        compute='_compute_from_source',
         store=True,
         string='Columna 606'
     )
+
+    @api.depends('tax_id', 'retention_type_id.rate', 'retention_type_id.dgii_606_bucket')
+    def _compute_from_source(self):
+        for rec in self:
+            if rec.tax_id:
+                rec.rate = abs(rec.tax_id.amount)
+                rec.dgii_606_bucket = rec.tax_id._l10n_do_retention_bucket()
+            else:
+                rec.rate = rec.retention_type_id.rate
+                rec.dgii_606_bucket = rec.retention_type_id.dgii_606_bucket
 
     currency_id = fields.Many2one('res.currency', related='move_id.currency_id')
     company_id = fields.Many2one('res.company', related='move_id.company_id')
@@ -163,9 +198,12 @@ class AccountMoveRetention(models.Model):
         default=False,
         help='Marcar si esta retención fue ajustada manualmente por el contador'
     )
-    @api.depends('base_amount', 'rate')
+    @api.depends('base_amount', 'rate', 'tax_id', 'tax_amount')
     def _compute_retention_amount(self):
         for rec in self:
+            if rec.tax_id:
+                rec.retention_amount = rec.tax_amount
+                continue
             # rate viene como porcentaje (10, 30, 100)
             # convertir a decimal para cálculo
             rec.retention_amount = rec.base_amount * (rec.rate / 100.0) if rec.rate else 0.0

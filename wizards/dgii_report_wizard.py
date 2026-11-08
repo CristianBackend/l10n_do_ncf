@@ -471,12 +471,14 @@ class DgiiReportWizard(models.TransientModel):
             itbis_percibido = abs(self._to_dop(inv, inv.l10n_do_itbis_percibido or 0.0))
 
             # Columna 17: Tipo de retención en ISR
-            tipo_retencion_isr = inv.l10n_do_tipo_retencion_isr or ''
+            tipo_retencion_isr = inv._l10n_do_isr_retention_type() or ''
 
             # Columna 18: Monto retención renta (ISR) (CONVERTIDO A DOP)
             isr_retenido = abs(self._to_dop(inv, inv.l10n_do_isr_retenido or inv.l10n_do_total_isr_retention or 0.0))
             if isr_retenido > 0 and not tipo_retencion_isr:
-                self._pending(pending, inv, _('falta el tipo de retención de ISR'))
+                self._pending(pending, inv, _(
+                    'falta el tipo de retención de ISR: indíquelo en el impuesto de retención '
+                    '("Tipo de retención ISR (606)")'))
 
             # Columna 19: ISR percibido en compras (CONVERTIDO A DOP)
             isr_percibido = abs(self._to_dop(inv, inv.l10n_do_isr_percibido or 0.0))
@@ -912,16 +914,15 @@ class DgiiReportWizard(models.TransientModel):
             # 9. Fecha documento (AAAAMMDD)
             fecha_doc = self._format_date(inv.invoice_date)
             # 10. Monto facturado (DOP)
-            monto = abs(self._to_dop(inv, inv.amount_total))
+            # Antes de las retenciones: con la retención como impuesto de la
+            # línea, amount_total ya viene neto.
+            monto = abs(self._to_dop(inv, inv._l10n_do_amount_before_retentions()))
 
             # 11-13. Retención de ISR: la registrada en la factura. Si no hay,
             # el ISR va en 0 y la Renta Presunta (base del ISR retenido, Art.
             # 305) también; sin renta presunta la herramienta no exige fecha.
-            isr_lines = inv.l10n_do_retention_ids.filtered(
-                lambda r: r.retention_type_id.retention_type == 'isr'
-                and not r.retention_type_id.is_perceived)
             isr_retenido = abs(self._to_dop(inv, inv.l10n_do_total_isr_retention or 0.0))
-            renta_presunta = abs(self._to_dop(inv, sum(isr_lines.mapped('base_amount'))))
+            renta_presunta = abs(self._to_dop(inv, inv._l10n_do_isr_retention_base()))
             if not isr_retenido:
                 pending.append(_('%s: no tiene retención de ISR registrada; se reporta ISR 0.00.', label))
             elif not renta_presunta:
@@ -1011,11 +1012,11 @@ class DgiiReportWizard(models.TransientModel):
             isr = abs(self._to_dop(inv, inv.l10n_do_total_isr_retention or inv.l10n_do_isr_retenido or 0))
             itbis_ret = abs(self._to_dop(inv, inv.l10n_do_total_itbis_retention or inv.l10n_do_itbis_retenido or 0))
             base = abs(self._to_dop(inv, inv.amount_untaxed))
-            itbis = abs(self._to_dop(inv, inv.amount_tax))
+            itbis = abs(self._to_dop(inv, inv._l10n_do_billed_tax_amount()))
             total_isr += isr
             total_itbis += itbis_ret
 
-            tipo_ret = inv.l10n_do_tipo_retencion_isr or ''
+            tipo_ret = inv._l10n_do_isr_retention_type() or ''
             rnc_prov = self._clean_rnc(inv.partner_id.vat)
 
             # Para B11 usar cédula

@@ -217,25 +217,47 @@
                                    class="fw-bold text-primary"/>
                         </group>
                     </group>
-                    <field name="l10n_do_retention_ids" nolabel="1" readonly="state != 'draft'">
-                        <list editable="bottom">
-                            <field name="retention_type_id" options="{'no_create': True}"/>
-                            <field name="base_amount"/>
-                            <field name="rate" readonly="1"/>
-                            <field name="retention_amount" readonly="1" sum="Total"/>
+                    <!-- Una sola fuente: los impuestos de retención de las líneas
+                         (los que generan asiento). Aquí solo se muestran. -->
+                    <field name="l10n_do_retention_legacy" invisible="1"/>
+                    <field name="l10n_do_retention_line_ids" nolabel="1" readonly="1"
+                           invisible="l10n_do_retention_legacy">
+                        <list create="0" delete="0" no_open="1">
+                            <field name="tax_line_id" string="Impuesto de retención"/>
+                            <field name="account_id" string="Cuenta"/>
+                            <field name="tax_base_amount" string="Base"/>
+                            <field name="amount_currency" string="Monto (en el asiento)" sum="Total"/>
                             <field name="currency_id" column_invisible="1"/>
+                            <field name="company_currency_id" column_invisible="1"/>
                         </list>
                     </field>
-                    <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'informal'">
-                        Las retenciones al proveedor informal van como impuesto de retención en la
-                        línea (por ejemplo "-100% ITBIS" y la de ISR): así entran en el asiento y
-                        reducen lo que se le paga. Lo que se escriba aquí no genera asiento.
+                    <p class="text-muted mt-2" invisible="l10n_do_retention_legacy">
+                        Las retenciones se ponen como impuesto de retención en las líneas de la factura
+                        (por ejemplo "-100% ITBIS" o la de ISR). Así entran en el asiento, reducen lo que
+                        se le paga al proveedor y salen en el 606, el IR-17 y el e-CF.
                     </p>
-                    <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'minor_expense'">
+                    <!-- Retenciones escritas en la pestaña: las de una factura anterior
+                         (de solo lectura) o las de un borrador por corregir (se borran). -->
+                    <div invisible="not l10n_do_retention_legacy and not l10n_do_retention_check">
+                        <separator string="Retenciones registradas en la pestaña"/>
+                        <p class="text-muted" invisible="not l10n_do_retention_legacy">
+                            Factura confirmada antes de que las retenciones salieran de los impuestos: sus
+                            reportes conservan estas retenciones.
+                        </p>
+                        <field name="l10n_do_retention_ids" nolabel="1"
+                               readonly="state != 'draft' or l10n_do_retention_legacy">
+                            <list create="0" editable="bottom">
+                                <field name="retention_type_id" readonly="1"/>
+                                <field name="tax_id" readonly="1" optional="hide"/>
+                                <field name="base_amount" readonly="1"/>
+                                <field name="rate" readonly="1"/>
+                                <field name="retention_amount" readonly="1" sum="Total"/>
+                                <field name="currency_id" column_invisible="1"/>
+                            </list>
+                        </field>
+                    </div>
+                    <p class="text-muted" invisible="l10n_do_purchase_kind != 'minor_expense'">
                         Un gasto menor no lleva retenciones.
-                    </p>
-                    <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'exterior'">
-                        Un pago al exterior lleva la retención de ISR del 27 %.
                     </p>
                 </page>
             </xpath>

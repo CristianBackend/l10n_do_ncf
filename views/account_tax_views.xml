@@ -11,6 +11,8 @@
                         <field name="dgii_tax_kind" invisible="amount &lt; 0"/>
                         <field name="dgii_retention_type"/>
                         <field name="dgii_606_bucket"/>
+                        <field name="dgii_isr_retention_type"
+                               invisible="dgii_retention_type != 'isr' and dgii_606_bucket != 'isr_retenido'"/>
                     </group>
                     <group>
                         <field name="is_dgii_retention" readonly="1"/>

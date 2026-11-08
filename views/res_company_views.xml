@@ -24,6 +24,21 @@
                             </div>
                         </div>
                     </setting>
+                    <setting id="ncf_retentions" string="Retenciones sugeridas en compras"
+                             help="Impuestos de retención que se agregan solos a las líneas según el tipo de compra. Se pueden quitar en cada línea.">
+                        <div class="content-group">
+                            <div class="row mt16">
+                                <label for="l10n_do_informal_retention_tax_ids" class="col-lg-4"/>
+                                <field name="l10n_do_informal_retention_tax_ids" widget="many2many_tags" class="col-lg-8"
+                                       options="{'no_create': True}"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="l10n_do_exterior_retention_tax_ids" class="col-lg-4"/>
+                                <field name="l10n_do_exterior_retention_tax_ids" widget="many2many_tags" class="col-lg-8"
+                                       options="{'no_create': True}"/>
+                            </div>
+                        </div>
+                    </setting>
                     <setting id="ncf_journals" title="Diarios Fiscales">
                         <div class="content-group">
                             <div class="row mt16">

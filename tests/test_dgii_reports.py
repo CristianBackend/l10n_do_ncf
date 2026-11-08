@@ -32,8 +32,12 @@ class TestDgiiReports(NcfCommon):
             'name': 'Proveedor Local SRL', 'is_company': True,
             'country_id': cls.country_do.id, 'vat': RNC_EMPRESA,
         })
-        RetType = cls.env['l10n_do_ncf.retention.type']
-        cls.isr_prof = RetType.search([('code', '=', 'ISR_PROF')], limit=1)
+        # Retención de ISR como impuesto de la línea, sin tipo 606 (desde 19.0.4).
+        cls.isr_prof = cls.env['account.tax'].create({
+            'name': '-10% ISR (prueba)', 'amount': -10.0, 'amount_type': 'percent',
+            'type_tax_use': 'purchase', 'company_id': cls.company.id,
+            'dgii_retention_type': 'isr', 'dgii_606_bucket': 'isr_retenido',
+        })
 
     # ---------------------------------------------------------------
     # Helpers
@@ -59,18 +63,17 @@ class TestDgiiReports(NcfCommon):
         return invoice
 
     def _bill(self, partner=None, retentions=(), **vals):
+        # retentions: [(impuesto de retención, _)] que lleva la línea.
+        taxes = self.env['account.tax'].union(*[tax for tax, _base in retentions])
         bill = self.env['account.move'].create({
             'move_type': 'in_invoice', 'partner_id': (partner or self.supplier).id,
             'invoice_date': self.today, 'l10n_do_vendor_ncf': 'B0100000001',
             'invoice_line_ids': [Command.create({
-                'name': 'Servicio', 'quantity': 1, 'price_unit': 1000.0, 'tax_ids': [],
+                'name': 'Servicio', 'quantity': 1, 'price_unit': 1000.0,
+                'tax_ids': [Command.set(taxes.ids)],
             })],
             **vals,
         })
-        if retentions:
-            bill.l10n_do_retention_ids = [
-                Command.create({'retention_type_id': kind.id, 'base_amount': base})
-                for kind, base in retentions]
         bill.action_post()
         return bill
 
@@ -389,7 +392,10 @@ class TestDgiiReports(NcfCommon):
         B17/E47 y B13/E43 van en el 606 con el RNC del encabezado."""
         foreign = self.env['res.partner'].create({
             'name': 'Foreign Inc.', 'country_id': self.env.ref('base.us').id, 'vat': 'EIN1'})
-        isr_ext = self.env['l10n_do_ncf.retention.type'].search([('code', '=', 'ISR_EXT')], limit=1)
+        isr_ext = self.env['account.tax'].create({
+            'name': '-27% ISR exterior (prueba)', 'amount': -27.0, 'amount_type': 'percent',
+            'type_tax_use': 'purchase', 'company_id': self.company.id,
+            'dgii_retention_type': 'isr', 'dgii_606_bucket': 'isr_retenido'})
         bill = self._bill(foreign, retentions=[(isr_ext, 1000.0)], l10n_do_fiscal_type='exterior',
                           l10n_do_vendor_ncf=False)
         self._set(bill, l10n_do_ncf_number='E470000000001', l10n_do_propina_legal=50.0,

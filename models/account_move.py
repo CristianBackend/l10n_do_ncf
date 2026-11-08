@@ -491,6 +491,93 @@ class AccountMove(models.Model):
     # RETENCIONES
     # =========================================
     l10n_do_retention_ids = fields.One2many('l10n_do_ncf.move.retention', 'move_id', string='Retenciones')
+    # Una sola fuente de verdad: los impuestos de retención de las líneas
+    # (los que generan asiento). Una factura confirmada antes de la versión
+    # 19.0.4 conserva lo que se reportó desde la pestaña: "anterior".
+    l10n_do_retention_legacy = fields.Boolean(
+        string='Retenciones anteriores (pestaña)', copy=False, readonly=True,
+        help='Factura confirmada antes de que las retenciones salieran de los impuestos '
+             'de las líneas: sus reportes conservan lo que tenía la pestaña Retenciones.')
+    l10n_do_retention_line_ids = fields.One2many(
+        'account.move.line', compute='_compute_l10n_do_retention_line_ids',
+        string='Retenciones del asiento')
+
+    @api.depends('line_ids.tax_line_id', 'line_ids.amount_currency')
+    def _compute_l10n_do_retention_line_ids(self):
+        for move in self:
+            move.l10n_do_retention_line_ids = move._l10n_do_retention_tax_lines()
+
+    def _l10n_do_retention_tax_lines(self):
+        """Líneas de impuesto del asiento que son retenciones (o percepciones)."""
+        self.ensure_one()
+        return self.line_ids.filtered(
+            lambda l: l.tax_line_id and (
+                l.tax_line_id.amount < 0
+                or (l.tax_line_id.dgii_606_bucket or '').endswith('_percibido')))
+
+    def _l10n_do_tax_retention_amounts(self):
+        """{columna del 606: monto} de los impuestos de retención, en la moneda
+        de la factura (False = impuesto sin tipo DGII)."""
+        self.ensure_one()
+        result = {}
+        for line in self._l10n_do_retention_tax_lines():
+            bucket = line.tax_line_id._l10n_do_retention_bucket()
+            result[bucket] = result.get(bucket, 0.0) + abs(line.amount_currency)
+        return result
+
+    def _l10n_do_amount_before_retentions(self):
+        """Total de la factura antes de las retenciones de sus impuestos, en la
+        moneda de la factura (amount_total ya viene con ellas restadas)."""
+        self.ensure_one()
+        retained = sum(abs(line.amount_currency) for line in self.line_ids
+                       if line.tax_line_id and line.tax_line_id.amount < 0)
+        return abs(self.amount_total) + retained
+
+    def _l10n_do_billed_tax_amount(self):
+        """Impuestos facturados (los positivos), sin las retenciones."""
+        self.ensure_one()
+        return sum(abs(line.amount_currency) for line in self.line_ids
+                   if line.tax_line_id and line.tax_line_id.amount > 0)
+
+    def _l10n_do_isr_retention_lines(self):
+        self.ensure_one()
+        return self._l10n_do_retention_tax_lines().filtered(
+            lambda l: l.tax_line_id._l10n_do_retention_bucket() == 'isr_retenido')
+
+    def _l10n_do_isr_retention_type(self):
+        """Casilla 17 del 606: la escrita en la factura, o la del impuesto de
+        retención de ISR si todas sus líneas dicen la misma."""
+        self.ensure_one()
+        if self.l10n_do_tipo_retencion_isr:
+            return self.l10n_do_tipo_retencion_isr
+        if self.l10n_do_retention_legacy:
+            return False
+        types = set(self._l10n_do_isr_retention_lines().tax_line_id.mapped('dgii_isr_retention_type'))
+        if len(types) == 1 and False not in types:
+            return types.pop()
+        if self.l10n_do_fiscal_type == 'exterior' and self._l10n_do_isr_retention_lines():
+            # Lo que el módulo ponía antes en un pago al exterior.
+            return '03'
+        return False
+
+    def _l10n_do_isr_retention_base(self):
+        """Base del ISR retenido (renta presunta del 609), en la moneda de la factura."""
+        self.ensure_one()
+        if self.l10n_do_retention_legacy:
+            lines = self.l10n_do_retention_ids.filtered(
+                lambda r: r.retention_type_id.retention_type == 'isr'
+                and not r.retention_type_id.is_perceived)
+            return sum(lines.mapped('base_amount'))
+        return self._l10n_do_tax_base_in_currency(self._l10n_do_isr_retention_lines())
+
+    def _l10n_do_tax_base_in_currency(self, tax_lines):
+        """Base de unas líneas de impuesto en la moneda de la factura
+        (tax_base_amount viene en la moneda de la compañía)."""
+        self.ensure_one()
+        base = abs(sum(tax_lines.mapped('tax_base_amount')))
+        if self.currency_id and self.currency_id != self.company_id.currency_id:
+            base = self.currency_id.round(base * (self.invoice_currency_rate or 1.0))
+        return base
     l10n_do_total_isr_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
     l10n_do_total_itbis_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
     l10n_do_gross_total = fields.Monetary(
@@ -519,7 +606,7 @@ class AccountMove(models.Model):
              'ambas), o la de un impuesto sin tipo DGII, que no llega al 606 ni al IR-17.')
 
     @api.depends('move_type', 'l10n_do_retention_ids.retention_amount',
-                 'l10n_do_retention_ids.retention_type_id',
+                 'l10n_do_retention_ids.retention_type_id', 'l10n_do_retention_ids.tax_id',
                  'line_ids.tax_line_id', 'line_ids.amount_currency')
     def _compute_l10n_do_retention_check(self):
         for move in self:
@@ -533,7 +620,8 @@ class AccountMove(models.Model):
         la factura. Las percepciones no cuentan."""
         self.ensure_one()
         tab = {'itbis': 0.0, 'isr': 0.0}
-        for retention in self.l10n_do_retention_ids:
+        # Las filas copiadas de un impuesto (tax_id) son el asiento mismo.
+        for retention in self.l10n_do_retention_ids.filtered(lambda r: not r.tax_id):
             kind = retention.retention_type_id
             if kind and not kind.is_perceived and kind.retention_type in tab:
                 tab[kind.retention_type] += retention.retention_amount or 0.0
@@ -853,13 +941,20 @@ class AccountMove(models.Model):
             move.l10n_do_itbis_adelantar = max(
                 move.l10n_do_itbis_facturado - move.l10n_do_itbis_costo, 0)
 
-    @api.depends('l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.dgii_606_bucket')
+    @api.depends('l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.dgii_606_bucket',
+                 'l10n_do_retention_legacy', 'line_ids.tax_line_id', 'line_ids.amount_currency')
     def _compute_606_buckets(self):
         for move in self:
             buckets = {'itbis_retenido': 0, 'itbis_percibido': 0, 'isr_retenido': 0, 'isr_percibido': 0}
-            for ret in move.l10n_do_retention_ids:
-                if ret.dgii_606_bucket in buckets:
-                    buckets[ret.dgii_606_bucket] += ret.retention_amount or 0
+            if move.l10n_do_retention_legacy:
+                # Confirmada antes de 19.0.4: lo que se reportó desde la pestaña.
+                for ret in move.l10n_do_retention_ids:
+                    if ret.dgii_606_bucket in buckets:
+                        buckets[ret.dgii_606_bucket] += ret.retention_amount or 0
+            else:
+                for bucket, amount in move._l10n_do_tax_retention_amounts().items():
+                    if bucket in buckets:
+                        buckets[bucket] += amount
             move.l10n_do_itbis_retenido = buckets['itbis_retenido']
             move.l10n_do_itbis_percibido = buckets['itbis_percibido']
             move.l10n_do_isr_retenido = buckets['isr_retenido']
@@ -881,7 +976,8 @@ class AccountMove(models.Model):
             else:
                 move.l10n_do_payment_status_display = status_map.get(move.payment_state, move.payment_state or '')
 
-    @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total', 'l10n_do_retention_ids.retention_amount', 'l10n_do_retention_ids.retention_type_id')
+    @api.depends('line_ids.tax_line_id', 'line_ids.balance', 'amount_total', 'l10n_do_retention_ids.retention_amount',
+                 'l10n_do_retention_ids.retention_type_id', 'l10n_do_retention_legacy')
     def _compute_retention_totals(self):
         """Calcular totales de retenciones desde l10n_do_retention_ids
 
@@ -893,6 +989,16 @@ class AccountMove(models.Model):
         """
         for move in self:
             isr = itbis = 0
+            if not move.l10n_do_retention_legacy:
+                # Desde 19.0.4: solo los impuestos de retención de las líneas.
+                amounts = move._l10n_do_tax_retention_amounts()
+                isr = amounts.get('isr_retenido', 0.0)
+                itbis = amounts.get('itbis_retenido', 0.0)
+                move.l10n_do_total_isr_retention = isr
+                move.l10n_do_total_itbis_retention = itbis
+                move.l10n_do_amount_to_pay = move.amount_total
+                move.l10n_do_gross_total = move.amount_total + isr + itbis
+                continue
 
             # Fuente 1: Retenciones del módulo NCF (l10n_do_retention_ids)
             for ret in move.l10n_do_retention_ids:
@@ -1364,10 +1470,10 @@ class AccountMove(models.Model):
                         'Gastos menores: la línea "%s" tiene ITBIS.\n\nLos gastos menores van '
                         'exentos: quite el impuesto de la línea o cámbielo por "ITBIS Exento".',
                         line.name))
-        if self.l10n_do_retention_ids.filtered('retention_amount'):
+        if self._l10n_do_retention_tax_lines() or self.l10n_do_retention_ids.filtered('retention_amount'):
             raise UserError(_(
                 'Gastos menores: la factura tiene retenciones.\n\nUn gasto menor no lleva '
-                'retenciones: bórrelas en la pestaña "Retenciones".'))
+                'retenciones: quite los impuestos de retención de las líneas.'))
         limit = self._get_b13_transaction_limit()
         if self.amount_total > limit:
             raise UserError(_(
@@ -1384,11 +1490,16 @@ class AccountMove(models.Model):
             raise UserError(_(
                 'Pago al exterior: la factura tiene ITBIS.\n\nUn pago al exterior no lleva '
                 'ITBIS: quite el impuesto de las líneas.'))
-        if not any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids):
+        if self.l10n_do_retention_legacy:
+            has_isr = any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids)
+        else:
+            has_isr = bool(self._l10n_do_isr_retention_lines())
+        if not has_isr:
             raise UserError(_(
-                'Pago al exterior: falta la retención de ISR del 27 %.\n\nAgréguela en la '
-                'pestaña "Retenciones" ("ISR Pagos al Exterior (27%)") sobre el monto de la '
-                'factura.'))
+                'Pago al exterior: falta la retención de ISR.\n\nAgregue en las líneas el '
+                'impuesto de retención del pago al exterior (en el plan l10n_do, "-27% ISR '
+                '(L253-12)"). Para que se agregue solo, indíquelo en la compañía, "Retenciones '
+                'del pago al exterior".'))
 
     # =========================================
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
@@ -1576,57 +1687,104 @@ class AccountMove(models.Model):
             return
         if self.l10n_do_fiscal_type in ('informal', 'minor_expense'):
             self.l10n_do_vendor_ncf = False
-        self._l10n_do_suggest_retentions()
+        # Las retenciones sugeridas de las líneas las recalcula la línea
+        # (AccountMoveLine._compute_tax_ids depende del tipo de compra).
 
-    @api.onchange('invoice_line_ids')
-    def _onchange_lines_suggest_retentions(self):
-        # Las bases cambian con las líneas: el pago al exterior vuelve a
-        # sugerir su retención de ISR (se puede editar luego).
-        if (self.move_type in ('in_invoice', 'in_refund')
-                and self.l10n_do_fiscal_type == 'exterior'):
-            self._l10n_do_suggest_retentions()
-
-    def _l10n_do_suggested_retentions(self):
-        """[(tipo de retención, base)] que se sugieren en la pestaña.
-
-        Solo el ISR del 27 % del pago al exterior. Al proveedor informal no se
-        le sugiere nada: una retención de la pestaña no genera asiento (no
-        reduce lo que se le debe al proveedor ni crea el pasivo con la DGII).
-        Sus retenciones van como impuesto en la línea.
-        """
+    def _l10n_do_suggested_retention_taxes(self, line=None, line_taxes=None):
+        """Impuestos de retención que se agregan solos a una línea, según el tipo
+        de compra y lo que indicó la compañía. Ninguno en gastos menores ni en
+        una compra con comprobante del proveedor."""
         self.ensure_one()
-        RetType = self.env['l10n_do_ncf.retention.type']
-        # Desde las líneas: en el formulario los totales de la factura todavía
-        # no reflejan la línea que se acaba de agregar.
-        lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
-        base = sum(lines.mapped('price_subtotal'))
-        result = []
-        if self.l10n_do_fiscal_type == 'exterior' and base > 0:
-            result.append((RetType.search([('code', '=', 'ISR_EXT')], limit=1), base))
-        return [(kind, amount) for kind, amount in result if kind]
+        Tax = self.env['account.tax']
+        company = self.company_id
+        if self.move_type not in ('in_invoice', 'in_refund') or company.country_id.code != 'DO':
+            return Tax
+        if self.l10n_do_fiscal_type == 'exterior':
+            return company.l10n_do_exterior_retention_tax_ids
+        if self.l10n_do_fiscal_type != 'informal':
+            return Tax
+        taxes = company.l10n_do_informal_retention_tax_ids
+        if line is None:
+            return taxes
+        line_taxes = line.tax_ids if line_taxes is None else line_taxes
+        has_itbis = any(t.amount > 0 for t in line_taxes)
+        is_service = not line.product_id or line.product_id.type == 'service'
+        return taxes.filtered(lambda t: (
+            (t._l10n_do_retention_kind() == 'itbis' and has_itbis)
+            or (t._l10n_do_retention_kind() == 'isr' and is_service)))
 
-    def _l10n_do_suggest_retentions(self):
-        """Reemplaza las retenciones por las sugeridas del tipo de compra. Una
-        compra con comprobante del proveedor se deja como esté."""
+    def _l10n_do_apply_retention_taxes(self):
+        """Al cambiar el tipo de compra: quita de las líneas las retenciones
+        sugeridas de los otros tipos y agrega las del tipo actual."""
         self.ensure_one()
-        if self.l10n_do_fiscal_type not in ('minor_expense', 'exterior'):
-            # Con comprobante del proveedor o informal: la pestaña no se toca.
-            return
-        suggested = self._l10n_do_suggested_retentions()
-        self.l10n_do_retention_ids = [Command.clear()] + [
-            Command.create({'retention_type_id': kind.id, 'base_amount': amount})
-            for kind, amount in suggested
-        ]
-        if self.l10n_do_fiscal_type == 'exterior' and suggested:
-            self.l10n_do_tipo_retencion_isr = '03'
+        company = self.company_id
+        known = company.l10n_do_informal_retention_tax_ids | company.l10n_do_exterior_retention_tax_ids
+        for line in self.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
+            taxes = line.tax_ids - known
+            line.tax_ids = taxes
+            suggested = self._l10n_do_suggested_retention_taxes(line)
+            if suggested:
+                line.tax_ids = taxes | suggested
 
     # Compatibilidad: los usaban el onchange y los tests anteriores.
     def _apply_b11_retentions(self):
-        self._l10n_do_suggest_retentions()
+        self._l10n_do_apply_retention_taxes()
 
     def _apply_b17_retentions(self):
-        self._l10n_do_suggest_retentions()
+        self._l10n_do_apply_retention_taxes()
 
+    def _l10n_do_suggest_retentions(self):
+        self._l10n_do_apply_retention_taxes()
+
+    # =========================================
+    # BORRADORES CON RETENCIONES EN LA PESTAÑA
+    # =========================================
+    @api.model
+    def _l10n_do_convert_tab_retentions(self, retention_types=None):
+        """Pasa a impuesto de línea las retenciones escritas en la pestaña de
+        las facturas de proveedor en borrador.
+
+        Solo cuando el tipo de retención tiene indicado su impuesto equivalente
+        en la compañía y el resultado da el mismo monto; si no, la fila se queda
+        y la factura sigue avisando (no se confirma hasta que se corrija).
+        Devuelve las facturas convertidas.
+        """
+        domain = [('move_id.state', '=', 'draft'), ('tax_id', '=', False),
+                  ('move_id.move_type', 'in', ('in_invoice', 'in_refund')),
+                  ('move_id.l10n_do_retention_legacy', '=', False)]
+        if retention_types is not None:
+            domain.append(('retention_type_id', 'in', retention_types.ids))
+        rows = self.env['l10n_do_ncf.move.retention'].sudo().search(domain)
+        converted = self.browse()
+        for move in rows.move_id:
+            if move._l10n_do_convert_move_tab_retentions():
+                converted |= move
+        return converted
+
+    def _l10n_do_convert_move_tab_retentions(self):
+        self.ensure_one()
+        done = False
+        for row in self.l10n_do_retention_ids.filtered(lambda r: not r.tax_id and r.retention_type_id):
+            tax = row.retention_type_id.tax_ids.filtered(lambda t: t.company_id == self.company_id)[:1]
+            if not tax:
+                continue
+            kind = row.retention_type_id.retention_type
+            lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+            if kind == 'itbis':
+                lines = lines.filtered(lambda l: any(t.amount > 0 for t in l.tax_ids))
+            elif self.l10n_do_fiscal_type == 'informal':
+                lines = lines.filtered(lambda l: not l.product_id or l.product_id.type == 'service')
+            before = {line: line.tax_ids for line in lines}
+            for line in lines:
+                line.tax_ids |= tax
+            amount = sum(abs(l.amount_currency) for l in self.line_ids if l.tax_line_id == tax)
+            if lines and self.currency_id.compare_amounts(amount, row.retention_amount) == 0:
+                row.unlink()
+                done = True
+            else:
+                for line, taxes in before.items():
+                    line.tax_ids = taxes
+        return done
 
     @api.onchange('l10n_do_origin_move_id')
     def _onchange_origin_move(self):
@@ -1716,43 +1874,22 @@ class AccountMove(models.Model):
     # SINCRONIZACIÓN RETENCIONES
     # =========================================
     def _sync_tax_retentions(self):
+        """Al confirmar, la pestaña "Retenciones" copia los impuestos de
+        retención del asiento: una fila por impuesto, con su base y su monto.
+        Es solo una copia (la fuente son los impuestos); la de una factura
+        anterior a 19.0.4 no se toca."""
         self.ensure_one()
-        if self.move_type not in ('in_invoice', 'in_refund') or self.l10n_do_retention_ids:
+        if self.move_type not in ('in_invoice', 'in_refund') or self.l10n_do_retention_legacy:
             return
-        retentions = []
-        base = abs(self.amount_untaxed or 0)
-        for line in self.line_ids:
-            if line.tax_line_id and line.balance < 0:
-                tax = line.tax_line_id
-                tax_amount = abs(line.balance)
-                tax_name = (tax.name or '').lower()
-                tax_rate = abs(tax.amount)
-                retention_type = False
-                if 'isr' in tax_name or 'renta' in tax_name:
-                    if tax_rate >= 25:
-                        code = 'ISR_EXT'
-                    elif 8 <= tax_rate <= 12:
-                        code = 'ISR_PROF'
-                    elif 1 <= tax_rate <= 5:
-                        code = 'ISR_TEC'
-                    else:
-                        code = 'ISR_PROF'
-                    retention_type = self.env['l10n_do_ncf.retention.type'].search([('code', '=', code)], limit=1)
-                elif 'itbis' in tax_name:
-                    if tax_rate >= 90:
-                        code = 'ITBIS_100'
-                    elif tax_rate >= 70:
-                        code = 'ITBIS_75'
-                    elif tax_rate >= 25:
-                        code = 'ITBIS_PROF'
-                    else:
-                        code = 'ITBIS_100'
-                    retention_type = self.env['l10n_do_ncf.retention.type'].search([('code', '=', code)], limit=1)
-                if retention_type:
-                    calculated_base = tax_amount / retention_type.rate * 100 if retention_type.rate > 0 else base
-                    retentions.append((0, 0, {'retention_type_id': retention_type.id, 'base_amount': calculated_base}))
-        if retentions:
-            self.l10n_do_retention_ids = retentions
+        rows = []
+        for tax in self._l10n_do_retention_tax_lines().tax_line_id:
+            lines = self.line_ids.filtered(lambda l: l.tax_line_id == tax)
+            rows.append(Command.create({
+                'tax_id': tax.id,
+                'base_amount': self._l10n_do_tax_base_in_currency(lines),
+                'tax_amount': abs(sum(lines.mapped('amount_currency'))),
+            }))
+        self.l10n_do_retention_ids = [Command.clear()] + rows
 
     # =========================================
     # VALIDACIÓN FISCAL INTELIGENTE
@@ -1967,6 +2104,16 @@ class AccountMove(models.Model):
                             'Falta el motivo de la nota de débito: elíjalo en "Motivo ND" '
                             '(pestaña "Datos Fiscales").'))
 
+            if (is_do and move.move_type in ('in_invoice', 'in_refund')
+                    and not move.l10n_do_retention_legacy
+                    and move.l10n_do_retention_ids.filtered(lambda r: not r.tax_id)):
+                raise UserError(_(
+                    'La factura tiene retenciones escritas en la pestaña "Retenciones", que no '
+                    'generan asiento: no reducen lo que se le debe al proveedor ni crean la deuda '
+                    'con la DGII.\n\nPóngalas como impuesto de retención en las líneas (por '
+                    'ejemplo "-100%% ITBIS" o la de ISR) y borre las filas de la pestaña.'
+                ).replace('%%', '%'))
+
             if is_do and move.move_type in ('in_invoice', 'in_refund') and move.l10n_do_fiscal_type:
                 if move.l10n_do_fiscal_type == 'informal':
                     move._check_informal_provider_rnc()
@@ -2052,6 +2199,31 @@ class AccountMove(models.Model):
 
 class AccountMoveLine(models.Model):
     _inherit = 'account.move.line'
+
+    @api.depends('move_id.l10n_do_fiscal_type')
+    def _compute_tax_ids(self):
+        """Además de lo de Odoo: las retenciones sugeridas siguen al tipo de
+        compra (se quitan las de los otros tipos y se agregan las del actual),
+        también en líneas sin producto."""
+        super()._compute_tax_ids()
+        for line in self:
+            move = line.move_id
+            if (line.display_type != 'product' or line.is_imported or move.state != 'draft'
+                    or move.move_type not in ('in_invoice', 'in_refund')
+                    or move.company_id.country_id.code != 'DO'):
+                continue
+            company = move.company_id
+            known = company.l10n_do_informal_retention_tax_ids | company.l10n_do_exterior_retention_tax_ids
+            if not known and move.l10n_do_fiscal_type != 'minor_expense':
+                continue
+            taxes = line.tax_ids - known
+            if move.l10n_do_fiscal_type == 'minor_expense':
+                # Un gasto menor no lleva retenciones.
+                taxes = taxes.filtered(lambda t: t.amount >= 0)
+            suggested = move._l10n_do_suggested_retention_taxes(line, taxes)
+            new = taxes | suggested
+            if new != line.tax_ids:
+                line.tax_ids = new
 
     def _get_computed_taxes(self):
         # Gastos menores: van exentos de ITBIS. Las líneas nuevas toman el
