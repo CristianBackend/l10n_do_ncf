@@ -270,6 +270,8 @@ def autoconfigure(env, companies=None):
         export = ensure_export_tax(env, company) if company.chart_template else None
         journals = autoconfigure_journals(env, company)
         accounts = autoconfigure_accounts(env, company)
+        # Contacto genérico de las facturas de gastos menores (E43/B13).
+        company._l10n_do_minor_expense_partner()
         _logger.info(
             'l10n_do_ncf: configuración DGII de %s: %s impuestos, %s diarios y %s cuentas '
             'completados%s', company.name, taxes, journals, accounts,

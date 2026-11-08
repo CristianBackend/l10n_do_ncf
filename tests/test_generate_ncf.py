@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.exceptions import UserError
+from odoo.exceptions import RedirectWarning, UserError
 from odoo.tests import tagged
 from odoo.tools import mute_logger
 
@@ -78,8 +78,10 @@ class TestGenerateNcf(NcfCommon):
     def test_no_sequence_blocks_posting(self):
         self.seq_b01.unlink()
         invoice = self._create_invoice(self.partner_taxpayer)
-        with self.assertRaises(UserError):
+        # El error trae el botón "Registrar secuencia B01".
+        with self.assertRaises(RedirectWarning) as error:
             invoice.action_post()
+        self.assertEqual(error.exception.args[1]['res_model'], 'l10n_do_ncf.sequence')
 
     def test_exhausted_sequence_blocks_posting(self):
         self.seq_b01.unlink()

@@ -80,6 +80,26 @@ class ResPartner(models.Model):
     ], string='Tipo de Contribuyente', default='final_consumer',
        help='Determina el tipo de NCF a generar automaticamente')
 
+    l10n_do_is_informal_supplier = fields.Boolean(
+        string='Proveedor informal',
+        help='Persona física que vende o presta servicios sin darle comprobante fiscal '
+             '(NCF). Se identifica con su cédula. Sus facturas de proveedor nacen como '
+             '"Proveedor informal": la empresa emite el comprobante de compras (e-CF '
+             'E41, o B11 en papel) y se le sugieren las retenciones de ITBIS e ISR.')
+
+    @api.onchange('l10n_do_is_informal_supplier', 'vat')
+    def _onchange_l10n_do_informal_supplier(self):
+        if not self.l10n_do_is_informal_supplier:
+            return
+        digits = re.sub(r'[^0-9]', '', self.vat or '')
+        if len(digits) == 9:
+            return {'warning': {
+                'title': _('Proveedor con RNC'),
+                'message': _('%s tiene RNC: un contribuyente da su propio comprobante y no es '
+                             'un proveedor informal. Un proveedor informal se identifica con su '
+                             'cédula (11 dígitos).', self.name or _('Este contacto')),
+            }}
+
     l10n_do_rnc_validated = fields.Boolean(
         string='RNC Validado',
         default=False,

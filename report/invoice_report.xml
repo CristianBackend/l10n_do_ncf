@@ -87,6 +87,27 @@
             </xpath>
 
             <!-- ========================================= -->
+            <!-- NOTA DE DÉBITO DESDE LA FACTURA          -->
+            <!-- ========================================= -->
+            <!-- Si account_debit_note está instalado se usan su botón y su botón
+                 inteligente (las notas salen igual como B03/E33). -->
+            <xpath expr="//button[@name='action_reverse']" position="after">
+                <field name="l10n_do_can_debit_note" invisible="1"/>
+                <field name="l10n_do_std_debit_note" invisible="1"/>
+                <button name="action_l10n_do_debit_note" string="Nota de débito" type="object"
+                        groups="account.group_account_invoice"
+                        invisible="not l10n_do_can_debit_note or l10n_do_std_debit_note"
+                        help="Crea una nota de débito enlazada a esta factura, con su cliente y su comprobante."/>
+            </xpath>
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_l10n_do_view_debit_notes" type="object" class="oe_stat_button"
+                        icon="fa-plus-square-o"
+                        invisible="l10n_do_debit_note_count == 0 or l10n_do_std_debit_note">
+                    <field name="l10n_do_debit_note_count" widget="statinfo" string="Notas de débito"/>
+                </button>
+            </xpath>
+
+            <!-- ========================================= -->
             <!-- CAMPOS NCF - BLOQUE UNIFICADO            -->
             <!-- ========================================= -->
             <xpath expr="//field[@name='invoice_date']" position="after">
@@ -138,11 +159,20 @@
             <!-- CAMPOS PARA FACTURAS DE COMPRA           -->
             <!-- ========================================= -->
             <xpath expr="//field[@name='ref']" position="after">
-                <!-- NCF del Proveedor -->
+                <!-- Tipo de compra: de él sale el tipo de comprobante (E41/E43/E47
+                     o el del proveedor). Se elige solo según el proveedor. -->
+                <field name="l10n_do_fiscal_type" invisible="1"/>
+                <field name="l10n_do_purchase_kind" string="Tipo de compra"
+                       invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_is_vendor_debit_note"
+                       readonly="state != 'draft' or l10n_do_ncf_number"
+                       required="move_type in ('in_invoice', 'in_refund') and state == 'draft' and not l10n_do_is_vendor_debit_note"/>
+                <field name="l10n_do_is_vendor_debit_note" invisible="1"/>
+
+                <!-- NCF del Proveedor: solo cuando el comprobante lo da él -->
                 <label for="l10n_do_vendor_ncf" string="NCF Proveedor"
-                       invisible="move_type not in ('in_invoice', 'in_refund')"/>
+                       invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_purchase_kind != 'vendor'"/>
                 <div class="d-flex align-items-center"
-                     invisible="move_type not in ('in_invoice', 'in_refund')">
+                     invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_purchase_kind != 'vendor'">
                     <field name="l10n_do_vendor_ncf"
                            placeholder="B0100000001 o E310000000001"
                            class="fw-bold oe_inline"
@@ -187,8 +217,24 @@
                                    class="fw-bold text-primary"/>
                         </group>
                     </group>
-                    <p class="text-muted mt-3">
-                        Las retenciones se calculan automáticamente desde los impuestos aplicados en las líneas de factura.
+                    <field name="l10n_do_retention_ids" nolabel="1" readonly="state != 'draft'">
+                        <list editable="bottom">
+                            <field name="retention_type_id" options="{'no_create': True}"/>
+                            <field name="base_amount"/>
+                            <field name="rate" readonly="1"/>
+                            <field name="retention_amount" readonly="1" sum="Total"/>
+                            <field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+                    <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'informal'">
+                        Retenciones sugeridas para un proveedor informal: el 100 % del ITBIS
+                        facturado y el ISR según el tipo de servicio. Puede cambiarlas o borrarlas.
+                    </p>
+                    <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'minor_expense'">
+                        Un gasto menor no lleva retenciones.
+                    </p>
+                    <p class="text-muted mt-3" invisible="l10n_do_purchase_kind != 'exterior'">
+                        Un pago al exterior lleva la retención de ISR del 27 %.
                     </p>
                 </page>
             </xpath>
@@ -200,7 +246,8 @@
                 <group string="Información Fiscal RD" name="fiscal_rd_group"
                        invisible="move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund')">
                     <group>
-                        <field name="l10n_do_fiscal_type" string="Tipo Fiscal"/>
+                        <field name="l10n_do_purchase_kind" string="Tipo de compra"
+                               invisible="move_type not in ('in_invoice', 'in_refund')" readonly="1"/>
                         <field name="l10n_do_fiscal_status" string="Estado Fiscal" readonly="1"
                                invisible="move_type not in ('out_invoice', 'out_refund')"/>
                     </group>

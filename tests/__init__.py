@@ -12,3 +12,5 @@ from . import test_dgii_reminder
 from . import test_dgii_609
 from . import test_dgii_reports
 from . import test_autoconfig
+from . import test_debit_note_button
+from . import test_purchase_kind

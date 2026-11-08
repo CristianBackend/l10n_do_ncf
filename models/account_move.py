@@ -4,8 +4,8 @@
 # Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
 # Compatibilidad: Odoo 19 (100% compatible, upgrade-friendly)
 
-from odoo import models, fields, api, _
-from odoo.exceptions import ValidationError, UserError
+from odoo import Command, models, fields, api, _
+from odoo.exceptions import RedirectWarning, ValidationError, UserError
 from datetime import date
 import re
 import logging
@@ -35,9 +35,24 @@ NCF_FULL_PATTERN = r'^(B(01|02|03|04|11|12|13|14|15|16|17)\d{8}|E(31|32|33|34|41
 # patrón gubernamental). Un conector de e-CF convierte 14/15/16 en 44/45/46.
 COHERENCE_PAPER_CODE = {'44': '14', '45': '15', '46': '16'}
 
+# "Tipo de compra" de la factura de proveedor, en el lenguaje del usuario. Los
+# tres últimos son tipos fiscales (l10n_do_fiscal_type) cuyo comprobante emite
+# la empresa (B11/E41, B13/E43, B17/E47).
+PURCHASE_KINDS = [
+    ('vendor', 'Con comprobante del proveedor'),
+    ('informal', 'Proveedor informal'),
+    ('minor_expense', 'Gastos menores'),
+    ('exterior', 'Pago al exterior'),
+]
+PURCHASE_KIND_FISCAL_TYPES = ('informal', 'minor_expense', 'exterior')
+
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
+
+    # Encontrar la factura escribiendo su NCF o e-NCF (p. ej. al elegir el
+    # origen de una nota de débito).
+    _rec_names_search = ['name', 'partner_id.name', 'ref', 'l10n_do_ncf_number']
 
     # =========================================
     # CAMPOS NCF
@@ -140,15 +155,41 @@ class AccountMove(models.Model):
         compute='_compute_credited_amount', store=True, currency_field='currency_id'
     )
 
-    l10n_do_is_debit_note = fields.Boolean(string='Es Nota de Débito', default=False)
+    l10n_do_is_debit_note = fields.Boolean(string='Es Nota de Débito', default=False, copy=False)
     l10n_do_debit_note_reason = fields.Selection([
         ('01', '01 - Intereses por mora'),
         ('02', '02 - Gastos adicionales'),
         ('03', '03 - Ajuste precio al alza'),
         ('04', '04 - Otros cargos'),
-    ], string='Motivo ND')
-    l10n_do_debit_origin_move_id = fields.Many2one('account.move', string='Factura Origen ND', copy=False)
+    ], string='Motivo ND', copy=False)
+    # Solo facturas de cliente confirmadas del mismo cliente y compañía. Sin
+    # este filtro se podía elegir un borrador, una compra o la propia nota, y
+    # escribir el e-NCF ofrecía "Crear", que fabricaba un asiento vacío.
+    l10n_do_debit_origin_move_id = fields.Many2one(
+        'account.move', string='Factura Origen ND', copy=False, index='btree_not_null',
+        domain="[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'),"
+               " ('l10n_do_is_debit_note', '=', False), ('company_id', '=', company_id),"
+               " ('commercial_partner_id', '=', commercial_partner_id)]")
     l10n_do_debit_ncf_origin = fields.Char(string='NCF Afectado ND', copy=False)
+    l10n_do_debit_note_ids = fields.One2many(
+        'account.move', 'l10n_do_debit_origin_move_id', string='Notas de débito')
+    l10n_do_debit_note_count = fields.Integer(
+        string='Notas de débito', compute='_compute_l10n_do_debit_note_count')
+    # account_debit_note trae su propio botón "Nota de débito" y su botón
+    # inteligente: si está instalado, se usan esos y se ocultan los del módulo.
+    l10n_do_std_debit_note = fields.Boolean(compute='_compute_l10n_do_debit_note_count')
+    l10n_do_can_debit_note = fields.Boolean(compute='_compute_l10n_do_debit_note_count')
+
+    @api.depends('l10n_do_debit_note_ids', 'state', 'move_type', 'l10n_do_is_debit_note')
+    def _compute_l10n_do_debit_note_count(self):
+        std = 'debit_origin_id' in self._fields
+        for move in self:
+            move.l10n_do_debit_note_count = len(move.l10n_do_debit_note_ids)
+            move.l10n_do_std_debit_note = std
+            move.l10n_do_can_debit_note = (
+                move.move_type == 'out_invoice' and move.state == 'posted'
+                and not move.l10n_do_is_debit_note
+                and move.company_id.country_id.code == 'DO')
 
     l10n_do_is_vendor_debit_note = fields.Boolean(string='Es ND de Proveedor', default=False)
     l10n_do_vendor_debit_ncf_origin = fields.Char(string='NCF Afectado (ND Proveedor)')
@@ -162,6 +203,9 @@ class AccountMove(models.Model):
         ('local', 'Local'), ('dgii', 'DGII'), ('manual', 'Manual')
     ], default='local')
 
+    # En compras se calcula a partir del proveedor (informal, del exterior o el
+    # contacto "Gastos menores") y se puede cambiar; el usuario lo ve como
+    # "Tipo de compra" (l10n_do_purchase_kind). En ventas no se usa.
     l10n_do_fiscal_type = fields.Selection([
         ('fiscal', 'Compra Fiscal'),
         ('informal', 'B11 - Compra Informal'),
@@ -169,7 +213,72 @@ class AccountMove(models.Model):
         ('exterior', 'B17 - Pago Exterior'),
         ('special', 'B14 - Régimen Especial'),
         ('governmental', 'B15 - Gubernamental'),
-    ], string='Tipo Fiscal', default='fiscal', tracking=True)
+    ], string='Tipo Fiscal', tracking=True,
+        compute='_compute_l10n_do_fiscal_type', store=True, readonly=False, precompute=True)
+
+    l10n_do_purchase_kind = fields.Selection(
+        PURCHASE_KINDS, string='Tipo de compra',
+        compute='_compute_l10n_do_purchase_kind',
+        inverse='_inverse_l10n_do_purchase_kind',
+        help='Con comprobante del proveedor: compra normal, el NCF o e-NCF lo da el '
+             'proveedor.\nProveedor informal: persona física sin comprobante; lo emite '
+             'la empresa.\nGastos menores: peajes, parqueos y gastos sin comprobante.\n'
+             'Pago al exterior: proveedor fuera del país.\n\n'
+             'Se elige solo según el proveedor y se puede cambiar.')
+
+    @api.depends('partner_id', 'move_type')
+    def _compute_l10n_do_fiscal_type(self):
+        for move in self:
+            current = move.l10n_do_fiscal_type
+            if (move.move_type not in ('in_invoice', 'in_refund')
+                    or move.state == 'posted' or move.l10n_do_ncf_number
+                    or move.l10n_do_is_vendor_debit_note):
+                # Un comprobante confirmado o emitido no cambia de tipo.
+                move.l10n_do_fiscal_type = current or 'fiscal'
+                continue
+            move.l10n_do_fiscal_type = move._l10n_do_partner_fiscal_type(current)
+
+    def _l10n_do_partner_fiscal_type(self, current=False):
+        """Tipo fiscal de compra que corresponde al proveedor de la factura."""
+        self.ensure_one()
+        partner = self.partner_id.commercial_partner_id
+        if not partner:
+            return current or 'fiscal'
+        if partner == self.company_id.l10n_do_minor_expense_partner_id:
+            return 'minor_expense'
+        if partner.l10n_do_is_informal_supplier:
+            return 'informal'
+        if partner.country_id and partner.country_id.code != 'DO':
+            return 'exterior'
+        # Un régimen especial o gubernamental puesto a mano se respeta.
+        return current if current in ('special', 'governmental') else 'fiscal'
+
+    @api.depends('l10n_do_fiscal_type')
+    def _compute_l10n_do_purchase_kind(self):
+        for move in self:
+            kind = move.l10n_do_fiscal_type
+            move.l10n_do_purchase_kind = kind if kind in PURCHASE_KIND_FISCAL_TYPES else 'vendor'
+
+    def _inverse_l10n_do_purchase_kind(self):
+        for move in self:
+            fiscal_type = move._l10n_do_fiscal_type_for_kind(move.l10n_do_purchase_kind)
+            if fiscal_type != move.l10n_do_fiscal_type:
+                move.l10n_do_fiscal_type = fiscal_type
+
+    def _l10n_do_fiscal_type_for_kind(self, kind):
+        self.ensure_one()
+        if kind in PURCHASE_KIND_FISCAL_TYPES:
+            return kind
+        current = self.l10n_do_fiscal_type
+        return current if current in ('special', 'governmental') else 'fiscal'
+
+    @api.onchange('l10n_do_purchase_kind')
+    def _onchange_l10n_do_purchase_kind(self):
+        if self.move_type not in ('in_invoice', 'in_refund') or not self.l10n_do_purchase_kind:
+            return
+        self.l10n_do_fiscal_type = self._l10n_do_fiscal_type_for_kind(self.l10n_do_purchase_kind)
+        if self.l10n_do_purchase_kind == 'minor_expense' and not self.partner_id:
+            self.partner_id = self.company_id._l10n_do_minor_expense_partner()
 
     # B11 - INFORMAL
     l10n_do_informal_provider_name = fields.Char(string='Nombre Proveedor Informal')
@@ -439,7 +548,142 @@ class AccountMove(models.Model):
                     'No se puede modificar el tipo fiscal de un comprobante ya emitido.'
                 ) % move.l10n_do_ncf_number)
 
-        return super().write(vals)
+            # Marcar como nota de débito una factura ya confirmada la
+            # convertía en "ND" sin aviso: la nota es un documento nuevo.
+            if (
+                'l10n_do_is_debit_note' in vals
+                and bool(vals['l10n_do_is_debit_note']) != move.l10n_do_is_debit_note
+                and (move.state == 'posted' or move.l10n_do_ncf_number)
+            ):
+                raise UserError(_(
+                    'La factura %s ya está confirmada: no se puede convertir en nota de '
+                    'débito.\n\nPara cobrarle un cargo adicional al cliente, use el botón '
+                    '"Nota de débito" de la factura: crea una nota nueva enlazada a ella.',
+                    move.name))
+
+        res = super().write(vals)
+        if 'l10n_do_debit_origin_move_id' in vals or 'l10n_do_is_debit_note' in vals:
+            self._l10n_do_fill_debit_ncf_origin()
+        return res
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            self._l10n_do_debit_vals_from_std(vals)
+        moves = super().create(vals_list)
+        moves._l10n_do_fill_debit_ncf_origin()
+        return moves
+
+    def _l10n_do_fill_debit_ncf_origin(self):
+        """NCF afectado de la nota de débito, tomado de su factura origen.
+
+        En el formulario es de solo lectura, así que lo que pone el onchange
+        no siempre llega a guardarse.
+        """
+        for move in self:
+            origin = move.l10n_do_debit_origin_move_id
+            if move.l10n_do_is_debit_note and origin and not move.l10n_do_debit_ncf_origin:
+                number = origin._l10n_do_note_origin_number()
+                if number:
+                    move.l10n_do_debit_ncf_origin = number
+
+    @api.model
+    def _l10n_do_debit_vals_from_std(self, vals):
+        """Nota creada con el botón "Nota de débito" de Odoo (account_debit_note).
+
+        Ese asistente copia la factura y le pone debit_origin_id: sin esto la
+        nota salía como una factura más (B01/E31). Aquí se completa como nota
+        de débito dominicana (B03/E33) enlazada a su origen.
+        """
+        origin_id = vals.get('debit_origin_id')
+        if not origin_id:
+            return
+        origin = self.browse(origin_id)
+        if origin.company_id.country_id.code != 'DO':
+            return
+        if origin.move_type == 'out_invoice' and vals.get('move_type', 'out_invoice') == 'out_invoice':
+            vals.setdefault('l10n_do_is_debit_note', True)
+            vals.setdefault('l10n_do_debit_origin_move_id', origin.id)
+            vals.setdefault('l10n_do_debit_ncf_origin', origin._l10n_do_note_origin_number() or False)
+        elif origin.move_type == 'in_invoice' and vals.get('move_type', 'in_invoice') == 'in_invoice':
+            # La nota de débito de un proveedor trae el comprobante de él.
+            vals.setdefault('l10n_do_is_vendor_debit_note', True)
+            vals.setdefault('l10n_do_vendor_debit_ncf_origin',
+                            origin.l10n_do_vendor_ncf or origin.l10n_do_ncf_number or False)
+            vals.setdefault('l10n_do_fiscal_type', 'fiscal')
+
+    def _l10n_do_note_origin_number(self):
+        """El comprobante (NCF o e-NCF) que una nota de este documento modifica.
+
+        Punto de extensión: con e-CF el número puede estar asignado antes de
+        que la DGII responda (un conector lo sobrescribe).
+        """
+        self.ensure_one()
+        return self.l10n_do_ncf_number
+
+    # =========================================
+    # NOTA DE DÉBITO DESDE LA FACTURA
+    # =========================================
+    def _l10n_do_debit_note_vals(self):
+        """Valores de una nota de débito en borrador para esta factura."""
+        self.ensure_one()
+        vals = {
+            'move_type': 'out_invoice',
+            'partner_id': self.partner_id.id,
+            'journal_id': self.journal_id.id,
+            'currency_id': self.currency_id.id,
+            'fiscal_position_id': self.fiscal_position_id.id,
+            'invoice_payment_term_id': self.invoice_payment_term_id.id,
+            'invoice_user_id': self.invoice_user_id.id,
+            'ref': self.name,
+            'l10n_do_is_debit_note': True,
+            'l10n_do_debit_origin_move_id': self.id,
+            'l10n_do_debit_ncf_origin': self._l10n_do_note_origin_number(),
+        }
+        if 'debit_origin_id' in self._fields:
+            # Con account_debit_note, su botón inteligente la cuenta también.
+            vals['debit_origin_id'] = self.id
+        return vals
+
+    def action_l10n_do_debit_note(self):
+        """Botón "Nota de débito": abre una nota nueva ya enlazada a la factura.
+
+        Lleva el cliente, la factura origen y su comprobante; el motivo y los
+        cargos los completa el usuario.
+        """
+        self.ensure_one()
+        if not self.l10n_do_can_debit_note:
+            raise UserError(_('Solo se le hace nota de débito a una factura de cliente confirmada.'))
+        if not self._l10n_do_note_origin_number():
+            raise UserError(_(
+                'La factura %s todavía no tiene comprobante fiscal (NCF o e-NCF). '
+                'Espere a que tenga su número para hacerle una nota de débito.', self.name))
+        debit_note = self.create(self._l10n_do_debit_note_vals())
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Nota de débito'),
+            'res_model': 'account.move',
+            'res_id': debit_note.id,
+            'view_mode': 'form',
+            'views': [(False, 'form')],
+            'context': {'default_move_type': 'out_invoice'},
+        }
+
+    def action_l10n_do_view_debit_notes(self):
+        self.ensure_one()
+        notes = self.l10n_do_debit_note_ids
+        action = {
+            'type': 'ir.actions.act_window',
+            'name': _('Notas de débito'),
+            'res_model': 'account.move',
+            'context': {'default_move_type': 'out_invoice', 'create': False},
+        }
+        if len(notes) == 1:
+            action.update({'view_mode': 'form', 'views': [(False, 'form')], 'res_id': notes.id})
+        else:
+            action.update({'view_mode': 'list,form', 'views': [(False, 'list'), (False, 'form')],
+                           'domain': [('id', 'in', notes.ids)]})
+        return action
 
     # =========================================
     # CÓMPUTOS
@@ -873,11 +1117,15 @@ class AccountMove(models.Model):
                 if not move.l10n_do_ncf_origin and not move.l10n_do_origin_move_id:
                     raise ValidationError(_('NC requiere NCF afectado.'))
 
-    @api.constrains('l10n_do_is_debit_note', 'l10n_do_debit_ncf_origin')
+    @api.constrains('l10n_do_is_debit_note', 'l10n_do_debit_ncf_origin', 'l10n_do_debit_origin_move_id')
     def _check_debit_note_origin(self):
         for move in self:
             if move.company_id.country_id.code != 'DO':
                 continue
+            if move.l10n_do_debit_origin_move_id == move:
+                raise ValidationError(_(
+                    'Una nota de débito no puede modificarse a sí misma: elija como '
+                    '"Factura Origen ND" la factura confirmada a la que se le cobra el cargo.'))
             if move.l10n_do_is_debit_note and move.state == 'posted':
                 if not move.l10n_do_debit_ncf_origin and not move.l10n_do_debit_origin_move_id:
                     raise ValidationError(_('ND requiere NCF afectado.'))
@@ -955,14 +1203,56 @@ class AccountMove(models.Model):
     # =========================================
     # VALIDACIONES ESPECÍFICAS POR TIPO
     # =========================================
+    def _l10n_do_partner_action(self, partner=None):
+        """Acción que abre la ficha del proveedor (botón de los errores)."""
+        partner = partner or self.partner_id.commercial_partner_id
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'res.partner',
+            'res_id': partner.id,
+            'views': [[False, 'form']],
+            'target': 'current',
+        }
+
+    def _l10n_do_raise_partner_fix(self, message, partner=None):
+        partner = partner or self.partner_id.commercial_partner_id
+        if not partner:
+            raise UserError(message)
+        raise RedirectWarning(message, self._l10n_do_partner_action(partner),
+                              _('Abrir "%s"', partner.display_name))
+
+    def _l10n_do_fill_informal_provider(self):
+        """Nombre y cédula del proveedor informal: los de su contacto si la
+        factura no trae otros (reportes 606 y e-CF E41 los leen de aquí)."""
+        for move in self.filtered(lambda m: m.l10n_do_fiscal_type == 'informal'):
+            partner = move.partner_id.commercial_partner_id
+            digits = re.sub(r'[^0-9]', '', partner.vat or '')
+            vals = {}
+            if not move.l10n_do_informal_provider_name and partner.name:
+                vals['l10n_do_informal_provider_name'] = partner.name
+            if not move.l10n_do_informal_provider_cedula and len(digits) == 11:
+                vals['l10n_do_informal_provider_cedula'] = digits
+            if vals:
+                move.write(vals)
+
     def _check_informal_provider_rnc(self):
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'informal':
             return
-        if self.partner_id and self.partner_id.vat:
-            raise UserError(_('Proveedor con RNC no puede usar B11.'))
+        partner = self.partner_id.commercial_partner_id
+        digits = re.sub(r'[^0-9]', '', partner.vat or '')
+        if len(digits) == 9:
+            # Un RNC es de un contribuyente: él da su propio comprobante.
+            self._l10n_do_raise_partner_fix(_(
+                'El proveedor %(name)s tiene RNC (%(vat)s): es un contribuyente y debe darle '
+                'su propio comprobante (NCF o e-NCF).\n\nCambie "Tipo de compra" a "Con '
+                'comprobante del proveedor" y escriba el NCF que le dio, o, si es una persona '
+                'sin comprobante, ponga su cédula en el contacto.',
+                name=partner.display_name, vat=partner.vat), partner)
+        self._l10n_do_fill_informal_provider()
         if not self.l10n_do_informal_provider_name:
-            raise UserError(_('B11 requiere nombre del proveedor.'))
+            raise UserError(_(
+                'Falta el nombre del proveedor informal: elija el proveedor en la factura.'))
         self.l10n_do_informal_rnc_verified = True
 
     def _check_b11_monthly_limit(self):
@@ -989,19 +1279,35 @@ class AccountMove(models.Model):
         for line in self.invoice_line_ids:
             for tax in line.tax_ids:
                 if tax.amount > 0 and 'itbis' in (tax.name or '').lower():
-                    raise UserError(_('B13 no permite ITBIS acreditable en línea %s.') % line.name)
+                    raise UserError(_(
+                        'Gastos menores: la línea "%s" tiene ITBIS.\n\nLos gastos menores van '
+                        'exentos: quite el impuesto de la línea o cámbielo por "ITBIS Exento".',
+                        line.name))
+        if self.l10n_do_retention_ids.filtered('retention_amount'):
+            raise UserError(_(
+                'Gastos menores: la factura tiene retenciones.\n\nUn gasto menor no lleva '
+                'retenciones: bórrelas en la pestaña "Retenciones".'))
         limit = self._get_b13_transaction_limit()
         if self.amount_total > limit:
-            raise UserError(_('B13 excede límite de RD$ %s.') % limit)
+            raise UserError(_(
+                'Gastos menores: el total (RD$ %(total)s) pasa del límite de RD$ %(limit)s por '
+                'gasto.\n\nSi el proveedor le dio comprobante, cambie "Tipo de compra" a "Con '
+                'comprobante del proveedor".',
+                total='{:,.2f}'.format(self.amount_total), limit='{:,.2f}'.format(limit)))
 
     def _check_b17_no_itbis(self):
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'exterior':
             return
         if self.amount_tax > 0:
-            raise UserError(_('B17 no debe tener ITBIS.'))
+            raise UserError(_(
+                'Pago al exterior: la factura tiene ITBIS.\n\nUn pago al exterior no lleva '
+                'ITBIS: quite el impuesto de las líneas.'))
         if not any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids):
-            raise UserError(_('B17 requiere retención ISR 27%.'))
+            raise UserError(_(
+                'Pago al exterior: falta la retención de ISR del 27 %.\n\nAgréguela en la '
+                'pestaña "Retenciones" ("ISR Pagos al Exterior (27%)") sobre el monto de la '
+                'factura.'))
 
     # =========================================
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
@@ -1082,10 +1388,20 @@ class AccountMove(models.Model):
         ], order='id desc')
 
         if not sequences:
-            raise UserError(_(
-                'No hay secuencias activas para %s.\n'
-                'Configure una secuencia en Contabilidad > Configuración > Secuencias NCF.'
-            ) % ncf_type.name)
+            action = self.env['ir.actions.act_window']._for_xml_id('l10n_do_ncf.action_ncf_sequence')
+            action.update({
+                'views': [[False, 'form']],
+                'view_mode': 'form',
+                'target': 'current',
+                'context': {'default_ncf_type_id': ncf_type.id,
+                            'default_company_id': self.company_id.id},
+            })
+            raise RedirectWarning(_(
+                'No hay una secuencia activa de "%(type)s" (%(prefix)s) en %(company)s.\n\n'
+                'Registre el rango que le autorizó la DGII para este tipo de comprobante y '
+                'actívelo; luego confirme de nuevo.',
+                type=ncf_type.name, prefix=ncf_type.prefix, company=self.company_id.name,
+            ), action, _('Registrar secuencia %s', ncf_type.prefix))
 
         # FOR UPDATE NOWAIT: bloquea la fila para evitar duplicados
         # Si otra transacción tiene el lock, falla inmediatamente
@@ -1178,46 +1494,67 @@ class AccountMove(models.Model):
         if self.move_type not in ('in_invoice', 'in_refund'):
             return
         if self.l10n_do_fiscal_type in ('informal', 'minor_expense'):
-            self.l10n_do_retention_ids = [(5, 0, 0)]
             self.l10n_do_vendor_ncf = False
-        if self.l10n_do_fiscal_type == 'informal':
-            self._apply_b11_retentions()
-        elif self.l10n_do_fiscal_type == 'exterior':
-            self._apply_b17_retentions()
+        self._l10n_do_suggest_retentions()
 
-    def _apply_b11_retentions(self):
-        retentions = []
-        base = self.amount_untaxed or 0
-        itbis = self.amount_tax or 0
+    @api.onchange('invoice_line_ids')
+    def _onchange_lines_suggest_retentions(self):
+        # Las bases cambian con las líneas: el proveedor informal y el pago al
+        # exterior vuelven a sugerir sus retenciones (se pueden editar luego).
+        if (self.move_type in ('in_invoice', 'in_refund')
+                and self.l10n_do_fiscal_type in ('informal', 'exterior')):
+            self._l10n_do_suggest_retentions()
+
+    def _l10n_do_suggested_retentions(self):
+        """[(tipo de retención, base)] que corresponden al tipo de compra.
+
+        Proveedor informal: 100 % del ITBIS facturado y el ISR según el tipo de
+        servicio. Pago al exterior: ISR del 27 %. Gastos menores: ninguna.
+        """
+        self.ensure_one()
         RetType = self.env['l10n_do_ncf.retention.type']
-        if itbis > 0:
-            itbis_type = RetType.search([('code', '=', 'ITBIS_100')], limit=1)
-            if itbis_type:
-                retentions.append((0, 0, {'retention_type_id': itbis_type.id, 'base_amount': itbis}))
-        if base > 0:
-            code = 'ISR_PROF' if self.l10n_do_informal_service_type == 'professional' else 'ISR_TEC'
-            isr_type = RetType.search([('code', '=', code)], limit=1)
-            if isr_type:
-                retentions.append((0, 0, {'retention_type_id': isr_type.id, 'base_amount': base}))
-        if retentions:
-            self.l10n_do_retention_ids = retentions
+        # Desde las líneas: en el formulario los totales de la factura todavía
+        # no reflejan la línea que se acaba de agregar.
+        lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+        base = sum(lines.mapped('price_subtotal'))
+        itbis = sum(line.price_total - line.price_subtotal for line in lines
+                    if any(tax.amount > 0 for tax in line.tax_ids))
+        result = []
+        if self.l10n_do_fiscal_type == 'informal':
+            if itbis > 0:
+                result.append((RetType.search([('code', '=', 'ITBIS_100')], limit=1), itbis))
+            if base > 0:
+                code = 'ISR_PROF' if self.l10n_do_informal_service_type == 'professional' else 'ISR_TEC'
+                result.append((RetType.search([('code', '=', code)], limit=1), base))
+        elif self.l10n_do_fiscal_type == 'exterior' and base > 0:
+            result.append((RetType.search([('code', '=', 'ISR_EXT')], limit=1), base))
+        return [(kind, amount) for kind, amount in result if kind]
+
+    def _l10n_do_suggest_retentions(self):
+        """Reemplaza las retenciones por las sugeridas del tipo de compra. Una
+        compra con comprobante del proveedor se deja como esté."""
+        self.ensure_one()
+        if self.l10n_do_fiscal_type not in PURCHASE_KIND_FISCAL_TYPES:
+            return
+        suggested = self._l10n_do_suggested_retentions()
+        self.l10n_do_retention_ids = [Command.clear()] + [
+            Command.create({'retention_type_id': kind.id, 'base_amount': amount})
+            for kind, amount in suggested
+        ]
+        if self.l10n_do_fiscal_type == 'exterior' and suggested:
+            self.l10n_do_tipo_retencion_isr = '03'
+
+    # Compatibilidad: los usaban el onchange y los tests anteriores.
+    def _apply_b11_retentions(self):
+        self._l10n_do_suggest_retentions()
+
+    def _apply_b17_retentions(self):
+        self._l10n_do_suggest_retentions()
 
     @api.onchange('l10n_do_informal_service_type')
     def _onchange_informal_service_type(self):
         if self.l10n_do_fiscal_type == 'informal':
-            self._apply_b11_retentions()
-
-    def _apply_b17_retentions(self):
-        retentions = []
-        base = self.amount_untaxed or 0
-        RetType = self.env['l10n_do_ncf.retention.type']
-        if base > 0:
-            isr_type = RetType.search([('code', '=', 'ISR_EXT')], limit=1)
-            if isr_type:
-                retentions.append((0, 0, {'retention_type_id': isr_type.id, 'base_amount': base}))
-        if retentions:
-            self.l10n_do_retention_ids = retentions
-            self.l10n_do_tipo_retencion_isr = '03'
+            self._l10n_do_suggest_retentions()
 
     @api.onchange('l10n_do_origin_move_id')
     def _onchange_origin_move(self):
@@ -1544,10 +1881,19 @@ class AccountMove(models.Model):
                     if not move.l10n_do_credit_note_reason:
                         raise UserError(_('NC requiere motivo.'))
                 if move.l10n_do_is_debit_note:
-                    if not move.l10n_do_debit_ncf_origin and not move.l10n_do_debit_origin_move_id:
-                        raise UserError(_('ND requiere origen.'))
+                    origin = move.l10n_do_debit_origin_move_id
+                    if not move.l10n_do_debit_ncf_origin and origin:
+                        # El campo es de solo lectura en el formulario: el
+                        # número se toma de la factura origen.
+                        move.l10n_do_debit_ncf_origin = origin._l10n_do_note_origin_number()
+                    if not move.l10n_do_debit_ncf_origin and not origin:
+                        raise UserError(_(
+                            'Falta la factura que modifica esta nota de débito: elíjala en '
+                            '"Factura Origen ND" (pestaña "Datos Fiscales").'))
                     if not move.l10n_do_debit_note_reason:
-                        raise UserError(_('ND requiere motivo.'))
+                        raise UserError(_(
+                            'Falta el motivo de la nota de débito: elíjalo en "Motivo ND" '
+                            '(pestaña "Datos Fiscales").'))
 
             if is_do and move.move_type in ('in_invoice', 'in_refund') and move.l10n_do_fiscal_type:
                 if move.l10n_do_fiscal_type == 'informal':
@@ -1630,3 +1976,18 @@ class AccountMove(models.Model):
         if self.l10n_do_fiscal_type == 'informal':
             return self.l10n_do_informal_provider_cedula or ''
         return self.partner_id.vat or ''
+
+
+class AccountMoveLine(models.Model):
+    _inherit = 'account.move.line'
+
+    def _get_computed_taxes(self):
+        # Gastos menores: van exentos de ITBIS. Las líneas nuevas toman el
+        # "ITBIS Exento" de compras (o ninguno) en vez del ITBIS del producto.
+        move = self.move_id
+        if (move.move_type in ('in_invoice', 'in_refund')
+                and move.l10n_do_fiscal_type == 'minor_expense'
+                and move.company_id.country_id.code == 'DO'):
+            exempt = move.company_id._l10n_do_purchase_exempt_tax()
+            return exempt.with_env(self.env) if exempt else self.env['account.tax']
+        return super()._get_computed_taxes()

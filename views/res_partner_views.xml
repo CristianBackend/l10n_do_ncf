@@ -41,6 +41,7 @@
                     <group>
                         <group string="Informacion Fiscal">
                             <field name="l10n_do_dgii_tax_payer_type" string="Tipo"/>
+                            <field name="l10n_do_is_informal_supplier"/>
                             <field name="l10n_do_609_related_party"/>
                             <field name="l10n_do_dgii_status" string="Estado DGII" readonly="1" 
                                    invisible="not l10n_do_rnc_validated"/>

@@ -27,7 +27,7 @@
                 <div class="alert alert-warning text-center mb-3" role="status"
                      invisible="not l10n_do_is_debit_note">
                     <strong>📝 NOTA DE DÉBITO</strong>
-                    <span class="ms-2">NCF Afectado: <field name="l10n_do_debit_ncf_origin" readonly="1"/></span>
+                    <span class="ms-2">NCF Afectado: <field name="l10n_do_debit_ncf_origin" readonly="1" force_save="1"/></span>
                 </div>
 
                 <!-- Banner ND Proveedor -->
@@ -75,16 +75,24 @@
                     <separator string="Nota de Débito" invisible="move_type != 'out_invoice'"/>
                     <group invisible="move_type != 'out_invoice'">
                         <group>
-                            <field name="l10n_do_is_debit_note"/>
-                            <field name="l10n_do_debit_note_reason" 
+                            <!-- Una factura confirmada no se convierte en nota de
+                                 débito: para eso está el botón "Nota de débito". -->
+                            <field name="l10n_do_is_debit_note"
+                                   readonly="state != 'draft' or l10n_do_ncf_number"/>
+                            <field name="l10n_do_debit_note_reason"
                                    invisible="not l10n_do_is_debit_note"
-                                   required="l10n_do_is_debit_note"/>
+                                   required="l10n_do_is_debit_note and state == 'draft'"
+                                   readonly="state != 'draft'"/>
                         </group>
                         <group>
-                            <field name="l10n_do_debit_origin_move_id" 
+                            <field name="commercial_partner_id" invisible="1"/>
+                            <field name="l10n_do_debit_origin_move_id"
                                    invisible="not l10n_do_is_debit_note"
-                                   required="l10n_do_is_debit_note"/>
-                            <field name="l10n_do_debit_ncf_origin" readonly="1" 
+                                   required="l10n_do_is_debit_note and state == 'draft'"
+                                   readonly="state != 'draft'"
+                                   options="{'no_create': True}"
+                                   placeholder="Número o e-NCF de la factura"/>
+                            <field name="l10n_do_debit_ncf_origin" readonly="1" force_save="1"
                                    invisible="not l10n_do_is_debit_note"/>
                         </group>
                     </group>
@@ -146,27 +154,30 @@
                     
                     <group>
                         <group string="Clasificación">
-                            <field name="l10n_do_fiscal_type"/>
+                            <field name="l10n_do_purchase_kind" readonly="1"
+                                   invisible="l10n_do_is_vendor_debit_note"/>
                             <field name="l10n_do_purchase_type"/>
                             <field name="l10n_do_expense_type"/>
                         </group>
                         <group string="NCF">
-                            <field name="l10n_do_vendor_ncf" 
-                                   invisible="l10n_do_fiscal_type in ('informal', 'minor_expense')"/>
+                            <field name="l10n_do_vendor_ncf"
+                                   invisible="l10n_do_purchase_kind != 'vendor'"/>
                             <field name="l10n_do_ncf_number" readonly="1"
-                                   invisible="l10n_do_fiscal_type not in ('informal', 'minor_expense')"/>
+                                   invisible="l10n_do_purchase_kind == 'vendor'"/>
                             <field name="l10n_do_reported_606" readonly="l10n_do_reported_606"/>
                             <field name="l10n_do_report_period" readonly="1"/>
                         </group>
                     </group>
 
-                    <separator string="Proveedor Informal (B11)" 
+                    <separator string="Proveedor informal" 
                                invisible="l10n_do_fiscal_type != 'informal'"/>
                     <group invisible="l10n_do_fiscal_type != 'informal'">
                         <group>
-                            <field name="l10n_do_informal_provider_name" 
-                                   required="l10n_do_fiscal_type == 'informal'"/>
-                            <field name="l10n_do_informal_provider_cedula"/>
+                            <!-- Vacíos, se toman del contacto al confirmar. -->
+                            <field name="l10n_do_informal_provider_name"
+                                   placeholder="El nombre del contacto"/>
+                            <field name="l10n_do_informal_provider_cedula"
+                                   placeholder="La cédula del contacto"/>
                             <field name="l10n_do_informal_rnc_verified" readonly="1"/>
                         </group>
                         <group>
@@ -176,7 +187,7 @@
                         </group>
                     </group>
 
-                    <separator string="Gasto Menor (B13)" 
+                    <separator string="Gastos menores" 
                                invisible="l10n_do_fiscal_type != 'minor_expense'"/>
                     <group invisible="l10n_do_fiscal_type != 'minor_expense'">
                         <group>
@@ -188,7 +199,7 @@
                         </group>
                     </group>
 
-                    <separator string="Pago al Exterior (B17)" 
+                    <separator string="Pago al exterior" 
                                invisible="l10n_do_fiscal_type != 'exterior'"/>
                     <group invisible="l10n_do_fiscal_type != 'exterior'">
                         <group>
@@ -314,7 +325,7 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='name']" position="after">
                 <field name="l10n_do_vendor_ncf" string="NCF Proveedor" optional="show"/>
-                <field name="l10n_do_fiscal_type" string="Tipo Fiscal" widget="badge" optional="show"/>
+                <field name="l10n_do_purchase_kind" string="Tipo de compra" optional="show"/>
             </xpath>
         </field>
     </record>
@@ -338,9 +349,9 @@
                 <filter name="reported_607" string="Reportado 607" domain="[('l10n_do_reported_607', '=', True)]"/>
                 <filter name="not_reported_607" string="Sin Reportar 607" domain="[('l10n_do_reported_607', '=', False), ('move_type', 'in', ('out_invoice', 'out_refund')), ('state', '=', 'posted')]"/>
                 <separator/>
-                <filter name="fiscal_informal" string="B11 - Informal" domain="[('l10n_do_fiscal_type', '=', 'informal')]"/>
-                <filter name="fiscal_minor" string="B13 - Gasto Menor" domain="[('l10n_do_fiscal_type', '=', 'minor_expense')]"/>
-                <filter name="fiscal_exterior" string="B17 - Exterior" domain="[('l10n_do_fiscal_type', '=', 'exterior')]"/>
+                <filter name="fiscal_informal" string="Proveedor informal" domain="[('l10n_do_fiscal_type', '=', 'informal')]"/>
+                <filter name="fiscal_minor" string="Gastos menores" domain="[('l10n_do_fiscal_type', '=', 'minor_expense')]"/>
+                <filter name="fiscal_exterior" string="Pago al exterior" domain="[('l10n_do_fiscal_type', '=', 'exterior')]"/>
             </xpath>
             <xpath expr="//field[@name='name']" position="after">
                 <field name="l10n_do_ncf_number"/>
