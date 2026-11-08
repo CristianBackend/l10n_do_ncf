@@ -36,7 +36,7 @@ Columnas:
 | `ret_3_income_person` | Retención 3% ISR conforme a la Norma 07-2007 (L30-26) | −3 % | 21030308 Otras Retenciones (N07-07) | ISR | 03 | A confirmar |
 | `ret_3_income_article_70` | Retención 3% ISR por Otras Rentas (Decreto 139-98, Art. 70) | −3 % | 21030309 Otras Retenciones | ISR | 03 | A confirmar |
 | `ret_2_income_transfer` | Retención 2% ISR por Transferencias de Títulos y Propiedades | −2 % | 21030306 ISR Retenido por Transferencias | ISR | 03 | A confirmar |
-| `ret_27_income_remittance` | Retención 27% ISR por Remesas al Exterior (L253-12) | −27 % | 21030307 ISR Retenido por Remesas al Exterior | ISR | 03 (lo que el módulo ponía en un pago al exterior); va además en el 609 | A confirmar |
+| `ret_27_income_remittance` | Retención 27% ISR por Remesas al Exterior (L253-12) | −27 % | 21030307 ISR Retenido por Remesas al Exterior | ISR | 03 (lo que el módulo ponía en un pago al exterior); va además en el 609 | **Sugerido en el pago al exterior** (Guía del Contribuyente No. 5, pág. 5; arts. 297 y 305 del Código Tributario); editable por convenios. Tipo 606 a confirmar |
 | `ret_15_income_foreign_royalties_technology` | Retención 15% ISR por Regalías, Licencias de Software, Publicidad en Línea y Datos en el Exterior (L30-26) | −15 % | 21030310 ISR Retenido por Regalías y Servicios Tecnológicos del Exterior | ISR | 03; va además en el 609 | A confirmar |
 | `ret_5_income_gov` | Retención 5% ISR Gubernamentales (ventas) | −5 % | 11080302 | ISR | — (nos la retiene el Estado: 607, no 606) | No aplica |
 
@@ -68,8 +68,9 @@ Panel.
 1. Las tasas de ISR del módulo (10 % profesionales y alquileres, 2 % técnicos)
    frente a las de la plantilla (15 %): cuáles son las vigentes para cada caso.
 2. El tipo 606 de cada impuesto de ISR marcado "A confirmar".
-3. Qué impuestos se sugieren solos al **proveedor informal** y al **pago al
-   exterior** (Ajustes > Contabilidad > "Retenciones sugeridas en compras").
-   Están vacíos hasta que el contador los indique.
+3. Qué impuestos se sugieren solos al **proveedor informal** (Ajustes >
+   Contabilidad > "Retenciones sugeridas en compras"): vacío hasta que el
+   contador lo indique. En el **pago al exterior** se sugiere el ISR 27 %
+   ("-27% ISR (L253-12)"), editable.
 4. El impuesto equivalente de cada tipo de retención de la sección 2, para
    convertir los borradores.

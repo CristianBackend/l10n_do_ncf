@@ -251,7 +251,9 @@ class TestRetentionSuggestions(NcfCommon):
         form.partner_id = self.foreign
         form.invoice_date = fields.Date.today()
         with form.invoice_line_ids.new() as line:
-            line.name = 'Licencia'
+            # Pago al exterior: un servicio sin ITBIS de un proveedor extranjero.
+            line.product_id = self.env['product.product'].create({
+                'name': 'Licencia', 'type': 'service', 'supplier_taxes_id': False})
             line.price_unit = 1000.0
         self.assertEqual(form.l10n_do_purchase_kind, 'exterior')
         form.l10n_do_purchase_kind = 'minor_expense'
@@ -353,4 +355,6 @@ class TestRetentionAutoconfig(NcfCommon):
             if tax:
                 self.assertFalse(tax.dgii_isr_retention_type, name)
         self.assertFalse(self.company.l10n_do_informal_retention_tax_ids)
-        self.assertFalse(self.company.l10n_do_exterior_retention_tax_ids)
+        # Pago al exterior: el ISR 27 % de la plantilla (Guía No. 5, pág. 5).
+        self.assertEqual(self.company.l10n_do_exterior_retention_tax_ids,
+                         self._tmpl('ret_27_income_remittance'))

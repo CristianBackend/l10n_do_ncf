@@ -264,6 +264,25 @@ def autoconfigure_accounts(env, company):
     return changed
 
 
+def autoconfigure_exterior_retention(env, company):
+    """Retención sugerida en el pago al exterior: el ISR del 27 % de la
+    plantilla l10n_do ("-27% ISR (L253-12)"), si la compañía no indicó otra.
+
+    DGII, Guía del Contribuyente No. 5, pág. 5: el comprobante para pagos al
+    exterior (B17/E47) lleva la retención del 27 % de ISR "según lo establecido
+    en los artículos 297 y 305 del Código Tributario". Es una sugerencia: se
+    puede cambiar en la línea (un convenio de doble tributación puede fijar
+    otra tasa). No se crea ningún impuesto.
+    """
+    if company.l10n_do_exterior_retention_tax_ids:
+        return False
+    tax = env.ref('account.%s_ret_27_income_remittance' % company.id, raise_if_not_found=False)
+    if not tax or tax.company_id != company or tax.amount != -27.0:
+        return False
+    company.l10n_do_exterior_retention_tax_ids = tax
+    return True
+
+
 def autoconfigure(env, companies=None):
     """Todo lo deducible para las compañías dominicanas (o las indicadas)."""
     companies = companies if companies is not None else env['res.company'].sudo().search([])
@@ -275,6 +294,7 @@ def autoconfigure(env, companies=None):
         accounts = autoconfigure_accounts(env, company)
         # Contacto genérico de las facturas de gastos menores (E43/B13).
         company._l10n_do_minor_expense_partner()
+        autoconfigure_exterior_retention(env, company)
         _logger.info(
             'l10n_do_ncf: configuración DGII de %s: %s impuestos, %s diarios y %s cuentas '
             'completados%s', company.name, taxes, journals, accounts,

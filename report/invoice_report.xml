@@ -162,6 +162,7 @@
                 <!-- Tipo de compra: de él sale el tipo de comprobante (E41/E43/E47
                      o el del proveedor). Se elige solo según el proveedor. -->
                 <field name="l10n_do_fiscal_type" invisible="1"/>
+                <field name="l10n_do_purchase_kind_manual" invisible="1"/>
                 <field name="l10n_do_purchase_kind" string="Tipo de compra"
                        invisible="move_type not in ('in_invoice', 'in_refund') or l10n_do_is_vendor_debit_note"
                        readonly="state != 'draft' or l10n_do_ncf_number"

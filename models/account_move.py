@@ -226,13 +226,22 @@ class AccountMove(models.Model):
              'Pago al exterior: proveedor fuera del país.\n\n'
              'Se elige solo según el proveedor y se puede cambiar.')
 
-    @api.depends('partner_id', 'move_type')
+    l10n_do_purchase_kind_manual = fields.Boolean(
+        string='Tipo de compra elegido a mano', copy=False,
+        help='El usuario eligió el tipo de compra: ya no se recalcula con el proveedor '
+             'ni con las líneas.')
+
+    # Las líneas cuentan para el proveedor extranjero: solo los servicios sin
+    # ITBIS son un pago al exterior (ver _l10n_do_partner_fiscal_type).
+    @api.depends('partner_id', 'move_type', 'invoice_line_ids.product_id',
+                 'invoice_line_ids.display_type', 'l10n_do_purchase_kind_manual')
     def _compute_l10n_do_fiscal_type(self):
         for move in self:
             current = move.l10n_do_fiscal_type
             if (move.move_type not in ('in_invoice', 'in_refund')
                     or move.state == 'posted' or move.l10n_do_ncf_number
-                    or move.l10n_do_is_vendor_debit_note):
+                    or move.l10n_do_is_vendor_debit_note
+                    or (move.l10n_do_purchase_kind_manual and current)):
                 # Un comprobante confirmado o emitido no cambia de tipo.
                 move.l10n_do_fiscal_type = current or 'fiscal'
                 continue
@@ -248,10 +257,36 @@ class AccountMove(models.Model):
             return 'minor_expense'
         if partner.l10n_do_is_informal_supplier:
             return 'informal'
-        if partner.country_id and partner.country_id.code != 'DO':
+        if partner.country_id and partner.country_id.code != 'DO' and self._l10n_do_is_foreign_service():
             return 'exterior'
         # Un régimen especial o gubernamental puesto a mano se respeta.
         return current if current in ('special', 'governmental') else 'fiscal'
+
+    def _l10n_do_is_foreign_service(self):
+        """True si la compra a un proveedor extranjero es un pago al exterior.
+
+        La E47/B17 es para "pagos de rentas gravadas de fuentes dominicanas a
+        Personas Físicas o Jurídicas no residentes en el país" (DGII, Guía del
+        Contribuyente No. 5, pág. 5): servicios, no mercancía. Y no lleva ITBIS
+        (instructivo del 606: el B17 no llena las casillas de ITBIS). Por eso
+        solo cuando TODAS las líneas son productos de tipo Servicio y ninguna
+        tiene ITBIS. Un bien, una línea con ITBIS o una línea sin producto (no
+        se sabe qué es) dejan la compra "Con comprobante del proveedor": por
+        ejemplo una importación de mercancía, cuyo tratamiento en el 606 aún no
+        está definido.
+        """
+        self.ensure_one()
+        lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+        if not lines:
+            return False
+        for line in lines:
+            if not line.product_id or line.product_id.type != 'service':
+                return False
+            if any(tax.amount > 0 and (tax.dgii_tax_kind == 'itbis' or (
+                    not tax.dgii_tax_kind and tax.amount in (18.0, 16.0)))
+                   for tax in line.tax_ids):
+                return False
+        return True
 
     @api.depends('l10n_do_fiscal_type')
     def _compute_l10n_do_purchase_kind(self):
@@ -264,6 +299,18 @@ class AccountMove(models.Model):
             fiscal_type = move._l10n_do_fiscal_type_for_kind(move.l10n_do_purchase_kind)
             if fiscal_type != move.l10n_do_fiscal_type:
                 move.l10n_do_fiscal_type = fiscal_type
+            move._l10n_do_mark_kind_manual()
+
+    def _l10n_do_mark_kind_manual(self):
+        """Marca el tipo de compra como elegido a mano si no es el que daría
+        la regla automática."""
+        for move in self:
+            if (move.move_type in ('in_invoice', 'in_refund') and move.state == 'draft'
+                    and not move.l10n_do_purchase_kind_manual
+                    and move.l10n_do_fiscal_type
+                    and move.l10n_do_fiscal_type != move._l10n_do_partner_fiscal_type(
+                        move.l10n_do_fiscal_type)):
+                move.l10n_do_purchase_kind_manual = True
 
     def _l10n_do_fiscal_type_for_kind(self, kind):
         self.ensure_one()
@@ -276,9 +323,15 @@ class AccountMove(models.Model):
     def _onchange_l10n_do_purchase_kind(self):
         if self.move_type not in ('in_invoice', 'in_refund') or not self.l10n_do_purchase_kind:
             return
-        self.l10n_do_fiscal_type = self._l10n_do_fiscal_type_for_kind(self.l10n_do_purchase_kind)
+        fiscal_type = self._l10n_do_fiscal_type_for_kind(self.l10n_do_purchase_kind)
+        # Solo es "a mano" si el usuario eligió algo distinto de la regla (este
+        # onchange también corre cuando el tipo cambia solo con el proveedor).
+        if fiscal_type != self._l10n_do_partner_fiscal_type(self.l10n_do_fiscal_type):
+            self.l10n_do_purchase_kind_manual = True
+        self.l10n_do_fiscal_type = fiscal_type
         if self.l10n_do_purchase_kind == 'minor_expense' and not self.partner_id:
             self.partner_id = self.company_id._l10n_do_minor_expense_partner()
+        self._l10n_do_apply_retention_taxes()
 
     # B11 - INFORMAL
     l10n_do_informal_provider_name = fields.Char(string='Nombre Proveedor Informal')
@@ -733,6 +786,8 @@ class AccountMove(models.Model):
         res = super().write(vals)
         if 'l10n_do_debit_origin_move_id' in vals or 'l10n_do_is_debit_note' in vals:
             self._l10n_do_fill_debit_ncf_origin()
+        if 'l10n_do_fiscal_type' in vals and not self.env.context.get('l10n_do_skip_kind_manual'):
+            self._l10n_do_mark_kind_manual()
         return res
 
     @api.model_create_multi
@@ -741,6 +796,9 @@ class AccountMove(models.Model):
             self._l10n_do_debit_vals_from_std(vals)
         moves = super().create(vals_list)
         moves._l10n_do_fill_debit_ncf_origin()
+        explicit = self.browse([move.id for move, vals in zip(moves, vals_list)
+                                if 'l10n_do_fiscal_type' in vals or 'l10n_do_purchase_kind' in vals])
+        explicit._l10n_do_mark_kind_manual()
         return moves
 
     def _l10n_do_fill_debit_ncf_origin(self):
@@ -1687,8 +1745,7 @@ class AccountMove(models.Model):
             return
         if self.l10n_do_fiscal_type in ('informal', 'minor_expense'):
             self.l10n_do_vendor_ncf = False
-        # Las retenciones sugeridas de las líneas las recalcula la línea
-        # (AccountMoveLine._compute_tax_ids depende del tipo de compra).
+        self._l10n_do_apply_retention_taxes()
 
     def _l10n_do_suggested_retention_taxes(self, line=None, line_taxes=None):
         """Impuestos de retención que se agregan solos a una línea, según el tipo
@@ -1715,16 +1772,22 @@ class AccountMove(models.Model):
 
     def _l10n_do_apply_retention_taxes(self):
         """Al cambiar el tipo de compra: quita de las líneas las retenciones
-        sugeridas de los otros tipos y agrega las del tipo actual."""
+        sugeridas de los otros tipos (y todas en un gasto menor) y agrega las
+        del tipo actual. Se escribe con comandos sobre invoice_line_ids para
+        que el formulario lo guarde también en una factura ya creada."""
         self.ensure_one()
         company = self.company_id
         known = company.l10n_do_informal_retention_tax_ids | company.l10n_do_exterior_retention_tax_ids
+        commands = []
         for line in self.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
             taxes = line.tax_ids - known
-            line.tax_ids = taxes
-            suggested = self._l10n_do_suggested_retention_taxes(line)
-            if suggested:
-                line.tax_ids = taxes | suggested
+            if self.l10n_do_fiscal_type == 'minor_expense':
+                taxes = taxes.filtered(lambda t: t.amount >= 0)
+            new = taxes | self._l10n_do_suggested_retention_taxes(line, taxes)
+            if new != line.tax_ids:
+                commands.append(Command.update(line.id, {'tax_ids': [Command.set(new.ids)]}))
+        if commands:
+            self.invoice_line_ids = commands
 
     # Compatibilidad: los usaban el onchange y los tests anteriores.
     def _apply_b11_retentions(self):
@@ -2200,31 +2263,6 @@ class AccountMove(models.Model):
 class AccountMoveLine(models.Model):
     _inherit = 'account.move.line'
 
-    @api.depends('move_id.l10n_do_fiscal_type')
-    def _compute_tax_ids(self):
-        """Además de lo de Odoo: las retenciones sugeridas siguen al tipo de
-        compra (se quitan las de los otros tipos y se agregan las del actual),
-        también en líneas sin producto."""
-        super()._compute_tax_ids()
-        for line in self:
-            move = line.move_id
-            if (line.display_type != 'product' or line.is_imported or move.state != 'draft'
-                    or move.move_type not in ('in_invoice', 'in_refund')
-                    or move.company_id.country_id.code != 'DO'):
-                continue
-            company = move.company_id
-            known = company.l10n_do_informal_retention_tax_ids | company.l10n_do_exterior_retention_tax_ids
-            if not known and move.l10n_do_fiscal_type != 'minor_expense':
-                continue
-            taxes = line.tax_ids - known
-            if move.l10n_do_fiscal_type == 'minor_expense':
-                # Un gasto menor no lleva retenciones.
-                taxes = taxes.filtered(lambda t: t.amount >= 0)
-            suggested = move._l10n_do_suggested_retention_taxes(line, taxes)
-            new = taxes | suggested
-            if new != line.tax_ids:
-                line.tax_ids = new
-
     def _get_computed_taxes(self):
         # Gastos menores: van exentos de ITBIS. Las líneas nuevas toman el
         # "ITBIS Exento" de compras (o ninguno) en vez del ITBIS del producto.
@@ -2234,4 +2272,12 @@ class AccountMoveLine(models.Model):
                 and move.company_id.country_id.code == 'DO'):
             exempt = move.company_id._l10n_do_purchase_exempt_tax()
             return exempt.with_env(self.env) if exempt else self.env['account.tax']
-        return super()._get_computed_taxes()
+        taxes = super()._get_computed_taxes()
+        if (move.move_type in ('in_invoice', 'in_refund')
+                and move.l10n_do_fiscal_type in ('informal', 'exterior')):
+            # Las retenciones que indicó la compañía para este tipo de compra.
+            suggested = move._l10n_do_suggested_retention_taxes(
+                self, taxes or self.env['account.tax'])
+            if suggested:
+                taxes = (taxes or self.env['account.tax']) | suggested.with_env(self.env)
+        return taxes

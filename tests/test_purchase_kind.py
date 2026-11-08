@@ -38,15 +38,24 @@ class TestPurchaseKind(NcfCommon):
             'name': 'Servicio de limpieza', 'type': 'service',
             'supplier_taxes_id': [Command.set(cls.ptax_18.ids)],
         })
+        cls.foreign_service = cls.env['product.product'].create({
+            'name': 'Licencia de software (exterior)', 'type': 'service', 'supplier_taxes_id': False,
+        })
+        cls.foreign_good = cls.env['product.product'].create({
+            'name': 'Silla de oficina (importada)', 'type': 'consu',
+            'supplier_taxes_id': [Command.set(cls.ptax_18.ids)],
+        })
 
-    def _bill(self, partner, **vals):
+    def _bill(self, partner, product=None, taxes=None, **vals):
+        line = {'name': 'Servicio', 'quantity': 1, 'price_unit': 1000.0,
+                'tax_ids': [Command.set(taxes.ids if taxes else [])]}
+        if product:
+            line['product_id'] = product.id
         return self.env['account.move'].create({
             'move_type': 'in_invoice',
             'partner_id': partner.id,
             'invoice_date': fields.Date.today(),
-            'invoice_line_ids': [Command.create({
-                'name': 'Servicio', 'quantity': 1, 'price_unit': 1000.0, 'tax_ids': [],
-            })],
+            'invoice_line_ids': [Command.create(line)],
             **vals,
         })
 
@@ -68,7 +77,7 @@ class TestPurchaseKind(NcfCommon):
         ]
         for partner, kind, fiscal_type, prefix in cases:
             with self.subTest(partner=partner.name):
-                bill = self._bill(partner)
+                bill = self._bill(partner, product=self.foreign_service)
                 self.assertEqual(bill.l10n_do_purchase_kind, kind)
                 self.assertEqual(bill.l10n_do_fiscal_type, fiscal_type)
                 self.assertEqual(bill.l10n_do_ncf_type_id.prefix or False, prefix)
@@ -90,9 +99,16 @@ class TestPurchaseKind(NcfCommon):
         form = self._bill_form(self.partner_informal)
         self.assertEqual(form.l10n_do_purchase_kind, 'informal')
         form.partner_id = self.partner_exterior
+        # Extranjero sin líneas todavía: no se adivina.
+        self.assertEqual(form.l10n_do_purchase_kind, 'vendor')
+        with form.invoice_line_ids.new() as line:
+            line.product_id = self.foreign_service
+            line.price_unit = 500.0
         self.assertEqual(form.l10n_do_purchase_kind, 'exterior')
         form.l10n_do_purchase_kind = 'vendor'
         self.assertEqual(form.l10n_do_fiscal_type, 'fiscal')
+        bill = form.save()
+        self.assertTrue(bill.l10n_do_purchase_kind_manual)
 
     def test_posted_bill_keeps_its_kind(self):
         bill = self._bill(self.partner_taxpayer, l10n_do_vendor_ncf='B0100000099')
@@ -170,7 +186,65 @@ class TestPurchaseKind(NcfCommon):
         self.assertEqual(action['context']['default_ncf_type_id'], self._ncf_type('11').id)
 
     def test_exterior_without_isr_says_what_to_do(self):
-        bill = self._bill(self.partner_exterior)
-        bill.l10n_do_retention_ids = [Command.clear()]
+        bill = self._bill(self.partner_exterior, product=self.foreign_service,
+                          l10n_do_fiscal_type='exterior')
+        self.assertFalse(bill.invoice_line_ids.tax_ids)
         with self.assertRaisesRegex(UserError, 'Retenciones'):
             bill.action_post()
+
+    # ---------------------------------------------------------------
+    # Proveedor extranjero: solo los servicios sin ITBIS son pago al exterior
+    # (DGII, Guía del Contribuyente No. 5, pág. 5; instructivo del 606)
+    # ---------------------------------------------------------------
+    def test_foreign_goods_are_not_a_payment_abroad(self):
+        bill = self._bill(self.partner_exterior, product=self.foreign_good, taxes=self.ptax_18,
+                          l10n_do_vendor_ncf=False)
+        self.assertEqual(bill.l10n_do_purchase_kind, 'vendor')
+        self.assertFalse(bill.l10n_do_ncf_type_id)
+        # Las reglas del B17/E47 (sin ITBIS, ISR obligatorio) no aplican.
+        bill.action_post()
+        self.assertEqual(bill.state, 'posted')
+
+    def test_foreign_service_with_itbis_is_not_a_payment_abroad(self):
+        bill = self._bill(self.partner_exterior, product=self.foreign_service, taxes=self.ptax_18)
+        self.assertEqual(bill.l10n_do_purchase_kind, 'vendor')
+
+    def test_foreign_line_without_product_is_not_guessed(self):
+        bill = self._bill(self.partner_exterior)
+        self.assertEqual(bill.l10n_do_purchase_kind, 'vendor')
+
+    def test_foreign_mixed_goods_and_services(self):
+        bill = self._bill(self.partner_exterior, product=self.foreign_service)
+        self.assertEqual(bill.l10n_do_purchase_kind, 'exterior')
+        bill.invoice_line_ids = [Command.create({
+            'product_id': self.foreign_good.id, 'name': 'Silla', 'quantity': 1,
+            'price_unit': 100.0, 'tax_ids': []})]
+        self.assertEqual(bill.l10n_do_purchase_kind, 'vendor')
+
+    def test_kind_chosen_by_hand_is_kept_when_lines_change(self):
+        bill = self._bill(self.partner_exterior, product=self.foreign_good)
+        self.assertEqual(bill.l10n_do_purchase_kind, 'vendor')
+        bill.l10n_do_purchase_kind = 'exterior'
+        self.assertTrue(bill.l10n_do_purchase_kind_manual)
+        bill.invoice_line_ids = [Command.create({
+            'product_id': self.foreign_good.id, 'name': 'Otra silla', 'quantity': 1,
+            'price_unit': 100.0, 'tax_ids': []})]
+        self.assertEqual(bill.l10n_do_purchase_kind, 'exterior')
+
+    def test_payment_abroad_suggests_isr_27(self):
+        isr_27 = self.env.ref('account.%s_ret_27_income_remittance' % self.company.id,
+                              raise_if_not_found=False)
+        if not isr_27:
+            self.skipTest('La compañía de prueba no tiene la plantilla l10n_do')
+        self.assertEqual(self.company.l10n_do_exterior_retention_tax_ids, isr_27)
+        form = self._bill_form(self.partner_exterior)
+        with form.invoice_line_ids.new() as line:
+            line.product_id = self.foreign_service
+            line.price_unit = 1000.0
+        bill = form.save()
+        self.assertEqual(bill.l10n_do_purchase_kind, 'exterior')
+        self.assertIn(isr_27, bill.invoice_line_ids.tax_ids)
+        self.assertEqual(bill.l10n_do_isr_retenido, 270.0)
+        # Editable: un convenio de doble tributación puede fijar otra tasa.
+        bill.invoice_line_ids.tax_ids -= isr_27
+        self.assertEqual(bill.l10n_do_isr_retenido, 0.0)

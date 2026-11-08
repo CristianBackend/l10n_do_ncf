@@ -46,8 +46,10 @@ class ResCompany(models.Model):
         'account.tax', 'l10n_do_company_exterior_ret_tax_rel', 'company_id', 'tax_id',
         string='Retenciones del pago al exterior',
         domain="[('type_tax_use', '=', 'purchase'), ('amount', '<', 0), ('company_id', '=', id)]",
-        help='Impuestos de retención que se agregan a las líneas de un pago al exterior '
-             '(por ejemplo la retención de ISR del 27 %).')
+        help='Impuestos de retención que se agregan a las líneas de un pago al exterior. '
+             'Por defecto el ISR del 27 % (DGII, Guía del Contribuyente No. 5, pág. 5; '
+             'arts. 297 y 305 del Código Tributario). Se puede cambiar en cada línea: un '
+             'convenio de doble tributación puede fijar otra tasa.')
 
     l10n_do_minor_expense_partner_id = fields.Many2one(
         'res.partner', string='Contacto "Gastos menores"',
