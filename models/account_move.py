@@ -1540,6 +1540,14 @@ class AccountMove(models.Model):
                 'comprobante del proveedor".',
                 total='{:,.2f}'.format(self.amount_total), limit='{:,.2f}'.format(limit)))
 
+    def _l10n_do_exterior_without_retention(self):
+        """True si todas las líneas de un pago al exterior son de productos
+        marcados "Sin retención en pagos al exterior" (por ejemplo, viáticos):
+        la factura no lleva retención de ISR."""
+        self.ensure_one()
+        lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+        return bool(lines) and all(l.product_id.l10n_do_no_exterior_retention for l in lines)
+
     def _check_b17_no_itbis(self):
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'exterior':
@@ -1552,12 +1560,14 @@ class AccountMove(models.Model):
             has_isr = any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids)
         else:
             has_isr = bool(self._l10n_do_isr_retention_lines())
-        if not has_isr:
+        if not has_isr and not self._l10n_do_exterior_without_retention():
             raise UserError(_(
                 'Pago al exterior: falta la retención de ISR.\n\nAgregue en las líneas el '
                 'impuesto de retención del pago al exterior (en el plan l10n_do, "-27% ISR '
                 '(L253-12)"). Para que se agregue solo, indíquelo en la compañía, "Retenciones '
-                'del pago al exterior".'))
+                'del pago al exterior".\n\nSi es un gasto que no lleva retención (por ejemplo, '
+                'viáticos de un viaje fuera del país), marque en su producto "Sin retención en '
+                'pagos al exterior" (pestaña Contabilidad).'))
 
     # =========================================
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
@@ -1757,6 +1767,10 @@ class AccountMove(models.Model):
         if self.move_type not in ('in_invoice', 'in_refund') or company.country_id.code != 'DO':
             return Tax
         if self.l10n_do_fiscal_type == 'exterior':
+            # Un producto marcado "Sin retención en pagos al exterior" (por
+            # ejemplo, viáticos de un viaje fuera del país) no la lleva.
+            if line is not None and line.product_id.l10n_do_no_exterior_retention:
+                return Tax
             return company.l10n_do_exterior_retention_tax_ids
         if self.l10n_do_fiscal_type != 'informal':
             return Tax

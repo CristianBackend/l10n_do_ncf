@@ -15,3 +15,5 @@ from . import test_autoconfig
 from . import test_debit_note_button
 from . import test_purchase_kind
 from . import test_retention_check
+from . import test_exterior_no_retention
+from . import test_user_timezone

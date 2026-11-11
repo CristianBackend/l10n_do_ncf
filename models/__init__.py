@@ -19,3 +19,5 @@ from . import dgii_validation
 from . import dgii_txt_validator
 from . import account_tax
 from . import chart_template
+from . import res_users
+from . import product_template

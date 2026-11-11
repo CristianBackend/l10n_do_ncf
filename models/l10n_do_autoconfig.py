@@ -283,6 +283,14 @@ def autoconfigure_exterior_retention(env, company):
     return True
 
 
+def autoconfigure_user_tz(env, companies):
+    """Hora de RD (America/Santo_Domingo) para los usuarios internos de las
+    compañías dominicanas que no tienen zona horaria; ver res_users.py."""
+    users = env['res.users'].sudo().search([
+        ('tz', '=', False), ('share', '=', False), ('company_id', 'in', companies.ids)])
+    return len(users._l10n_do_set_default_tz())
+
+
 def autoconfigure(env, companies=None):
     """Todo lo deducible para las compañías dominicanas (o las indicadas)."""
     companies = companies if companies is not None else env['res.company'].sudo().search([])
@@ -299,3 +307,6 @@ def autoconfigure(env, companies=None):
             'l10n_do_ncf: configuración DGII de %s: %s impuestos, %s diarios y %s cuentas '
             'completados%s', company.name, taxes, journals, accounts,
             ', ITBIS 0 % de exportación listo' if export else '')
+    users = autoconfigure_user_tz(env, companies.sudo().filtered(is_dominican))
+    if users:
+        _logger.info('l10n_do_ncf: zona horaria America/Santo_Domingo en %s usuarios sin zona', users)

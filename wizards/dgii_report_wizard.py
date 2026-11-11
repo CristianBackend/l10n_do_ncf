@@ -924,7 +924,10 @@ class DgiiReportWizard(models.TransientModel):
             isr_retenido = abs(self._to_dop(inv, inv.l10n_do_total_isr_retention or 0.0))
             renta_presunta = abs(self._to_dop(inv, inv._l10n_do_isr_retention_base()))
             if not isr_retenido:
-                pending.append(_('%s: no tiene retención de ISR registrada; se reporta ISR 0.00.', label))
+                # Sin aviso si todas sus líneas son de productos "Sin retención
+                # en pagos al exterior" (viáticos): no lleva, a propósito.
+                if not inv._l10n_do_exterior_without_retention():
+                    pending.append(_('%s: no tiene retención de ISR registrada; se reporta ISR 0.00.', label))
             elif not renta_presunta:
                 missing.append(_('base (renta presunta) de la retención de ISR'))
             fecha_retencion = fecha_doc if renta_presunta else ''
