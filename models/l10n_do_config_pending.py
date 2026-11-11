@@ -69,6 +69,27 @@ class ResCompany(models.Model):
             ('l10n_do_retention_check', '!=', False),
         ])
 
+    def _l10n_do_pending_user_tz(self):
+        """Usuarios contables de la compañía con otra zona horaria que la de RD.
+
+        Odoo toma "hoy" de la zona del usuario: con una zona adelantada a RD (o
+        sin zona, UTC) la factura nueva puede nacer con fecha de mañana. Una zona
+        elegida no se cambia sola (res_users.py): se avisa aquí."""
+        self.ensure_one()
+        from .l10n_do_autoconfig import is_dominican
+        from .res_users import DO_TZ
+        if not is_dominican(self):
+            return self.env['res.users']
+        group = self.env.ref('account.group_account_invoice', raise_if_not_found=False)
+        if not group:
+            return self.env['res.users']
+        return self.env['res.users'].sudo().search([
+            ('share', '=', False),
+            ('company_ids', 'in', self.id),
+            ('all_group_ids', 'in', group.id),
+            '|', ('tz', '=', False), ('tz', '!=', DO_TZ),
+        ])
+
     def _l10n_do_config_pending(self):
         """Lo que falta, solo los grupos con algo:
         [{key, severity, count, text}].
@@ -86,6 +107,7 @@ class ResCompany(models.Model):
         journals = len(self._l10n_do_pending_journals())
         accounts = len(self._l10n_do_pending_accounts())
         retentions = len(self._l10n_do_pending_retentions())
+        user_tz = len(self._l10n_do_pending_user_tz())
         groups = [
             ('taxes_zero', 'danger', zero, text(
                 zero,
@@ -111,6 +133,14 @@ class ResCompany(models.Model):
                   'el contador debe ajustarla.'),
                 _('%s facturas de proveedor con retenciones sin asiento o que no coinciden: '
                   'el contador debe ajustarlas.'))),
+            ('user_tz', 'warning', user_tz, text(
+                user_tz,
+                _('%s usuario contable con una zona horaria distinta de la de República '
+                  'Dominicana (America/Santo_Domingo): sus facturas pueden salir con la fecha '
+                  'de otro día.'),
+                _('%s usuarios contables con una zona horaria distinta de la de República '
+                  'Dominicana (America/Santo_Domingo): sus facturas pueden salir con la fecha '
+                  'de otro día.'))),
         ]
         return [{'key': key, 'severity': severity, 'count': count, 'text': message}
                 for key, severity, count, message in groups if count]
@@ -127,6 +157,8 @@ class ResCompany(models.Model):
                          self._l10n_do_pending_journals()),
             'accounts': ('account.account', _('Cuentas de gasto sin Tipo 606'),
                          self._l10n_do_pending_accounts()),
+            'user_tz': ('res.users', _('Usuarios con otra zona horaria'),
+                        self._l10n_do_pending_user_tz()),
         }
         if key == 'retentions':
             return {

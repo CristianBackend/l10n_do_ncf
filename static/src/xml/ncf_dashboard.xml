@@ -384,6 +384,85 @@
                         </div>
                     </section>
 
+                    <!-- ================= e-NCF POR ANULAR (ANECF, conector e-CF) ================= -->
+                    <section t-if="state.ecf_active and state.anecf" class="ncfd-card">
+                        <div class="ncfd-card__head">
+                            <div>
+                                <h2 class="ncfd-card__title">e-NCF por anular</h2>
+                                <p class="ncfd-card__sub">Números consumidos que no valen (rechazados por la DGII, con error en la plataforma o sin comprobante). Se anulan ante la DGII con un ANECF.</p>
+                            </div>
+                            <span t-if="state.anecf.rows.length" class="ncfd-pill is-warning">
+                                <t t-esc="state.anecf.rows.length"/> por anular
+                            </span>
+                        </div>
+                        <div t-if="!state.anecf.api_available" class="ncfd-banner is-warning is-inset" role="status">
+                            <i class="fa fa-plug"/>
+                            <div><span t-esc="state.anecf.api_message"/></div>
+                        </div>
+                        <div t-if="state.anecf.rows.length" class="ncfd-table-wrap">
+                            <table class="ncfd-table">
+                                <thead>
+                                    <tr>
+                                        <th>e-NCF</th>
+                                        <th>Motivo</th>
+                                        <th>Factura</th>
+                                        <th>Respuesta de la DGII</th>
+                                        <th t-if="state.anecf.can_annul" class="text-end"/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="state.anecf.rows" t-as="row" t-key="row.key">
+                                        <td><span class="ncfd-mono" t-esc="row.label"/></td>
+                                        <td>
+                                            <div t-esc="row.kind_label"/>
+                                            <small t-if="row.reason" class="text-muted" t-esc="row.reason"/>
+                                        </td>
+                                        <td>
+                                            <a t-if="row.move_id" href="#" t-on-click.prevent="() => this.openAnecfMove(row)" t-esc="row.move_name"/>
+                                            <span t-else="" class="text-muted">-</span>
+                                        </td>
+                                        <td>
+                                            <t t-if="row.result_state">
+                                                <span class="ncfd-pill" t-att-class="row.result_state === 'accepted' ? 'is-success' : (row.result_state === 'pending' ? 'is-warning' : 'is-danger')" t-esc="row.result_label"/>
+                                                <small class="d-block text-muted" t-esc="row.result_date"/>
+                                                <small class="d-block" t-esc="row.result_message"/>
+                                            </t>
+                                            <span t-else="" class="text-muted">Sin enviar</span>
+                                        </td>
+                                        <td t-if="state.anecf.can_annul" class="text-end">
+                                            <button class="ncfd-ghost-btn is-danger" title="Enviar el ANECF a la DGII"
+                                                    t-on-click="() => this.annulAnecfRow(row)">
+                                                <i class="fa fa-ban"/> Anular ante la DGII
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div t-else="" class="ncfd-empty">
+                            <i class="fa fa-check"/>
+                            <p>No hay e-NCF por anular.</p>
+                        </div>
+                        <div t-if="state.anecf.recent.length" class="ncfd-table-wrap">
+                            <table class="ncfd-table">
+                                <thead>
+                                    <tr><th>Anulados por la DGII</th><th>Respuesta</th><th>Fecha</th><th>Pedido por</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="state.anecf.recent" t-as="item" t-key="item.id">
+                                        <td><span class="ncfd-mono" t-esc="item.label"/></td>
+                                        <td>
+                                            <span t-esc="item.message"/>
+                                            <small t-if="item.track_id" class="d-block text-muted">TrackId <t t-esc="item.track_id"/></small>
+                                        </td>
+                                        <td class="ncfd-nowrap" t-esc="item.date"/>
+                                        <td t-esc="item.user"/>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
                     <!-- ================= PAPEL (solo e-CF con diario de papel o POS) ================= -->
                     <section t-if="state.ecf_active and state.has_paper" class="ncfd-card">
                         <div class="ncfd-card__head">

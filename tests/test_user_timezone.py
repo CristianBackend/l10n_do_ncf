@@ -77,3 +77,19 @@ class TestUserTimezone(NcfCommon):
             user.tz = False
             self.assertEqual(fields.Date.to_date(self._default_date(user)),
                              datetime(2026, 11, 10).date(), 'El problema sin zona horaria')
+
+    def test_panel_warns_accounting_users_with_other_tz(self):
+        """Una zona elegida no se pisa, pero el Panel lo avisa."""
+        accounting = 'base.group_user,account.group_account_invoice'
+        madrid = self._user('do_tz_madrid', tz='Europe/Madrid', groups=accounting)
+        self._user('do_tz_ok', tz='America/Santo_Domingo', groups=accounting)
+        self._user('do_tz_sales', tz='Europe/Madrid', groups='base.group_user')
+        pending = self.company._l10n_do_pending_user_tz()
+        self.assertIn(madrid, pending)
+        self.assertFalse(pending.filtered(lambda u: u.login in ('do_tz_ok', 'do_tz_sales')))
+        group = next(g for g in self.company._l10n_do_config_pending() if g['key'] == 'user_tz')
+        self.assertEqual(group['severity'], 'warning')
+        self.assertEqual(group['count'], len(pending))
+        action = self.company._l10n_do_config_pending_action('user_tz')
+        self.assertEqual(action['res_model'], 'res.users')
+        self.assertIn(madrid.id, action['domain'][0][2])
