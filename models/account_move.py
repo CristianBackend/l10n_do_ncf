@@ -174,7 +174,7 @@ class AccountMove(models.Model):
     l10n_do_debit_note_ids = fields.One2many(
         'account.move', 'l10n_do_debit_origin_move_id', string='Notas de débito')
     l10n_do_debit_note_count = fields.Integer(
-        string='Notas de débito', compute='_compute_l10n_do_debit_note_count')
+        string='Cantidad de notas de débito', compute='_compute_l10n_do_debit_note_count')
     # account_debit_note trae su propio botón "Nota de débito" y su botón
     # inteligente: si está instalado, se usan esos y se ocultan los del módulo.
     l10n_do_std_debit_note = fields.Boolean(compute='_compute_l10n_do_debit_note_count')
