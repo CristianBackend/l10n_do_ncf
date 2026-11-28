@@ -113,15 +113,26 @@ class TestDgiiReports(NcfCommon):
         self.assertEqual(lines[0].split('|')[3], '1')
 
     def test_607_retention_needs_its_date(self):
-        """Instructivo 607, casillas 10 y 12: con retención, fecha (casilla 7)."""
-        without = self._sale(self.partner_taxpayer, l10n_do_third_party_retention_isr=20.0)
+        """Instructivo 607, casillas 10 y 12: con retención, fecha (casilla 7).
+
+        Las dos facturas llevan el tipo de ingreso puesto a propósito: sin él,
+        las dos saldrían en "Pendientes de completar" por ESO y la última
+        comprobación no probaría nada. El tipo de ingreso no tiene valor por
+        defecto en este módulo; se lo pone el conector e-CF
+        (l10n_do_ecf_newplain, default='1'), asi que la prueba solo pasaba
+        cuando el conector estaba instalado en la misma base.
+        """
+        without = self._sale(self.partner_taxpayer, l10n_do_third_party_retention_isr=20.0,
+                             l10n_do_ecf_income_type='1')
         dated = self._sale(self.partner_taxpayer, l10n_do_third_party_retention_isr=20.0,
-                           l10n_do_retention_date=self.today)
+                           l10n_do_retention_date=self.today,
+                           l10n_do_ecf_income_type='1')
         wizard, lines = self._report('607')
         rows = {l.split('|')[2]: l.split('|') for l in lines[1:]}
         self.assertEqual(rows[without.l10n_do_ncf_number][6], '')
         self.assertEqual(rows[dated.l10n_do_ncf_number][6], self.today.strftime('%Y%m%d'))
-        self.assertIn(without.l10n_do_ncf_number, wizard.pending_message)
+        self.assertIn('%s: tiene retenciones de terceros pero no fecha de retención '
+                      '(casilla 7)' % without.l10n_do_ncf_number, wizard.pending_message)
         self.assertNotIn(dated.l10n_do_ncf_number, wizard.pending_message)
 
     def test_608_excludes_ecf_and_never_sends_an_empty_file(self):
