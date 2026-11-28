@@ -186,6 +186,45 @@ class TestRetentionCheck(NcfCommon):
         self.assertIn('l10n_do_retention_line_ids', arch)
 
 
+    def test_retention_in_foreign_currency_posts_and_keeps_its_base(self):
+        """Una compra en dolares con retencion se confirma, y la base del ISR
+        queda en la moneda de la factura.
+
+        En Odoo 16 la tasa la calcula el modulo
+        (_l10n_do_invoice_currency_rate): el campo del nucleo
+        account.move.invoice_currency_rate llego en la 17, y sin su equivalente
+        confirmar la factura se caia con AttributeError dentro de
+        _sync_tax_retentions (la ruta de action_post).
+        """
+        usd = self.env.ref('base.USD')
+        usd.active = True
+        Rate = self.env['res.currency.rate']
+        Rate.search([('currency_id', '=', usd.id)]).unlink()
+        Rate.create({
+            'name': fields.Date.today(), 'currency_id': usd.id,
+            'company_id': self.company.id, 'rate': 1.0 / 60.0,
+        })
+
+        type(self)._vendor_ncf += 1
+        bill = self.env['account.move'].create({
+            'move_type': 'in_invoice',
+            'partner_id': self.partner_taxpayer.id,
+            'invoice_date': fields.Date.today(),
+            'currency_id': usd.id,
+            'l10n_do_vendor_ncf': 'B01%08d' % self._vendor_ncf,
+            'invoice_line_ids': [Command.create({
+                'product_id': self.product.id, 'name': 'Servicio', 'quantity': 1,
+                'price_unit': 1000.0,
+                'tax_ids': [Command.set((self.tax_18 | self.ret_isr15).ids)],
+            })],
+        })
+        bill.action_post()
+
+        self.assertEqual(bill.state, 'posted')
+        # 1,000 USD de base, no 60,000 pesos.
+        self.assertAlmostEqual(bill._l10n_do_isr_retention_base(), 1000.0, places=2)
+        self.assertAlmostEqual(bill.l10n_do_total_isr_retention, 150.0, places=2)
+
 @tagged('post_install', '-at_install')
 class TestRetentionSuggestions(NcfCommon):
     """Retenciones sugeridas como impuestos de línea y borradores convertidos."""
