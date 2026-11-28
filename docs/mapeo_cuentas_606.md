@@ -1,11 +1,12 @@
 # Mapeo de cuentas del plan l10n_do → "Tipo 606"
 
-Qué "Tipo de bienes y servicios comprados" (casilla 3 del Formato 606) pone automáticamente `l10n_do_ncf` en cada cuenta del plan contable dominicano de Odoo 19 (`l10n_do`), y por qué algunas quedan vacías.
+Qué "Tipo de bienes y servicios comprados" (casilla 3 del Formato 606) pone automáticamente `l10n_do_ncf` en cada cuenta del plan contable dominicano de Odoo 16 (`l10n_do`), y por qué algunas quedan vacías.
 
 - **Fuente de la clasificación:** Norma General 07-2018 de la DGII, Anexo A, "Tabla de clasificación de Costos y Gastos" (qué asume cada tipo), e instructivo "Llenado y Remisión del Formato 606" (julio 2025), casilla 3.
-- **Cómo se aplica:** por xmlid de la plantilla (`account.<compañía>_<plantilla>`), nunca por nombre; al instalar o actualizar el módulo y al cargar el plan `do` en una compañía. **Solo en cuentas vacías:** un valor puesto a mano nunca se cambia.
+- **Cómo se aplica:** por **código de cuenta** dentro de la compañía, nunca por nombre; al instalar o actualizar el módulo y al cargar el plan dominicano en una compañía. **Solo en cuentas vacías:** un valor puesto a mano nunca se cambia.
+- **Por qué por código y no por xmlid:** el xmlid de la plantilla cambia entre versiones de `l10n_do`. En el plan de Odoo 16 la cuenta de código `61020600` tiene el id `do_niif_52020600` (`addons/l10n_do/data/account.account.template.csv`), mientras que en la 19 el id coincide con el código. El código es el mismo en las dos, y las 71 cuentas de esta tabla existen en el plan de 16.
 - **Cuentas vacías:** el 606 marca como pendiente cada compra registrada en ellas, hasta que se les ponga el tipo (o se indique en la factura). La tarjeta "Configuración pendiente" del Panel e-CF las cuenta.
-- **Código:** `models/l10n_do_autoconfig.py`, `ACCOUNT_TEMPLATE_606`.
+- **Código:** `models/l10n_do_autoconfig.py`, `ACCOUNT_606_BY_CODE`.
 
 ## Tipos de la DGII
 

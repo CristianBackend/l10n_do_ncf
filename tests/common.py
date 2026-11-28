@@ -47,6 +47,23 @@ class NcfTestMixin:
             'country_id': cls.env.ref('base.us').id,
         })
 
+    @staticmethod
+    def _drop_default_itbis(line):
+        """Quita de una linea del Form el ITBIS que Odoo 16 pone por defecto.
+
+        DIFERENCIA CON LA 19: en 16, cuando el producto no trae impuestos de
+        proveedor, account.move.line._get_computed_taxes cae en
+        company.account_purchase_tax_id (account/models/account_move_line.py:
+        891-908), que en una compania con el plan l10n_do es un ITBIS; la 19
+        quito ese respaldo y la linea nace sin impuestos. Un pago al exterior
+        (B17/E47) no lleva ITBIS, asi que se quita, igual que lo hace el
+        contador. Solo los impuestos positivos: las retenciones (negativas) que
+        sugiere el modulo se quedan.
+        """
+        for tax in list(line.tax_ids):
+            if tax.amount > 0:
+                line.tax_ids.remove(id=tax.id)
+
     @classmethod
     def _ncf_type(cls, code):
         return cls.env['l10n_do_ncf.type'].search([('code', '=', code)], limit=1)
@@ -122,9 +139,22 @@ class NcfTestMixin:
 
 
 class NcfCommon(NcfTestMixin, AccountTestInvoicingCommon):
+    """Base de pruebas con el plan dominicano cargado.
+
+    DIFERENCIA CON LA 19: allí la base de contabilidad trae el decorador
+    AccountTestInvoicingCommon.setup_country('do'), que elige el plan por el
+    código de país y deja la compañía con ese país. En Odoo 16 no existe: el
+    plan se pasa por su xmlid a setUpClass (chart_template_ref,
+    account/tests/common.py:29) y cargarlo solo pone el país FISCAL de la
+    compañía (account/models/chart_template.py:577). El país de la compañía hay
+    que ponerlo aquí, porque la mayor parte del módulo pregunta por
+    company_id.country_id (p. ej. account_move.py).
+    """
 
     @classmethod
-    @AccountTestInvoicingCommon.setup_country('do')
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpClass(cls, chart_template_ref='l10n_do.do_chart_template'):
+        super().setUpClass(chart_template_ref=chart_template_ref)
+        country_do = cls.env.ref('base.do')
+        for company in cls.company_data['company'] + cls.company_data_2['company']:
+            company.country_id = country_do
         cls._setup_ncf_data()

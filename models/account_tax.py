@@ -28,8 +28,12 @@ class AccountTax(models.Model):
     # como ITBIS (las dos tasas del ITBIS); cualquier otro sin clase queda
     # pendiente en el reporte.
     # Casilla 17 del 606 (Norma General 07-2018, Anexo A): tipo de retención
-    # en ISR. Lo asigna el contador; la configuración automática solo lo pone
-    # donde el impuesto de la plantilla l10n_do es inequívoco.
+    # en ISR. Lo asigna el contador. En Odoo 16 la configuración automática no
+    # lo deduce nunca: el plan l10n_do de 16 no trae las plantillas de
+    # honorarios y alquileres que la 19 podía clasificar sin ambigüedad
+    # (ret_15_income_person / ret_15_income_rent), y no se inventa el tipo a
+    # partir de otra tasa. Lo que falta sale en la tarjeta "Configuración
+    # pendiente" del Panel (grupo taxes_isr_type).
     dgii_isr_retention_type = fields.Selection([
         ('01', '01 - Alquileres'),
         ('02', '02 - Honorarios por servicios'),

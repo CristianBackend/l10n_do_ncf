@@ -87,7 +87,8 @@ class ResCompany(models.Model):
             ('amount', '=', 0),
             ('dgii_itbis_zero_type', '=', 'exempt'),
         ])
-        template = self.env.ref('account.%s_tax_0_purch' % self.id, raise_if_not_found=False)
+        from .l10n_do_autoconfig import template_ref
+        template = template_ref(self.env, self, 'tax_0_purch')
         if template and template in taxes:
             return template
         return taxes[:1]

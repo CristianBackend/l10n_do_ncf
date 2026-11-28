@@ -2,7 +2,7 @@
 # Módulo: l10n_do_ncf
 # Archivo: models/chart_template.py
 # Descripción: Datos demo de contabilidad en compañías dominicanas
-# Compatibilidad: Odoo 19
+# Compatibilidad: Odoo 16
 
 import logging
 
@@ -11,33 +11,54 @@ from odoo import models
 _logger = logging.getLogger(__name__)
 
 
-class AccountChartTemplate(models.AbstractModel):
+class AccountChartTemplate(models.Model):
+    """Enganches de la carga del plan contable.
+
+    En Odoo 16 account.chart.template es un modelo con REGISTROS
+    (addons/account/models/chart_template.py:357), no un AbstractModel como en
+    la 19, y sus dos enganches tienen otra firma:
+
+      - _load(self, company) -- chart_template.py:518 -- en vez del
+        _load(template_code, company, install_demo, force_create) de la 19.
+        La plantilla se reconoce por su propio country_id
+        (chart_template.py:380; l10n_do/data/l10n_do_chart_data.xml:11 lo pone
+        en base.do), no por un código de plantilla.
+
+      - _post_create_demo_data(self, created) -- addons/account/demo/
+        account_demo.py:311 -- es donde 16 confirma las facturas demo, una
+        llamada por modelo creado. En la 19 el enganche era
+        _post_load_demo_data(company), que en 16 no existe.
+    """
     _inherit = 'account.chart.template'
 
-    def _load(self, template_code, company, install_demo, force_create=True):
+    def _load(self, company):
         """Al cargar el plan dominicano, dejar la compañía lista para facturar
         y declarar: clasificación DGII de los impuestos del plan, ITBIS 0 %
         de exportación y forma de pago de los diarios (l10n_do_autoconfig)."""
-        result = super()._load(template_code, company, install_demo, force_create=force_create)
-        if template_code == 'do':
+        result = super()._load(company)
+        if self.country_id.code == 'DO':
             from . import l10n_do_autoconfig
             l10n_do_autoconfig.autoconfigure(self.env, company)
         return result
 
-    def _post_load_demo_data(self, company=False):
+    def _post_create_demo_data(self, created):
         """Preparar las facturas demo antes de que Odoo las confirme.
 
-        Odoo carga las facturas demo en _install_demo y las confirma aquí. En
-        una compañía dominicana cada una necesita un NCF, y una base demo no
-        tiene secuencias: sin esto todas fallan con "Error while posting demo
-        data". Solo se ejecuta al cargar datos demo; nunca en una base real.
+        Odoo 16 crea los datos demo en _create_demo_data y los confirma aquí
+        (account/demo/account_demo.py:311-320). En una compañía dominicana cada
+        factura necesita un NCF, y una base demo no tiene secuencias: sin esto
+        todas fallan con "Error while posting demo data". Solo se ejecuta al
+        cargar datos demo; nunca en una base real.
         """
-        company = company or self.env.company
+        if created._name != 'account.move':
+            return super()._post_create_demo_data(created)
+
+        company = self.env.company
         if company.country_id.code != 'DO':
-            return super()._post_load_demo_data(company)
+            return super()._post_create_demo_data(created)
 
         refunds = self._l10n_do_prepare_demo_moves(company)
-        result = super()._post_load_demo_data(company)
+        result = super()._post_create_demo_data(created)
 
         # El NCF de la factura origen no existía hasta confirmarla
         for refund in refunds:

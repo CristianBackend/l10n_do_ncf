@@ -21,8 +21,10 @@ class TestDemoData(TransactionCase):
             self.skipTest('Base sin datos demo')
 
     def _load_demo(self):
-        self.env['account.chart.template'].with_company(self.company).try_loading(
-            'do', self.company, install_demo=True,
+        # Odoo 16: try_loading(company, install_demo) sobre el registro de la
+        # plantilla (account/models/chart_template.py:472).
+        self.env.ref('l10n_do.do_chart_template').with_company(self.company).try_loading(
+            self.company, install_demo=True,
         )
         return self.env['account.move'].search([
             ('company_id', '=', self.company.id),
@@ -41,8 +43,12 @@ class TestDemoData(TransactionCase):
         self.assertTrue(all(moves.mapped('l10n_do_ncf_number')))
         numbers = moves.mapped('l10n_do_ncf_number')
         self.assertEqual(len(numbers), len(set(numbers)))
+        # DIFERENCIA CON LA 19: los datos demo de contabilidad de Odoo 16 no
+        # traen notas de credito (account/demo/account_demo.py: solo
+        # out_invoice e in_invoice); los de la 19 si. El codigo que les pone
+        # factura origen sigue igual, y si alguna llega (otro modulo demo),
+        # tiene que salir con su NCF origen.
         refunds = moves.filtered(lambda m: m.move_type == 'out_refund')
-        self.assertTrue(refunds)
         self.assertTrue(all(refunds.mapped('l10n_do_ncf_origin')))
 
     def test_demo_sequences_only_for_types_in_use(self):
@@ -61,8 +67,8 @@ class TestDemoData(TransactionCase):
 
     def test_no_sequences_without_demo_load(self):
         """Cargar el plan sin demo no crea secuencias."""
-        self.env['account.chart.template'].with_company(self.company).try_loading(
-            'do', self.company, install_demo=False,
+        self.env.ref('l10n_do.do_chart_template').with_company(self.company).try_loading(
+            self.company, install_demo=False,
         )
         self.assertFalse(self.env['l10n_do_ncf.sequence'].search([
             ('company_id', '=', self.company.id),

@@ -19,11 +19,22 @@ class TestAutoconfig(NcfCommon):
             'currency_id': cls.env.ref('base.DOP').id,
         })
         cls.env.user.company_ids |= company
-        cls.env['account.chart.template'].try_loading('do', company, install_demo=False)
+        # Odoo 16: try_loading(company, install_demo) se llama SOBRE el registro
+        # de la plantilla (account/models/chart_template.py:472); no recibe un
+        # codigo de plantilla como en la 19.
+        cls.env.ref('l10n_do.do_chart_template').with_company(company).try_loading(
+            company, install_demo=False)
         return company
 
     def _tax(self, company, template):
-        return self.env.ref('account.%s_%s' % (company.id, template))
+        return l10n_do_autoconfig.template_ref(self.env, company, template,
+                                               raise_if_not_found=True)
+
+    def _account(self, company, code):
+        """Cuenta del plan por codigo: el xmlid de la plantilla cambia entre
+        versiones de l10n_do (en 16 la cuenta 61020600 es do_niif_52020600)."""
+        return self.env['account.account'].search(
+            [('company_id', '=', company.id), ('code', '=', code)], limit=1)
 
     def test_new_company_with_the_do_chart_has_nothing_pending_in_taxes_or_journals(self):
         company = self._new_do_company()
@@ -32,9 +43,11 @@ class TestAutoconfig(NcfCommon):
         self.assertFalse(company._l10n_do_pending_journals())
         pending = {g['key'] for g in company._l10n_do_config_pending()}
         self.assertFalse(pending & {'taxes_kind', 'taxes_zero', 'journals'})
-        # El caso real: "ITBIS Exempt" de ventas sale ya como Exento.
+        # El caso real: el exento de ventas del plan sale ya como Exento.
+        # En el plan de Odoo 16 se llama "Exento ITBIS Ventas"; en el de la 19,
+        # "ITBIS Exempt". Es la misma plantilla (tax_0_sale).
         exempt = self._tax(company, 'tax_0_sale')
-        self.assertEqual(exempt.name, 'ITBIS Exempt')
+        self.assertEqual(exempt.name, 'Exento ITBIS Ventas')
         self.assertEqual(exempt.dgii_itbis_zero_type, 'exempt')
         self.assertEqual(self._tax(company, 'tax_18_sale').dgii_tax_kind, 'itbis')
         self.assertEqual(self._tax(company, 'tax_tip_sale').dgii_tax_kind, 'tip')
@@ -148,7 +161,7 @@ class TestAutoconfig(NcfCommon):
         company = self._new_do_company('Cuentas 606 SRL')
 
         def account(code):
-            return self.env.ref('account.%s_l10n_do_%s' % (company.id, code))
+            return self._account(company, code)
 
         expected = {
             '61010900': '01', '61020100': '02', '61030211': '02', '61020800': '03',
@@ -164,7 +177,7 @@ class TestAutoconfig(NcfCommon):
 
     def test_account_606_type_set_by_the_user_is_kept(self):
         company = self._new_do_company('Cuenta del Usuario SRL')
-        rent = self.env.ref('account.%s_l10n_do_61020800' % company.id)
+        rent = self._account(company, '61020800')
         rent.l10n_do_606_expense_type = '02'
         l10n_do_autoconfig.autoconfigure(self.env, company)
         self.assertEqual(rent.l10n_do_606_expense_type, '02')

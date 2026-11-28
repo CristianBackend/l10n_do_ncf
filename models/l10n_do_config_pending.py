@@ -37,6 +37,26 @@ class ResCompany(models.Model):
             ('dgii_itbis_zero_type', '=', False),
         ])
 
+    def _l10n_do_pending_taxes_isr_type(self):
+        """Retenciones de ISR de compras sin "Tipo de retención ISR".
+
+        Casilla 17 del 606 (Norma General 07-2018, Anexo A). La configuración
+        automática no la deduce: el plan l10n_do de Odoo 16 no trae las
+        plantillas de honorarios y alquileres que la 19 sí podía clasificar
+        sin ambigüedad (ret_15_income_person / ret_15_income_rent), y no se
+        inventa el tipo a partir de otra tasa. Lo confirma el contador.
+
+        Las retenciones de ventas (ret_5_income_gov, lo que le retiene el
+        Estado a la empresa) no van en el 606 y quedan fuera.
+        """
+        self.ensure_one()
+        return self.env['account.tax'].search([
+            ('company_id', '=', self.id),
+            ('type_tax_use', '=', 'purchase'),
+            ('dgii_retention_type', '=', 'isr'),
+            ('dgii_isr_retention_type', '=', False),
+        ])
+
     def _l10n_do_pending_journals(self):
         self.ensure_one()
         return self.env['account.journal'].search([
@@ -113,6 +133,7 @@ class ResCompany(models.Model):
 
         zero = len(self._l10n_do_pending_taxes_zero())
         kind = len(self._l10n_do_pending_taxes_kind())
+        isr_type = len(self._l10n_do_pending_taxes_isr_type())
         journals = len(self._l10n_do_pending_journals())
         accounts = len(self._l10n_do_pending_accounts())
         retentions = len(self._l10n_do_pending_retentions())
@@ -128,6 +149,10 @@ class ResCompany(models.Model):
                 kind,
                 _('%s impuesto sin clasificar para el 606 y el 607.'),
                 _('%s impuestos sin clasificar para el 606 y el 607.'))),
+            ('taxes_isr_type', 'warning', isr_type, text(
+                isr_type,
+                _('%s retención de ISR sin tipo de retención para la casilla 17 del 606.'),
+                _('%s retenciones de ISR sin tipo de retención para la casilla 17 del 606.'))),
             ('journals', 'warning', journals, text(
                 journals,
                 _('%s diario sin forma de pago para el 606 y el 607.'),
@@ -162,6 +187,8 @@ class ResCompany(models.Model):
                            self._l10n_do_pending_taxes_kind()),
             'taxes_zero': ('account.tax', _('Impuestos de 0 % sin indicador'),
                            self._l10n_do_pending_taxes_zero()),
+            'taxes_isr_type': ('account.tax', _('Retenciones de ISR sin tipo (606, casilla 17)'),
+                               self._l10n_do_pending_taxes_isr_type()),
             'journals': ('account.journal', _('Diarios sin forma de pago DGII'),
                          self._l10n_do_pending_journals()),
             'accounts': ('account.account', _('Cuentas de gasto sin Tipo 606'),
@@ -175,7 +202,7 @@ class ResCompany(models.Model):
                 'name': _('Retenciones sin asiento / que no coinciden'),
                 'res_model': 'account.move',
                 'domain': [('id', 'in', self._l10n_do_pending_retentions().ids)],
-                'views': [[self.env.ref('l10n_do_ncf.view_move_tree_retention_check').id, 'list'],
+                'views': [[self.env.ref('l10n_do_ncf.view_move_tree_retention_check').id, 'tree'],
                           [False, 'form']],
                 'context': {'create': False},
                 'target': 'current',
@@ -188,7 +215,7 @@ class ResCompany(models.Model):
             'name': name,
             'res_model': model,
             'domain': [('id', 'in', records.ids)],
-            'views': [[False, 'list'], [False, 'form']],
+            'views': [[False, 'tree'], [False, 'form']],
             'target': 'current',
         }
 

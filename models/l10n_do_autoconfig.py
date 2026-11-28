@@ -8,7 +8,12 @@ actualizar el módulo (hooks.py y la migración
 puesto por el usuario nunca se sobrescribe.
 
 Los impuestos del plan se identifican por el xmlid que les da Odoo al cargar
-la plantilla (account.<id de compañía>_<id de plantilla>), nunca por nombre.
+la plantilla, nunca por nombre. En Odoo 16 ese xmlid lleva el módulo de la
+PLANTILLA, no "account": _create_records_with_xmlid compone
+"<módulo de la plantilla>.<id de compañía>_<nombre de la plantilla>"
+(addons/account/models/chart_template.py:933), así que los impuestos del plan
+dominicano quedan como l10n_do.<id de compañía>_tax_18_sale. En la 19 todos
+caen bajo "account".
 """
 import logging
 
@@ -33,6 +38,15 @@ TAX_TEMPLATE_VALUES = {
     'tax_9_purch': _ITBIS,
     'tax_8_purch': _ITBIS,
     'tax_18_purch_serv': _ITBIS,
+    # Variantes con ITBIS incluido en el precio (price_include). Solo existen
+    # en el plan de Odoo 16: la misma clase DGII que su gemela sin incluir, lo
+    # que cambia es de donde sale la base, no que sea ITBIS.
+    'tax_18_sale_incl': _ITBIS,
+    'tax_18_purch_incl': _ITBIS,
+    'tax_16_purch_incl': _ITBIS,
+    'tax_9_purch_incl': _ITBIS,
+    'tax_8_purch_incl': _ITBIS,
+    'tax_18_purch_serv_incl': _ITBIS,
     'tax_18_importation': _ITBIS,
     'tax_18_of_10': _ITBIS,
     'tax_18_10_total_mount': _ITBIS,
@@ -51,21 +65,36 @@ TAX_TEMPLATE_VALUES = {
     'ret_30_tax_moral': _RET_ITBIS,
     'ret_30_tax_freelance': _RET_ITBIS,
     'ret_75_tax_nonformal': _RET_ITBIS,
-    # Retenciones de ISR (grupo ISR) que hace la empresa
-    # Tipo de retención ISR del 606 (casilla 17) solo donde el impuesto de la
-    # plantilla lo dice sin ambigüedad: honorarios (02) y alquileres (01).
-    # Los demás los confirma el contador (docs/retenciones_tabla.md).
-    'ret_15_income_person': dict(_RET_ISR, dgii_isr_retention_type='02'),
-    'ret_15_income_rent': dict(_RET_ISR, dgii_isr_retention_type='01'),
+    # Retenciones de ISR (grupo ISR) que hace la empresa.
+    #
+    # El "Tipo de retención en ISR" del 606 (casilla 17) NO se deduce aquí en
+    # Odoo 16: lo confirma el contador. En la 19 se ponía solo en honorarios
+    # (02) y alquileres (01), con las plantillas ret_15_income_person y
+    # ret_15_income_rent, que el l10n_do de 16 no tiene; las suyas son
+    # ret_10_income_person y ret_10_income_rent, con otra tasa. No se mapean ni
+    # se crean impuestos: las retenciones de ISR sin tipo aparecen en
+    # "Configuración pendiente" (l10n_do_config_pending.py) para que el
+    # contador las confirme. Tampoco existen en 16 ret_3_income_person,
+    # ret_3_income_article_70 ni ret_15_income_foreign_royalties_technology.
+    'ret_10_income_person': _RET_ISR,
+    'ret_10_income_rent': _RET_ISR,
     'ret_10_income_dividend': _RET_ISR,
-    'ret_3_income_person': _RET_ISR,
+    'ret_2_income_person': _RET_ISR,
     'ret_2_income_transfer': _RET_ISR,
-    'ret_3_income_article_70': _RET_ISR,
     'ret_27_income_remittance': _RET_ISR,
-    'ret_15_income_foreign_royalties_technology': _RET_ISR,
     # Retención de ISR que le hace el Estado a la empresa (en ventas): no va
     # en el 606, solo se clasifica el impuesto.
     'ret_5_income_gov': {'dgii_retention_type': 'isr'},
+    # Los impuestos de GRUPO del plan de 16 (tax_group_telco,
+    # tax_group_nonformal, tax_group_person_construction,
+    # tax_group_person_services, tax_group_moral_services,
+    # tax_group_restaurant_sale y tax_group_restaurant_purch) no se clasifican
+    # a proposito: amount_type = 'group' y solo juntan impuestos hijos que ya
+    # estan en esta tabla (p. ej. tax_group_person_services = tax_18_purch +
+    # ret_100_tax_person + ret_10_income_person). Odoo crea una linea de
+    # impuesto por cada HIJO, y el 606, el IR-17 y el e-CF leen esas lineas
+    # (account_move.py, _l10n_do_retention_tax_lines), asi que la clase va en
+    # el hijo. El plan de la 19 no trae impuestos de grupo.
 }
 
 # Formas de pago del 606/607 (Norma General 07-2018, Anexo A, "Tabla de Forma
@@ -82,92 +111,112 @@ JOURNAL_PAYMENT_FORM = {
 }
 
 
-# Plantilla de cuenta de l10n_do (account.account-do.csv) -> "Tipo 606".
+# Código de cuenta del plan l10n_do -> "Tipo 606".
 # Norma General 07-2018, Anexo A, "Tabla de clasificación de Costos y Gastos";
 # instructivo 606 (julio 2025), casilla 3. Solo las cuentas de categoría clara;
 # las demás quedan vacías a propósito (ver docs/mapeo_cuentas_606.md).
-ACCOUNT_TEMPLATE_606 = {
+#
+# Se indexa por CÓDIGO y no por el xmlid de la plantilla porque el xmlid cambia
+# entre versiones de l10n_do: en el plan de Odoo 16 la cuenta de código
+# 61020600 tiene el id do_niif_52020600
+# (addons/l10n_do/data/account.account.template.csv), mientras que en la 19 el
+# id coincide con el código. El código es el mismo en las dos: las 71 cuentas de
+# esta tabla existen en el plan de 16.
+ACCOUNT_606_BY_CODE = {
     # 01 Gastos de personal (pagos a terceros por beneficios a empleados)
-    'l10n_do_61010900': '01',  # Comidas o Dietas al Personal
-    'l10n_do_61011000': '01',  # Cursos y Entrenamientos
-    'l10n_do_61011400': '01',  # Uniformes
-    'l10n_do_61011500': '01',  # Otros Gastos de Personal
+    '61010900': '01',  # Comidas o Dietas al Personal
+    '61011000': '01',  # Cursos y Entrenamientos
+    '61011400': '01',  # Uniformes
+    '61011500': '01',  # Otros Gastos de Personal
     # 02 Gastos por trabajos, suministros y servicios
-    'l10n_do_61020100': '02',  # Energía Eléctrica
-    'l10n_do_61020200': '02',  # Comunicaciones
-    'l10n_do_61020300': '02',  # Suministros de Oficina (Papelería y útiles)
-    'l10n_do_61020400': '02',  # Útiles de Aseo y Limpieza
-    'l10n_do_61020500': '02',  # Agua y Basura
-    'l10n_do_61020700': '02',  # Combustibles y Lubricantes
-    'l10n_do_61021200': '02',  # Servicios de Mensajería
-    'l10n_do_61021300': '02',  # Flete y Carga
-    'l10n_do_61030101': '02',  # Legales (P. Física)
-    'l10n_do_61030102': '02',  # Contabilidad y Auditoría (P. Física)
-    'l10n_do_61030103': '02',  # Tecnología (P. Física)
-    'l10n_do_61030107': '02',  # Asesorías (P. Física)
-    'l10n_do_61030108': '02',  # Fumigaciones (P. Física)
-    'l10n_do_61030109': '02',  # Copias y Escaneos (P. Física)
-    'l10n_do_61030110': '02',  # Servicios de Vigilancia (P. Física)
-    'l10n_do_61030111': '02',  # Otros Servicios Profesionales (P. Física)
-    'l10n_do_61030201': '02',  # Legales (P. Jurídica)
-    'l10n_do_61030202': '02',  # Contabilidad y Auditoría (P. Jurídica)
-    'l10n_do_61030203': '02',  # Tecnología (P. Jurídica)
-    'l10n_do_61030207': '02',  # Asesorías (P. Jurídica)
-    'l10n_do_61030208': '02',  # Fumigaciones (P. Jurídica)
-    'l10n_do_61030209': '02',  # Copias y Escaneos (P. Jurídica)
-    'l10n_do_61030210': '02',  # Servicios de Vigilancia (P. Jurídica)
-    'l10n_do_61030211': '02',  # Otros Servicios Profesionales  (P. Jurídica)
-    'l10n_do_61030301': '02',  # Honorarios por Servicios del Exterior - Relacionadas
-    'l10n_do_61030302': '02',  # Honorarios por Servicios del Exterior - Terceros
+    '61020100': '02',  # Energía Eléctrica
+    '61020200': '02',  # Comunicaciones
+    '61020300': '02',  # Suministros de Oficina (Papelería y útiles)
+    '61020400': '02',  # Útiles de Aseo y Limpieza
+    '61020500': '02',  # Agua y Basura
+    '61020700': '02',  # Combustibles y Lubricantes
+    '61021200': '02',  # Servicios de Mensajería
+    '61021300': '02',  # Flete y Carga
+    '61030101': '02',  # Legales (P. Física)
+    '61030102': '02',  # Contabilidad y Auditoría (P. Física)
+    '61030103': '02',  # Tecnología (P. Física)
+    '61030107': '02',  # Asesorías (P. Física)
+    '61030108': '02',  # Fumigaciones (P. Física)
+    '61030109': '02',  # Copias y Escaneos (P. Física)
+    '61030110': '02',  # Servicios de Vigilancia (P. Física)
+    '61030111': '02',  # Otros Servicios Profesionales (P. Física)
+    '61030201': '02',  # Legales (P. Jurídica)
+    '61030202': '02',  # Contabilidad y Auditoría (P. Jurídica)
+    '61030203': '02',  # Tecnología (P. Jurídica)
+    '61030207': '02',  # Asesorías (P. Jurídica)
+    '61030208': '02',  # Fumigaciones (P. Jurídica)
+    '61030209': '02',  # Copias y Escaneos (P. Jurídica)
+    '61030210': '02',  # Servicios de Vigilancia (P. Jurídica)
+    '61030211': '02',  # Otros Servicios Profesionales  (P. Jurídica)
+    '61030301': '02',  # Honorarios por Servicios del Exterior - Relacionadas
+    '61030302': '02',  # Honorarios por Servicios del Exterior - Terceros
     # 03 Arrendamientos
-    'l10n_do_61020800': '03',  # Alquileres / Arrendamientos
+    '61020800': '03',  # Alquileres / Arrendamientos
     # 04 Gastos de activos fijos (reparación y mantenimiento)
-    'l10n_do_61030104': '04',  # Mantenimientos de Planta (P. Física)
-    'l10n_do_61030106': '04',  # Mantenimientos Mobiliarios y Equipos (P. Física)
-    'l10n_do_61030204': '04',  # Mantenimiento de Planta (P. Jurídica)
-    'l10n_do_61030206': '04',  # Mantenimiento Mobiliario y Equipos (P. Jurídica)
-    'l10n_do_61050100': '04',  # Gastos por Reparación de Edificios
-    'l10n_do_61050200': '04',  # Gastos por Reparación de Equipo de Transporte
-    'l10n_do_61050300': '04',  # Gastos por Reparación de Mobiliario y Equipos
-    'l10n_do_61050400': '04',  # Gastos por Reparación de Maquinaria
-    'l10n_do_61050500': '04',  # Gastos por Reparación de Herramientas
-    'l10n_do_61050600': '04',  # Gastos por Reparación de Instalaciones
+    '61030104': '04',  # Mantenimientos de Planta (P. Física)
+    '61030106': '04',  # Mantenimientos Mobiliarios y Equipos (P. Física)
+    '61030204': '04',  # Mantenimiento de Planta (P. Jurídica)
+    '61030206': '04',  # Mantenimiento Mobiliario y Equipos (P. Jurídica)
+    '61050100': '04',  # Gastos por Reparación de Edificios
+    '61050200': '04',  # Gastos por Reparación de Equipo de Transporte
+    '61050300': '04',  # Gastos por Reparación de Mobiliario y Equipos
+    '61050400': '04',  # Gastos por Reparación de Maquinaria
+    '61050500': '04',  # Gastos por Reparación de Herramientas
+    '61050600': '04',  # Gastos por Reparación de Instalaciones
     # 05 Gastos de representación
-    'l10n_do_61060100': '05',  # Relaciones Públicas
-    'l10n_do_61060200': '05',  # Publicidad
-    'l10n_do_61060600': '05',  # Promociones
+    '61060100': '05',  # Relaciones Públicas
+    '61060200': '05',  # Publicidad
+    '61060600': '05',  # Promociones
     # 07 Gastos financieros
-    'l10n_do_61070100': '07',  # Financial Loan Expenses
-    'l10n_do_61070300': '07',  # Intereses Bancarios
-    'l10n_do_61070400': '07',  # Comisiones Bancarias
-    'l10n_do_61070500': '07',  # Comisiones de Tarjeta de Crédito
-    'l10n_do_61070600': '07',  # Cargos Bancarios
-    'l10n_do_61070900': '07',  # Otro Gastos Financieros
+    '61070100': '07',  # Financial Loan Expenses
+    '61070300': '07',  # Intereses Bancarios
+    '61070400': '07',  # Comisiones Bancarias
+    '61070500': '07',  # Comisiones de Tarjeta de Crédito
+    '61070600': '07',  # Cargos Bancarios
+    '61070900': '07',  # Otro Gastos Financieros
     # 09 Compras y gastos que formarán parte del costo de venta
-    'l10n_do_51010100': '09',  # Costos de Bienes
-    'l10n_do_51010200': '09',  # Costos de Servicios
-    'l10n_do_51020100': '09',  # Costos de Materia Prima
-    'l10n_do_51020300': '09',  # Costos Indirectos
-    'l10n_do_51020400': '09',  # Costos de Importación
+    '51010100': '09',  # Costos de Bienes
+    '51010200': '09',  # Costos de Servicios
+    '51020100': '09',  # Costos de Materia Prima
+    '51020300': '09',  # Costos Indirectos
+    '51020400': '09',  # Costos de Importación
     # 10 Adquisiciones de activos
-    'l10n_do_12010101': '10',  # Terrenos
-    'l10n_do_12010102': '10',  # Edificaciones
-    'l10n_do_12010103': '10',  # Mejoras en Edificaciones
-    'l10n_do_12010104': '10',  # Mejoras en Edificaciones y Locales Arrendados
-    'l10n_do_12010201': '10',  # Equipos de Transporte Liviano
-    'l10n_do_12010202': '10',  # Mobiliarios y Equipos de Oficina
-    'l10n_do_12010301': '10',  # Maquinarias
-    'l10n_do_12010302': '10',  # Herramientas
-    'l10n_do_12010303': '10',  # Instalaciones
-    'l10n_do_12010304': '10',  # Sistemas de Cámara y Seguridad
-    'l10n_do_12010305': '10',  # Misceláneos u otros activos
-    'l10n_do_12040100': '10',  # Marcas y Patentes
-    'l10n_do_12040200': '10',  # Licencias y Programas Informáticos
+    '12010101': '10',  # Terrenos
+    '12010102': '10',  # Edificaciones
+    '12010103': '10',  # Mejoras en Edificaciones
+    '12010104': '10',  # Mejoras en Edificaciones y Locales Arrendados
+    '12010201': '10',  # Equipos de Transporte Liviano
+    '12010202': '10',  # Mobiliarios y Equipos de Oficina
+    '12010301': '10',  # Maquinarias
+    '12010302': '10',  # Herramientas
+    '12010303': '10',  # Instalaciones
+    '12010304': '10',  # Sistemas de Cámara y Seguridad
+    '12010305': '10',  # Misceláneos u otros activos
+    '12040100': '10',  # Marcas y Patentes
+    '12040200': '10',  # Licencias y Programas Informáticos
     # 11 Gastos de seguros
-    'l10n_do_61020600': '11',  # Seguro de Edificio y Locales
-    'l10n_do_61021100': '11',  # Seguros
-    'l10n_do_61070700': '11',  # Seguro sobre Préstamos Bancarios
+    '61020600': '11',  # Seguro de Edificio y Locales
+    '61021100': '11',  # Seguros
+    '61070700': '11',  # Seguro sobre Préstamos Bancarios
 }
+
+
+# Módulo que lleva el xmlid de los registros que la compañía crea desde el plan
+# contable. En Odoo 16 es el módulo de la PLANTILLA
+# (account/models/chart_template.py:933), es decir l10n_do; en la 19 es
+# "account". Un único sitio para que no se escape ninguno.
+TEMPLATE_MODULE = 'l10n_do'
+
+
+def template_ref(env, company, template, raise_if_not_found=False):
+    """Registro que la compañía creó desde una plantilla del plan l10n_do."""
+    return env.ref('%s.%s_%s' % (TEMPLATE_MODULE, company.id, template),
+                   raise_if_not_found=raise_if_not_found)
 
 
 def _fill_empty(record, values):
@@ -187,7 +236,7 @@ def autoconfigure_taxes(env, company):
     """Clasificación DGII de los impuestos del plan l10n_do de la compañía."""
     Tax = env['account.tax'].with_context(active_test=False)
     imd = env['ir.model.data'].sudo().search([
-        ('module', '=', 'account'),
+        ('module', '=', TEMPLATE_MODULE),
         ('model', '=', 'account.tax'),
         ('name', 'in', ['%s_%s' % (company.id, tpl) for tpl in TAX_TEMPLATE_VALUES]),
     ])
@@ -219,7 +268,10 @@ def ensure_export_tax(env, company):
     ], limit=1)
     if existing:
         return existing
-    group = env.ref('account.%s_tax_group_itbis' % company.id, raise_if_not_found=False)
+    # En Odoo 16 account.tax.group es global, sin company_id
+    # (account/models/account_tax.py:22-26), y el grupo ITBIS lo trae l10n_do
+    # (l10n_do/data/account_tax_group_data.xml:4).
+    group = env.ref('l10n_do.group_itbis', raise_if_not_found=False)
     if not group:
         return Tax
     tax = Tax.with_company(company).create({
@@ -251,19 +303,20 @@ def autoconfigure_journals(env, company):
 
 
 def autoconfigure_accounts(env, company):
-    """Tipo 606 de las cuentas del plan l10n_do cuya categoría es clara."""
-    imd = env['ir.model.data'].sudo().search([
-        ('module', '=', 'account'),
-        ('model', '=', 'account.account'),
-        ('name', 'in', ['%s_%s' % (company.id, tpl) for tpl in ACCOUNT_TEMPLATE_606]),
+    """Tipo 606 de las cuentas del plan l10n_do cuya categoría es clara.
+
+    Las cuentas se buscan por código dentro de la compañía (ver
+    ACCOUNT_606_BY_CODE): es estable entre versiones de l10n_do, donde el xmlid
+    de la plantilla no lo es.
+    """
+    accounts = env['account.account'].with_context(active_test=False).search([
+        ('company_id', '=', company.id),
+        ('code', 'in', list(ACCOUNT_606_BY_CODE)),
     ])
-    Account = env['account.account'].with_context(active_test=False)
-    prefix = '%s_' % company.id
     changed = 0
-    for data in imd:
-        account = Account.browse(data.res_id).exists()
-        code = ACCOUNT_TEMPLATE_606[data.name[len(prefix):]]
-        if account and _fill_empty(account, {'l10n_do_606_expense_type': code}):
+    for account in accounts:
+        expense_type = ACCOUNT_606_BY_CODE.get(account.code)
+        if expense_type and _fill_empty(account, {'l10n_do_606_expense_type': expense_type}):
             changed += 1
     return changed
 
@@ -280,7 +333,7 @@ def autoconfigure_exterior_retention(env, company):
     """
     if company.l10n_do_exterior_retention_tax_ids:
         return False
-    tax = env.ref('account.%s_ret_27_income_remittance' % company.id, raise_if_not_found=False)
+    tax = template_ref(env, company, 'ret_27_income_remittance')
     if not tax or tax.company_id != company or tax.amount != -27.0:
         return False
     company.l10n_do_exterior_retention_tax_ids = tax
@@ -301,7 +354,9 @@ def autoconfigure(env, companies=None):
     env = env(su=True)
     for company in companies.sudo().filtered(is_dominican):
         taxes = autoconfigure_taxes(env, company)
-        export = ensure_export_tax(env, company) if company.chart_template else None
+        # Odoo 16: res.company.chart_template_id, un many2one a la plantilla
+        # (account/models/company.py:76). En la 19 el campo es chart_template.
+        export = ensure_export_tax(env, company) if company.chart_template_id else None
         journals = autoconfigure_journals(env, company)
         accounts = autoconfigure_accounts(env, company)
         # Contacto genérico de las facturas de gastos menores (E43/B13).
