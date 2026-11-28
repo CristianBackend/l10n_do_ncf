@@ -33,6 +33,7 @@ class TestDashboardSequenceStats(NcfCommon):
         self.assertEqual(self.sequence.state, 'active')
         self.assertEqual(self.sequence.current_number, 0)
         self.assertEqual(self.sequence.used_qty, 0)
+        self.assertEqual(self.sequence.usage_percent, 0.0)
         stats = self._stats()
         self.assertEqual(stats['used'], 0)
         self.assertEqual(stats['available'], 500)
@@ -48,6 +49,12 @@ class TestDashboardSequenceStats(NcfCommon):
         self.assertEqual(stats['used'], 1)
         self.assertEqual(stats['available'], 499)
         self.assertEqual(stats['used'] + stats['available'], stats['total'])
+        # 1 de 500 = 0.2 %. El numero lo escribe el generador por SQL (por el
+        # bloqueo de concurrencia), asi que esto comprueba ademas que los
+        # campos guardados que dependen de current_number se recalculan: sin
+        # eso, el porcentaje y el semaforo del panel se quedan congelados.
+        self.assertAlmostEqual(self.sequence.usage_percent, 0.2, places=4)
+        self.assertEqual(self.sequence.traffic_light, 'green')
 
     def test_used_and_available_always_add_up_to_the_range(self):
         """Tres NCF emitidos, y en un rango que no empieza en 1."""

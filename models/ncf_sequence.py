@@ -518,6 +518,12 @@ class NcfSequence(models.Model):
             ) % tipo_ncf)
 
         self.invalidate_recordset(['current_number'])
+        # El numero se escribio por SQL (hace falta para el bloqueo de
+        # concurrencia), asi que el ORM no sabe que cambio: sin esto, los
+        # campos GUARDADOS que dependen de current_number se quedan con el
+        # valor viejo y el panel ensena un porcentaje de uso y un semaforo
+        # congelados (siempre 0 % y verde).
+        self.modified(['current_number'])
 
         _logger.info('NCF generado: %s (secuencia: %s)', ncf, self.name)
 
