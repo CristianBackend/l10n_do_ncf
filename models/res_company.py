@@ -81,7 +81,7 @@ class ResCompany(models.Model):
         self.ensure_one()
         Tax = self.env['account.tax']
         taxes = Tax.search([
-            *Tax._check_company_domain(self),
+            ('company_id', '=', self.id),
             ('type_tax_use', '=', 'purchase'),
             ('amount_type', '=', 'percent'),
             ('amount', '=', 0),

@@ -89,7 +89,17 @@ class NcfType(models.Model):
             if existing:
                 raise ValidationError(_('El prefijo del NCF debe ser unico.'))
 
+    def _l10n_do_label(self):
+        self.ensure_one()
+        return f"[{self.prefix}] {self.name}"
+
     @api.depends('prefix', 'name')
     def _compute_display_name(self):
         for record in self:
-            record.display_name = f"[{record.prefix}] {record.name}"
+            record.display_name = record._l10n_do_label()
+
+    def name_get(self):
+        # Odoo 16 toma la etiqueta de name_get (odoo/models.py:1574) y calcula
+        # display_name a partir de el (models.py:1558). Se definen los dos
+        # sobre la misma funcion para que no puedan divergir.
+        return [(record.id, record._l10n_do_label()) for record in self]

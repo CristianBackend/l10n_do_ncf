@@ -71,10 +71,14 @@ TAX_TEMPLATE_VALUES = {
 # Formas de pago del 606/607 (Norma General 07-2018, Anexo A, "Tabla de Forma
 # de pagos"; instructivo 606, julio 2025, casilla 23): 1 Efectivo, 2 Cheques/
 # Transferencias/Depósito, 3 Tarjeta crédito/débito. El tipo de diario lo dice.
+# Tipo de diario -> "Forma de pago DGII" (606/607).
+# Odoo 16 solo tiene los tipos sale/purchase/cash/bank/general
+# (account/models/account_journal.py:79-85): no existe el tipo 'credit' que en
+# la 19 se mapea a 03 - Tarjeta. En 16 un diario de tarjeta es de tipo 'bank' y
+# queda en 02; el contador lo cambia a 03 a mano en el diario.
 JOURNAL_PAYMENT_FORM = {
     'cash': '01',
     'bank': '02',
-    'credit': '03',
 }
 
 
@@ -207,7 +211,7 @@ def ensure_export_tax(env, company):
     """
     Tax = env['account.tax'].with_context(active_test=False)
     existing = Tax.search([
-        *Tax._check_company_domain(company),
+        ('company_id', '=', company.id),
         ('type_tax_use', '=', 'sale'),
         ('amount_type', '=', 'percent'),
         ('amount', '=', 0),

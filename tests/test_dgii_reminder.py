@@ -32,7 +32,7 @@ class TestDgiiReminder(TransactionCase):
             'login': login,
             'company_id': companies[0].id,
             'company_ids': [Command.set(companies.ids)],
-            'group_ids': [Command.set([cls.env.ref(group_xmlid).id])],
+            'groups_id': [Command.set([cls.env.ref(group_xmlid).id])],
         })
 
     def _reminders(self, user):

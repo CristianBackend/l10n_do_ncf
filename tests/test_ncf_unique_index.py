@@ -234,7 +234,7 @@ class TestNcfUniqueIndex(NcfCommon):
 
     def _exempt_taxes(self):
         return self.env['account.tax'].with_context(active_test=False).search([
-            *self.env['account.tax']._check_company_domain(self.company),
+            ('company_id', '=', self.company.id),
             ('dgii_itbis_zero_type', '=', 'exempt'),
         ])
 

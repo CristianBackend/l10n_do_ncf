@@ -11,6 +11,7 @@
 
 import logging
 
+from odoo import SUPERUSER_ID, api
 from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
@@ -40,11 +41,15 @@ VENDOR_NCF_UNIQUE_WHERE = """
 """
 
 
-def post_init_hook(env):
+def post_init_hook(cr, registry):
     """
     Hook ejecutado después de instalar el módulo.
+
+    Odoo 16 llama al hook con (cr, registry) -- odoo/modules/loading.py:249;
+    el Environment se construye aquí.
     """
     _logger.info('l10n_do_ncf: Ejecutando configuración post-instalación...')
+    env = api.Environment(cr, SUPERUSER_ID, {})
 
     # 1. Crear índices únicos para NCF
     ensure_ncf_indexes(env.cr)
@@ -233,21 +238,31 @@ def configure_vat_and_taxes(env):
 
 
 def _get_itbis_group(env, company, country_do):
+    """Grupo de impuestos ITBIS del pais.
+
+    En Odoo 16 account.tax.group es un modelo GLOBAL: no tiene company_id
+    (addons/account/models/account_tax.py:22-26), al contrario que en 19,
+    donde el grupo es por compania. El plan l10n_do ya trae el grupo ITBIS
+    de Republica Dominicana (addons/l10n_do/data/account_tax_group_data.xml:4),
+    asi que normalmente se reutiliza y no se crea nada.
+
+    La clasificacion DGII no depende del id del grupo sino de los campos
+    dgii_tax_kind / dgii_itbis_zero_type del impuesto: el payload y los
+    reportes salen igual que en la 19.
+    """
     TaxGroup = env['account.tax.group']
     itbis_group = TaxGroup.search([
-        *TaxGroup._check_company_domain(company),
         ('name', '=', 'ITBIS'),
         ('country_id', '=', country_do.id),
     ], limit=1)
 
     if not itbis_group:
-        itbis_group = TaxGroup.with_company(company).create({
+        itbis_group = TaxGroup.create({
             'name': 'ITBIS',
             'sequence': 10,
             'country_id': country_do.id,
-            'company_id': company.id,
         })
-        _logger.info('l10n_do_ncf: Grupo ITBIS creado para %s', company.name)
+        _logger.info('l10n_do_ncf: Grupo ITBIS creado')
 
     return itbis_group
 
@@ -258,7 +273,10 @@ def _configure_company_taxes(env, company, country_do):
     """
     _logger.info('l10n_do_ncf: Configurando impuestos para %s', company.name)
     Tax = env['account.tax'].with_context(active_test=False)
-    company_domain = Tax._check_company_domain(company)
+    # Odoo 16 no tiene Model._check_company_domain (llego en 17). En 16
+    # account.tax.company_id es required (account/models/account_tax.py:109),
+    # asi que el dominio equivalente es la compania a secas.
+    company_domain = [('company_id', '=', company.id)]
 
     existing_sale_tax = Tax.search([
         *company_domain,
@@ -331,7 +349,7 @@ def _ensure_exempt_taxes(env, company, country_do, itbis_group):
 
     for tax_use, name in (('sale', 'Exento Ventas'), ('purchase', 'Exento Compras')):
         exempt = Tax.search([
-            *Tax._check_company_domain(company),
+            ('company_id', '=', company.id),
             ('type_tax_use', '=', tax_use),
             ('amount_type', '=', 'percent'),
             ('amount', '=', 0),
@@ -401,14 +419,17 @@ def _configure_retention_taxes(env):
         })
 
 
-def uninstall_hook(env):
-    """Hook ejecutado antes de desinstalar el módulo."""
+def uninstall_hook(cr, registry):
+    """Hook ejecutado antes de desinstalar el módulo.
+
+    Odoo 16 llama al hook con (cr, registry) -- odoo/modules/loading.py:576.
+    """
     _logger.info('l10n_do_ncf: Ejecutando limpieza pre-desinstalación...')
 
     try:
-        env.cr.execute("DROP INDEX IF EXISTS unique_ncf_per_company")
-        env.cr.execute("DROP INDEX IF EXISTS unique_vendor_ncf_per_company")
-        env.cr.execute("DROP INDEX IF EXISTS idx_ncf_search")
+        cr.execute("DROP INDEX IF EXISTS unique_ncf_per_company")
+        cr.execute("DROP INDEX IF EXISTS unique_vendor_ncf_per_company")
+        cr.execute("DROP INDEX IF EXISTS idx_ncf_search")
         _logger.info('l10n_do_ncf: Índices NCF eliminados')
     except Exception as e:
         _logger.warning('l10n_do_ncf: Error eliminando índices: %s', str(e))

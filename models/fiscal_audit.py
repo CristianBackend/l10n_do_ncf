@@ -91,16 +91,26 @@ class L10nDoFiscalAudit(models.Model):
     ip_address = fields.Char(string='IP')
     session_id = fields.Char(string='Sesión')
 
+    def _l10n_do_label(self):
+        self.ensure_one()
+        event_label = dict(self._fields['event_type'].selection).get(
+            self.event_type, self.event_type)
+        return '%s - %s (%s)' % (
+            self.ncf_number or 'Sin NCF',
+            event_label,
+            self.create_date.strftime('%Y-%m-%d %H:%M') if self.create_date else ''
+        )
+
     @api.depends('ncf_number', 'event_type', 'create_date')
     def _compute_display_name(self):
         for record in self:
-            event_label = dict(self._fields['event_type'].selection).get(
-                record.event_type, record.event_type)
-            record.display_name = '%s - %s (%s)' % (
-                record.ncf_number or 'Sin NCF',
-                event_label,
-                record.create_date.strftime('%Y-%m-%d %H:%M') if record.create_date else ''
-            )
+            record.display_name = record._l10n_do_label()
+
+    def name_get(self):
+        # Odoo 16 toma la etiqueta de name_get (odoo/models.py:1574) y calcula
+        # display_name a partir de el (models.py:1558). Se definen los dos
+        # sobre la misma funcion para que no puedan divergir.
+        return [(record.id, record._l10n_do_label()) for record in self]
 
     @api.model
     def log_event(self, event_type, move=None, ncf_number=None, **kwargs):

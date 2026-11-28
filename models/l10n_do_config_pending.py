@@ -17,7 +17,7 @@ class ResCompany(models.Model):
         self.ensure_one()
         Tax = self.env['account.tax']
         return Tax.search([
-            *Tax._check_company_domain(self),
+            ('company_id', '=', self.id),
             ('type_tax_use', 'in', ('sale', 'purchase')),
             ('amount_type', '=', 'percent'),
             ('amount', '>', 0),
@@ -30,7 +30,7 @@ class ResCompany(models.Model):
         self.ensure_one()
         Tax = self.env['account.tax']
         return Tax.search([
-            *Tax._check_company_domain(self),
+            ('company_id', '=', self.id),
             ('type_tax_use', 'in', ('sale', 'purchase')),
             ('amount_type', '=', 'percent'),
             ('amount', '=', 0),
@@ -41,21 +41,27 @@ class ResCompany(models.Model):
         self.ensure_one()
         return self.env['account.journal'].search([
             ('company_id', '=', self.id),
-            ('type', 'in', ('bank', 'cash', 'credit')),
+            # Odoo 16 no tiene el tipo de diario 'credit' (llego despues):
+            # account/models/account_journal.py:79-85.
+            ('type', 'in', ('bank', 'cash')),
             ('l10n_do_payment_form', '=', False),
         ])
 
     def _l10n_do_pending_accounts(self):
         """Cuentas usadas en facturas de proveedor confirmadas sin "Tipo 606"."""
         self.ensure_one()
+        # Odoo 16: _read_group(domain, fields, groupby) devuelve dicts, con el
+        # many2one como (id, nombre) -- odoo/models.py:2205 y :2224. En 17+ la
+        # firma es (domain, groupby, aggregates) y devuelve tuplas.
         groups = self.env['account.move.line']._read_group([
             ('company_id', '=', self.id),
             ('parent_state', '=', 'posted'),
             ('move_id.move_type', 'in', ('in_invoice', 'in_refund')),
             ('display_type', '=', 'product'),
             ('account_id.l10n_do_606_expense_type', '=', False),
-        ], ['account_id'])
-        return self.env['account.account'].union(*[account for account, in groups])
+        ], ['account_id'], ['account_id'])
+        return self.env['account.account'].browse(
+            [group['account_id'][0] for group in groups if group['account_id']])
 
     def _l10n_do_pending_retentions(self):
         """Facturas de proveedor confirmadas cuyas retenciones no cuadran con
@@ -86,7 +92,10 @@ class ResCompany(models.Model):
         return self.env['res.users'].sudo().search([
             ('share', '=', False),
             ('company_ids', 'in', self.id),
-            ('all_group_ids', 'in', group.id),
+            # Odoo 16 materializa los grupos implicados dentro de groups_id al
+            # crear/escribir el usuario (odoo/addons/base/models/res_users.py:1409-1427),
+            # asi que groups_id equivale al all_group_ids de la 19.
+            ('groups_id', 'in', group.id),
             '|', ('tz', '=', False), ('tz', '!=', DO_TZ),
         ])
 
