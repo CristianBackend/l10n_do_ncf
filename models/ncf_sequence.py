@@ -60,6 +60,11 @@ class NcfSequence(models.Model):
         string='Disponibles',
         compute='_compute_available_qty'
     )
+    used_qty = fields.Integer(
+        string='Consumidos',
+        compute='_compute_used_qty',
+        help='Cuantos numeros de la secuencia ya se emitieron'
+    )
     usage_percent = fields.Float(
         string='Porcentaje Uso',
         compute='_compute_usage_percent',
@@ -216,6 +221,19 @@ class NcfSequence(models.Model):
             else:
                 record.next_number = record.current_number + 1
 
+    @api.depends('current_number', 'range_from')
+    def _compute_used_qty(self):
+        """Numeros ya emitidos de la secuencia.
+
+        current_number es el ULTIMO numero emitido, y 0 significa que todavia
+        no se emitio ninguno (el campo nace en 0, no en range_from). De ahi los
+        dos casos: sin restar, una secuencia recien activada con rango 1-500
+        daba -1 consumidos.
+        """
+        for record in self:
+            record.used_qty = (record.current_number - record.range_from + 1
+                               if record.current_number else 0)
+
     @api.depends('range_to', 'current_number', 'range_from')
     def _compute_available_qty(self):
         for record in self:
@@ -231,8 +249,7 @@ class NcfSequence(models.Model):
         for record in self:
             total = record.range_to - record.range_from + 1
             if total > 0:
-                used = record.current_number - record.range_from + 1 if record.current_number > 0 else 0
-                record.usage_percent = (used / total) * 100
+                record.usage_percent = (record.used_qty / total) * 100
 
                 if record.state in ('depleted', 'expired'):
                     record.traffic_light = 'red'
