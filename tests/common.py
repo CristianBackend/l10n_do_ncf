@@ -47,23 +47,6 @@ class NcfTestMixin:
             'country_id': cls.env.ref('base.us').id,
         })
 
-    @staticmethod
-    def _drop_default_itbis(line):
-        """Quita de una linea del Form el ITBIS que Odoo 16 pone por defecto.
-
-        DIFERENCIA CON LA 19: en 16, cuando el producto no trae impuestos de
-        proveedor, account.move.line._get_computed_taxes cae en
-        company.account_purchase_tax_id (account/models/account_move_line.py:
-        891-908), que en una compania con el plan l10n_do es un ITBIS; la 19
-        quito ese respaldo y la linea nace sin impuestos. Un pago al exterior
-        (B17/E47) no lleva ITBIS, asi que se quita, igual que lo hace el
-        contador. Solo los impuestos positivos: las retenciones (negativas) que
-        sugiere el modulo se quedan.
-        """
-        for tax in list(line.tax_ids):
-            if tax.amount > 0:
-                line.tax_ids.remove(id=tax.id)
-
     @classmethod
     def _ncf_type(cls, code):
         return cls.env['l10n_do_ncf.type'].search([('code', '=', code)], limit=1)
@@ -157,4 +140,18 @@ class NcfCommon(NcfTestMixin, AccountTestInvoicingCommon):
         country_do = cls.env.ref('base.do')
         for company in cls.company_data['company'] + cls.company_data_2['company']:
             company.country_id = country_do
+            # Sin impuesto de compra por defecto, como en la 19. En Odoo 16
+            # account.move.line._get_computed_taxes todavia cae en
+            # company.account_purchase_tax_id cuando el producto no trae
+            # impuestos de proveedor (account/models/account_move_line.py:
+            # 891-908) y cargar el plan l10n_do deja ahi un ITBIS
+            # (chart_template.py:647 coge el primer impuesto de compras). La 19
+            # quito ese respaldo: una linea de un producto sin impuestos nace
+            # sin impuestos. Las pruebas describen una compania asi, para que
+            # un pago al exterior (B17/E47, que no lleva ITBIS) se reconozca
+            # igual en las dos versiones. Al usuario de 16 que SI tenga
+            # impuesto por defecto le toca quitar el ITBIS de la linea, y
+            # entonces la factura pasa a "Pago al exterior" porque
+            # _compute_l10n_do_fiscal_type depende de invoice_line_ids.tax_ids.
+            company.account_purchase_tax_id = False
         cls._setup_ncf_data()

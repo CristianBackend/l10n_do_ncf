@@ -232,8 +232,9 @@ class TestPurchaseKind(NcfCommon):
         self.assertEqual(bill.l10n_do_purchase_kind, 'exterior')
 
     def test_payment_abroad_suggests_isr_27(self):
-        isr_27 = self.env.ref('account.%s_ret_27_income_remittance' % self.company.id,
-                              raise_if_not_found=False)
+        from odoo.addons.l10n_do_ncf.models import l10n_do_autoconfig
+        isr_27 = l10n_do_autoconfig.template_ref(
+            self.env, self.company, 'ret_27_income_remittance')
         if not isr_27:
             self.skipTest('La compañía de prueba no tiene la plantilla l10n_do')
         self.assertEqual(self.company.l10n_do_exterior_retention_tax_ids, isr_27)

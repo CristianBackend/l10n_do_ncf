@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # módulo: l10n_do_ncf
 # Archivo: models/account_move.py
 # Versión: 19.0 FINAL - PRODUCCIÓN LISTA - ODOO 19
@@ -151,6 +151,16 @@ class AccountMove(models.Model):
         ('06', '06 - Otros'),
     ], string='Motivo NC')
 
+    # Las notas de crédito que apuntan a esta factura. Hace falta para que
+    # l10n_do_credited_amount se recalcule cuando se confirma una nota: sus
+    # dependencias eran solo campos de la propia factura, asi que el valor
+    # guardado dependia de CUANDO corriera el calculo pendiente. En la 19
+    # salia bien de casualidad (el calculo quedaba pendiente desde el
+    # action_post de la factura y corria despues de confirmarse la nota); en
+    # 16 corre antes y se quedaba en 0. Misma logica, dependencia explicita.
+    l10n_do_credit_note_ids = fields.One2many(
+        'account.move', 'l10n_do_origin_move_id', string='Notas de crédito')
+
     l10n_do_credited_amount = fields.Monetary(
         compute='_compute_credited_amount', store=True, currency_field='currency_id'
     )
@@ -233,8 +243,20 @@ class AccountMove(models.Model):
 
     # Las líneas cuentan para el proveedor extranjero: solo los servicios sin
     # ITBIS son un pago al exterior (ver _l10n_do_partner_fiscal_type).
+    # 'invoice_line_ids.tax_ids' es necesario en Odoo 16 y no esta en la 19:
+    # alli una linea de un producto sin impuestos de proveedor nace SIN
+    # impuestos, mientras que en 16 account.move.line._get_computed_taxes
+    # (account/models/account_move_line.py:891-908) todavia cae en
+    # company.account_purchase_tax_id, que en una compania con el plan l10n_do
+    # es un ITBIS. Sin esta dependencia, al quitar ese ITBIS de la linea la
+    # compra se queda "Con comprobante del proveedor" y nunca llega a "Pago al
+    # exterior" (B17/E47) ni se sugiere el ISR 27 %: la regla de
+    # _l10n_do_is_foreign_service solo mira producto e ITBIS, asi que tiene que
+    # volver a evaluarse cuando cambian los impuestos de la linea. El tipo
+    # elegido a mano sigue protegido por l10n_do_purchase_kind_manual.
     @api.depends('partner_id', 'move_type', 'invoice_line_ids.product_id',
-                 'invoice_line_ids.display_type', 'l10n_do_purchase_kind_manual')
+                 'invoice_line_ids.display_type', 'invoice_line_ids.tax_ids',
+                 'l10n_do_purchase_kind_manual')
     def _compute_l10n_do_fiscal_type(self):
         for move in self:
             current = move.l10n_do_fiscal_type
@@ -733,7 +755,7 @@ class AccountMove(models.Model):
             'name': _('Impuestos de retención sin tipo DGII'),
             'res_model': 'account.tax',
             'domain': [('id', 'in', taxes.ids)],
-            'views': [[False, 'list'], [False, 'form']],
+            'views': [[False, 'tree'], [False, 'form']],
             'target': 'current',
         }
 
@@ -921,7 +943,7 @@ class AccountMove(models.Model):
         if len(notes) == 1:
             action.update({'view_mode': 'form', 'views': [(False, 'form')], 'res_id': notes.id})
         else:
-            action.update({'view_mode': 'list,form', 'views': [(False, 'list'), (False, 'form')],
+            action.update({'view_mode': 'tree,form', 'views': [(False, 'tree'), (False, 'form')],
                            'domain': [('id', 'in', notes.ids)]})
         return action
 
@@ -943,7 +965,9 @@ class AccountMove(models.Model):
             else:
                 move.l10n_do_amount_dop = move.amount_total
 
-    @api.depends('state', 'l10n_do_origin_move_id', 'amount_total', 'move_type')
+    @api.depends('state', 'l10n_do_origin_move_id', 'amount_total', 'move_type',
+                 'l10n_do_credit_note_ids.state', 'l10n_do_credit_note_ids.move_type',
+                 'l10n_do_credit_note_ids.amount_total')
     def _compute_credited_amount(self):
         for move in self:
             # _origin.id es el id real en base de datos (0/False en un registro
@@ -1336,12 +1360,25 @@ class AccountMove(models.Model):
     def _sql_error_to_message(self, exc):
         # Los índices únicos de NCF se crean en hooks.py, así que Odoo no
         # conoce su mensaje: sin esto el usuario vería un error genérico.
+        #
+        # DIFERENCIA CON LA 19: allí esto es un enganche del ORM
+        # (odoo/orm/models.py:3276), que Odoo llama solo al violarse un índice
+        # y convierte en el ValidationError que ve el usuario. Odoo 16 no lo
+        # tiene: traduce el error en _as_validation_error
+        # (odoo/service/model.py:90), una función de módulo sin enganche por
+        # modelo que solo conoce los _sql_constraints declarados. En 16, por
+        # tanto, el mensaje legible del NCF duplicado lo da la validación
+        # Python (_check_vendor_ncf_duplicate / _check_ncf_origin), que corre
+        # antes que la base de datos en el flujo normal; el índice queda como
+        # última red (carreras entre dos usuarios), y ahí el usuario ve el
+        # error de PostgreSQL. No se inventa un enganche nuevo.
         constraint = exc.diag.constraint_name
         if constraint == 'unique_vendor_ncf_per_company':
             return _('Ya existe otra factura de este proveedor con el mismo NCF.')
         if constraint == 'unique_ncf_per_company':
             return _('Ya existe otro documento con el mismo NCF en esta compañía.')
-        return super()._sql_error_to_message(exc)
+        parent = getattr(super(), '_sql_error_to_message', None)
+        return parent(exc) if parent else str(exc)
 
     @api.constrains('l10n_do_vendor_ncf')
     def _check_vendor_ncf_format(self):
@@ -1561,6 +1598,19 @@ class AccountMove(models.Model):
         lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
         return bool(lines) and all(l.product_id.l10n_do_no_exterior_retention for l in lines)
 
+    def _l10n_do_exterior_lines_missing_retention(self):
+        """Líneas de producto de un pago al exterior que tienen que llevar la
+        retención de ISR y no la llevan.
+
+        El producto marcado "Sin retención en pagos al exterior" (por ejemplo,
+        viáticos) no cuenta: esa línea va sin retención a propósito.
+        """
+        self.ensure_one()
+        lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+        return lines.filtered(lambda line: (
+            not line.product_id.l10n_do_no_exterior_retention
+            and not any(tax._l10n_do_retention_kind() == 'isr' for tax in line.tax_ids)))
+
     def _check_b17_no_itbis(self):
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'exterior':
@@ -1569,18 +1619,37 @@ class AccountMove(models.Model):
             raise UserError(_(
                 'Pago al exterior: la factura tiene ITBIS.\n\nUn pago al exterior no lleva '
                 'ITBIS: quite el impuesto de las líneas.'))
+        missing_help = _(
+            'Agregue en las líneas el impuesto de retención del pago al exterior (en el '
+            'plan l10n_do, "-27% ISR (L253-12)"). Para que se agregue solo, indíquelo en la '
+            'compañía, "Retenciones del pago al exterior".\n\nSi es un gasto que no lleva '
+            'retención (por ejemplo, viáticos de un viaje fuera del país), marque en su '
+            'producto "Sin retención en pagos al exterior" (pestaña Contabilidad).')
         if self.l10n_do_retention_legacy:
-            has_isr = any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids)
-        else:
-            has_isr = bool(self._l10n_do_isr_retention_lines())
-        if not has_isr and not self._l10n_do_exterior_without_retention():
+            # Factura con las retenciones en la pestaña "Retenciones": ahí no
+            # hay impuestos de línea que revisar, así que se comprueba la
+            # factura entera, como siempre.
+            has_isr = any(ret.retention_type_id.code == 'ISR_EXT'
+                          for ret in self.l10n_do_retention_ids)
+            if not has_isr and not self._l10n_do_exterior_without_retention():
+                raise UserError(_(
+                    'Pago al exterior: falta la retención de ISR.\n\n%s', missing_help))
+            return
+        # DIFERENCIA CON LA 19 (decidida con el cliente): la comprobación es
+        # POR LÍNEA, no por factura. En la 19 bastaba con que ALGUNA línea
+        # llevara retención, y en la práctica la llevaban todas porque la
+        # sugerencia entra al calcularse los impuestos de cada línea. En 16 la
+        # línea nace con el ITBIS que pone la compañía y hay que quitarlo a
+        # mano, así que una línea podía quedarse sin retención y la factura se
+        # confirmaba con menos ISR del que toca (270.00 en vez de 540.00 con
+        # dos líneas de 1,000). Con esto no se confirma nada infra-retenido.
+        missing = self._l10n_do_exterior_lines_missing_retention()
+        if missing:
             raise UserError(_(
-                'Pago al exterior: falta la retención de ISR.\n\nAgregue en las líneas el '
-                'impuesto de retención del pago al exterior (en el plan l10n_do, "-27% ISR '
-                '(L253-12)"). Para que se agregue solo, indíquelo en la compañía, "Retenciones '
-                'del pago al exterior".\n\nSi es un gasto que no lleva retención (por ejemplo, '
-                'viáticos de un viaje fuera del país), marque en su producto "Sin retención en '
-                'pagos al exterior" (pestaña Contabilidad).'))
+                'Pago al exterior: falta la retención de ISR en %(lines)s.\n\n%(help)s',
+                lines=', '.join('"%s"' % (line.name or line.product_id.display_name)
+                                for line in missing),
+                help=missing_help))
 
     # =========================================
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
@@ -1761,6 +1830,38 @@ class AccountMove(models.Model):
                 ('state', '=', 'active'),
             ], limit=1):
                 return {'warning': {'title': _('Sin secuencia'), 'message': _('Configure secuencia para este tipo.')}}
+
+    @api.onchange('invoice_line_ids')
+    def _onchange_l10n_do_lines_suggest_retentions(self):
+        """Rellena la retención sugerida en las líneas que quedaron SIN impuestos.
+
+        Hace falta en Odoo 16 y no en la 19: aquí _get_computed_taxes no puede
+        sugerir nada en una línea nueva de un formulario, porque el move_id en
+        memoria que ve la línea todavía trae el tipo fiscal anterior
+        (comprobado en vivo: siempre 'fiscal'). Así, la sugerencia solo entraba
+        por el onchange del tipo fiscal, y una segunda línea añadida cuando el
+        tipo YA era "Pago al exterior" se quedaba sin retención.
+
+        Solo AÑADE, y solo en líneas de producto sin ningún impuesto: una línea
+        así en un pago al exterior (o en una compra a un proveedor informal) es
+        justo el caso que la regla rellena. Para que una línea no lleve
+        retención está la casilla del producto "Sin retención en pagos al
+        exterior".
+        """
+        if self.move_type not in ('in_invoice', 'in_refund'):
+            return
+        if self.l10n_do_fiscal_type not in ('informal', 'exterior'):
+            return
+        Tax = self.env['account.tax']
+        commands = []
+        for line in self.invoice_line_ids.filtered(
+                lambda l: l.display_type == 'product' and not l.tax_ids):
+            suggested = self._l10n_do_suggested_retention_taxes(line, Tax)
+            if suggested:
+                commands.append(Command.update(
+                    line.id, {'tax_ids': [Command.set(suggested.ids)]}))
+        if commands:
+            self.invoice_line_ids = commands
 
     @api.onchange('l10n_do_fiscal_type')
     def _onchange_fiscal_type(self):

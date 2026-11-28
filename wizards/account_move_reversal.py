@@ -17,8 +17,14 @@ class AccountMoveReversal(models.TransientModel):
             and bool(move.l10n_do_ncf_number)
         )
 
-    def reverse_moves(self, is_modify=False):
-        """Validar que exista secuencia B04 antes de crear NC"""
+    def reverse_moves(self):
+        """Validar que exista secuencia B04 antes de crear NC.
+
+        Odoo 16: reverse_moves(self) no recibe argumentos
+        (account/wizard/account_move_reversal.py:113); el modo lo lleva el
+        campo refund_method del asistente ('refund', 'cancel' o 'modify'). En
+        la 19 la firma es reverse_moves(is_modify=False).
+        """
         for move in self.move_ids:
             if not self._l10n_do_refund_needs_local_sequence(move):
                 continue
@@ -41,7 +47,7 @@ class AccountMoveReversal(models.TransientModel):
                     'Dashboard NCF > Secuencias NCF > Nuevo'
                 ) % move.company_id.name)
         
-        return super().reverse_moves(is_modify=is_modify)
+        return super().reverse_moves()
 
     def _prepare_default_reversal(self, move):
         """Agregar tipo NCF y NCF afectado a la nota de credito"""

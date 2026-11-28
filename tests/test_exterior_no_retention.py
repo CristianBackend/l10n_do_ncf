@@ -90,11 +90,22 @@ class TestExteriorNoRetention(NcfCommon):
             bill.action_post()
 
     def test_retention_is_editable_on_any_line(self):
+        """Se puede añadir a mano en una línea marcada "sin retención"."""
         bill = self._form_bill([self.travel, self.service])
         self._line(bill, self.travel).tax_ids = self.ret_ext
-        self._line(bill, self.service).tax_ids = False
         bill.action_post()
-        self.assertEqual(bill.l10n_do_isr_retenido, 270.0)
+        self.assertEqual(bill.l10n_do_isr_retenido, 540.0)
+
+    def test_unmarked_line_without_retention_blocks_posting(self):
+        """DIFERENCIA CON LA 19 (decidida con el cliente): la comprobación al
+        confirmar es POR LÍNEA. En la 19 bastaba con que alguna línea llevara
+        retención, así que una línea sin ella se confirmaba y la factura salía
+        con menos ISR del que toca; aquí no se confirma."""
+        bill = self._form_bill([self.travel, self.service])
+        self._line(bill, self.service).tax_ids = False
+        with self.assertRaisesRegex(UserError, 'falta la retención de ISR'):
+            bill.action_post()
+        self.assertEqual(bill.state, 'draft')
 
     def test_kind_change_keeps_travel_lines_clean(self):
         bill = self._form_bill([self.travel, self.service])

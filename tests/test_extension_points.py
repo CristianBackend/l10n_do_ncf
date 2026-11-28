@@ -35,15 +35,22 @@ class TestExtensionPoints(NcfCommon):
     # _l10n_do_get_ncf_type_code
     # ---------------------------------------------------------------
     def test_type_code_matches_selected_type(self):
-        refund = self._create_refund(
-            self.partner_taxpayer, l10n_do_ncf_origin='B0100000001',
-        )
+        # La nota de credito se crea AL FINAL a proposito. En Odoo 16
+        # account.move._compute_name ordena por m.id (la 19 lo arreglo con
+        # m._origin.id, account/models/account_move.py:953): con dos asientos
+        # sin guardar pendientes de calcular el nombre, sorted() compara dos
+        # NewId y revienta con "'<' not supported between instances of
+        # 'NewId'". Un create() de asiento deja uno pendiente (Odoo calcula los
+        # campos precompute sobre un registro nuevo en memoria) y cada Form
+        # crea otro. Creando la nota despues de las facturas nunca coinciden
+        # dos; el modulo no toca el nombre del asiento.
         cases = (
             (self._create_invoice(self.partner_consumer), '02'),
             (self._create_invoice(self.partner_taxpayer), '01'),
             (self._create_invoice(self.partner_foreign), '16'),
             (self._create_invoice(self.partner_taxpayer, l10n_do_is_debit_note=True), '03'),
-            (refund, '04'),
+            (self._create_refund(
+                self.partner_taxpayer, l10n_do_ncf_origin='B0100000001'), '04'),
         )
         for move, code in cases:
             self.assertEqual(move._l10n_do_get_ncf_type_code(), code)

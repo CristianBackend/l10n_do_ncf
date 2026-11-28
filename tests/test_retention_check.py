@@ -304,30 +304,53 @@ class TestRetentionSuggestions(NcfCommon):
 
 @tagged('post_install', '-at_install')
 class TestRetentionAutoconfig(NcfCommon):
-    """La configuración automática no crea impuestos de retención: solo pone el
-    tipo 606 de ISR donde el impuesto de la plantilla l10n_do es inequívoco."""
+    """La configuración automática no crea impuestos de retención ni deduce el
+    tipo de retención de ISR del 606 (casilla 17).
+
+    DIFERENCIA CON LA 19: allí se ponía el tipo en honorarios (02) y alquileres
+    (01) desde las plantillas ret_15_income_person y ret_15_income_rent. El
+    plan l10n_do de Odoo 16 no las tiene -- sus equivalentes son
+    ret_10_income_person ("Retención 10% ISR Honorarios a Físicas") y
+    ret_10_income_rent ("Retención 10% ISR Alquileres a Físicas"), con otra
+    tasa (addons/l10n_do/data/account.tax.template.xml). No se mapean ni se
+    inventa la tasa: las retenciones de ISR quedan sin tipo y salen en
+    "Configuración pendiente" para que el contador las confirme.
+    """
 
     def _tmpl(self, name):
-        return self.env.ref('account.%s_%s' % (self.company.id, name), raise_if_not_found=False)
-
-    def test_isr_type_only_where_unambiguous(self):
         from odoo.addons.l10n_do_ncf.models import l10n_do_autoconfig
-        rent, fee = self._tmpl('ret_15_income_rent'), self._tmpl('ret_15_income_person')
-        if not rent or not fee:
+        return l10n_do_autoconfig.template_ref(self.env, self.company, name)
+
+    def test_autoconfig_creates_no_taxes_and_sets_no_isr_type(self):
+        from odoo.addons.l10n_do_ncf.models import l10n_do_autoconfig
+        remittance = self._tmpl('ret_27_income_remittance')
+        if not remittance:
             self.skipTest('La compañía de prueba no tiene la plantilla l10n_do')
         Tax = self.env['account.tax'].with_context(active_test=False)
         count = Tax.search_count([])
         l10n_do_autoconfig.autoconfigure(self.env, self.company)
-        self.assertEqual(Tax.search_count([]), count)
-        self.assertEqual(rent.dgii_isr_retention_type, '01')
-        self.assertEqual(fee.dgii_isr_retention_type, '02')
-        for name in ('ret_10_income_dividend', 'ret_3_income_person', 'ret_2_income_transfer',
-                     'ret_3_income_article_70', 'ret_27_income_remittance',
-                     'ret_15_income_foreign_royalties_technology'):
+        self.assertEqual(Tax.search_count([]), count, 'No se crea ningún impuesto')
+        # Ninguna retención de ISR recibe tipo automático.
+        for name in ('ret_10_income_person', 'ret_10_income_rent', 'ret_10_income_dividend',
+                     'ret_2_income_person', 'ret_2_income_transfer',
+                     'ret_27_income_remittance'):
             tax = self._tmpl(name)
             if tax:
+                self.assertEqual(tax.dgii_retention_type, 'isr', name)
                 self.assertFalse(tax.dgii_isr_retention_type, name)
         self.assertFalse(self.company.l10n_do_informal_retention_tax_ids)
         # Pago al exterior: el ISR 27 % de la plantilla (Guía No. 5, pág. 5).
-        self.assertEqual(self.company.l10n_do_exterior_retention_tax_ids,
-                         self._tmpl('ret_27_income_remittance'))
+        self.assertEqual(self.company.l10n_do_exterior_retention_tax_ids, remittance)
+
+    def test_isr_retentions_without_type_are_pending_config(self):
+        """Lo que la 19 clasificaba solo, en 16 lo pide la tarjeta del panel."""
+        from odoo.addons.l10n_do_ncf.models import l10n_do_autoconfig
+        if not self._tmpl('ret_27_income_remittance'):
+            self.skipTest('La compañía de prueba no tiene la plantilla l10n_do')
+        l10n_do_autoconfig.autoconfigure(self.env, self.company)
+        pending = self.company._l10n_do_pending_taxes_isr_type()
+        self.assertTrue(pending, 'Las retenciones de ISR sin tipo quedan pendientes')
+        self.assertTrue(all(t.type_tax_use == 'purchase' for t in pending),
+                        'Las retenciones de ventas no van en el 606')
+        keys = [group['key'] for group in self.company._l10n_do_config_pending()]
+        self.assertIn('taxes_isr_type', keys)
