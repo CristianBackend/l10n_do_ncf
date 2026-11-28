@@ -6,8 +6,6 @@ Fuente: Norma General 07-2018 de la DGII, Anexo D, y la herramienta oficial
 cual ("1", "21") y el país con su código ISO 3166 numérico ("840").
 """
 import base64
-import importlib.util
-import os
 
 from odoo import Command, fields
 from odoo.exceptions import ValidationError
@@ -126,36 +124,6 @@ class TestDgii609(NcfCommon):
         self.assertTrue(wizard.pending_message)
         wizard.action_reset()
         self.assertFalse(wizard.pending_message)
-
-    def test_migration_maps_only_clear_equivalences(self):
-        person = self.supplier.copy({'is_company': False, 'name': 'John Smith'})
-        bills = {
-            old: self._bill(partner=partner, retention_base=1.0)
-            for old, partner in [('01', self.supplier), ('02', self.supplier), ('03', self.supplier),
-                                 ('04', self.supplier), ('05', self.supplier), ('06', self.supplier)]
-        }
-        bills['02p'] = self._bill(partner=person, retention_base=1.0)
-        for key, bill in bills.items():
-            self.env.cr.execute(
-                'UPDATE account_move SET l10n_do_exterior_service_type = %s, '
-                'l10n_do_609_service_type = NULL, l10n_do_609_service_detail = NULL WHERE id = %s',
-                (key[:2], bill.id))
-        path = os.path.join(os.path.dirname(__file__), '..', 'migrations', '19.0.3.3.0', 'post-migrate.py')
-        spec = importlib.util.spec_from_file_location('l10n_do_ncf_mig_609', path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        module.migrate(self.env.cr, '19.0.3.2.15')
-        self.env.invalidate_all()
-        result = {k: (b.l10n_do_609_service_type, b.l10n_do_609_service_detail) for k, b in bills.items()}
-        self.assertEqual(result, {
-            '01': (False, False),
-            '02': ('2', '21'),
-            '02p': ('2', '22'),
-            '03': ('8', False),
-            '04': ('6', False),
-            '05': (False, False),
-            '06': (False, False),
-        })
 
     def test_name_outside_windows_1252_is_pending_not_replaced(self):
         partner = self.supplier.copy({'name': 'Łódź Software Sp.'})

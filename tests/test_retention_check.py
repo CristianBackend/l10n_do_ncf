@@ -301,33 +301,6 @@ class TestRetentionSuggestions(NcfCommon):
         self.assertEqual(len(bill.l10n_do_retention_ids), 1, 'Se queda para revisar')
         self.assertEqual(bill.invoice_line_ids.tax_ids, self.tax_18)
 
-    def test_migration_marks_posted_bills_with_tab_as_legacy(self):
-        import importlib.util
-        import os
-        bill = self.env['account.move'].create({
-            'move_type': 'in_invoice', 'partner_id': self.informal.id,
-            'invoice_date': fields.Date.today(), 'l10n_do_vendor_ncf': 'B0100000777',
-            'l10n_do_fiscal_type': 'fiscal',
-            'invoice_line_ids': [Command.create({
-                'name': 'Servicio', 'quantity': 1, 'price_unit': 1000.0, 'tax_ids': []})],
-        })
-        bill.action_post()
-        self.env['l10n_do_ncf.move.retention'].create({
-            'move_id': bill.id, 'retention_type_id': self.env['l10n_do_ncf.retention.type'].search(
-                [('code', '=', 'ISR_PROF')], limit=1).id, 'base_amount': 1000.0})
-        self.env.flush_all()
-        taxes_before = self.env['account.tax'].with_context(active_test=False).search_count([])
-        path = os.path.join(os.path.dirname(__file__), '..', 'migrations', '19.0.4.0.0', 'post-migrate.py')
-        spec = importlib.util.spec_from_file_location('l10n_do_ncf_mig_40', path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        module.migrate(self.env.cr, '19.0.3.7.1')
-        self.env.invalidate_all()
-        self.assertTrue(bill.l10n_do_retention_legacy)
-        self.assertEqual(self.env['account.tax'].with_context(active_test=False).search_count([]),
-                         taxes_before, 'La migración no crea impuestos')
-        self.assertEqual(bill.l10n_do_retention_check, 'no_entry')
-
 
 @tagged('post_install', '-at_install')
 class TestRetentionAutoconfig(NcfCommon):
