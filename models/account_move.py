@@ -658,13 +658,35 @@ class AccountMove(models.Model):
             return sum(lines.mapped('base_amount'))
         return self._l10n_do_tax_base_in_currency(self._l10n_do_isr_retention_lines())
 
+    def _l10n_do_invoice_currency_rate(self):
+        """Tasa de la moneda de la COMPAÑÍA a la de la factura.
+
+        Odoo 16 no tiene account.move.invoice_currency_rate: llegó en la 17
+        (account/models/account_move.py, _compute_invoice_currency_rate, que
+        lee la tabla de tasas a la fecha del documento). Aquí se saca de los
+        montos de la propia factura, que es la MISMA tasa —Odoo calculó esos
+        montos con ella— y además no cambia después si se corrige la tabla.
+        El respaldo es la tabla a la fecha de la factura, para una factura que
+        todavía no tiene montos.
+        """
+        self.ensure_one()
+        company = self.company_id or self.env.company
+        company_currency = company.currency_id
+        if not self.currency_id or self.currency_id == company_currency:
+            return 1.0
+        if self.amount_total and self.amount_total_signed:
+            return abs(self.amount_total) / abs(self.amount_total_signed)
+        return self.env['res.currency']._get_conversion_rate(
+            company_currency, self.currency_id, company,
+            self.invoice_date or self.date or fields.Date.context_today(self))
+
     def _l10n_do_tax_base_in_currency(self, tax_lines):
         """Base de unas líneas de impuesto en la moneda de la factura
         (tax_base_amount viene en la moneda de la compañía)."""
         self.ensure_one()
         base = abs(sum(tax_lines.mapped('tax_base_amount')))
         if self.currency_id and self.currency_id != self.company_id.currency_id:
-            base = self.currency_id.round(base * (self.invoice_currency_rate or 1.0))
+            base = self.currency_id.round(base * self._l10n_do_invoice_currency_rate())
         return base
     l10n_do_total_isr_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
     l10n_do_total_itbis_retention = fields.Monetary(compute='_compute_retention_totals', store=True, currency_field='currency_id')
