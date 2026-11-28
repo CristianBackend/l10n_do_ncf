@@ -56,7 +56,32 @@ tipo. Mientras falte, el 606 marca esas compras como pendientes.
 Las tasas del plan de 16 también son distintas: ver `docs/retenciones_tabla.md`,
 que es la tabla para revisar con el contador.
 
-## 3. Diarios de tarjeta de crédito: la forma de pago 03 se pone a mano
+## 3. Anticipos de venta: el producto "Anticipo" necesita ITBIS
+
+**Qué pasa.** La línea de un anticipo lleva los impuestos del **producto
+"Anticipo"**, no los del pedido. Odoo 16 le pone a ese producto los impuestos
+que se indiquen en el asistente "Factura de anticipo" ("Impuestos usados para
+los depósitos") la primera vez que lo crea; después ya no vuelve a tocarlo. La
+versión 19 copia los impuestos del pedido en cada anticipo.
+
+**Qué hay que hacer.** Dejar el producto "Anticipo" con el **ITBIS 18 %** (o el
+que corresponda) una sola vez. Si se queda sin impuesto, el e-CF **no deja
+confirmar** la factura del anticipo y avisa: *"La línea «Down payment of ...» no
+tiene ITBIS. Asígnele ITBIS 18 %, 16 %, 0 % o Exento: sin impuesto, la
+plataforma le aplicaría el 18 %"*. El aviso es correcto: la DGII calcularía el
+ITBIS por su cuenta.
+
+**Y el importe fijo del anticipo es la base, no el total.** En Odoo 16, si en el
+asistente se pide un anticipo fijo de RD$20,000, la factura sale por
+**RD$23,600** (20,000 + 18 % de ITBIS): el importe va al precio de la línea. La
+versión 19 lo trata como el total con el ITBIS ya incluido. Para cobrar
+exactamente RD$20,000 hay que pedir RD$16,949.15, o usar el anticipo por
+porcentaje.
+
+Lo demás de los anticipos con e-CF no cambia: la factura final va por el total
+del pedido y cada anticipo se anula con una E34.
+
+## 4. Diarios de tarjeta de crédito: la forma de pago 03 se pone a mano
 
 **Qué pasa.** La "Forma de pago DGII" del 606/607 se deduce del tipo de diario:
 efectivo → 01, banco → 02, tarjeta → 03. Odoo 16 **no tiene el tipo de diario
