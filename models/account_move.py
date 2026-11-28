@@ -1548,6 +1548,19 @@ class AccountMove(models.Model):
         lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
         return bool(lines) and all(l.product_id.l10n_do_no_exterior_retention for l in lines)
 
+    def _l10n_do_exterior_lines_missing_retention(self):
+        """Lineas de producto de un pago al exterior que tienen que llevar la
+        retencion de ISR y no la llevan.
+
+        El producto marcado "Sin retencion en pagos al exterior" (por ejemplo,
+        viaticos) no cuenta: esa linea va sin retencion a proposito.
+        """
+        self.ensure_one()
+        lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+        return lines.filtered(lambda line: (
+            not line.product_id.l10n_do_no_exterior_retention
+            and not any(tax._l10n_do_retention_kind() == 'isr' for tax in line.tax_ids)))
+
     def _check_b17_no_itbis(self):
         self.ensure_one()
         if self.l10n_do_fiscal_type != 'exterior':
@@ -1556,18 +1569,36 @@ class AccountMove(models.Model):
             raise UserError(_(
                 'Pago al exterior: la factura tiene ITBIS.\n\nUn pago al exterior no lleva '
                 'ITBIS: quite el impuesto de las líneas.'))
+        missing_help = _(
+            'Agregue en las líneas el impuesto de retención del pago al exterior (en el '
+            'plan l10n_do, "-27% ISR (L253-12)"). Para que se agregue solo, indíquelo en la '
+            'compañía, "Retenciones del pago al exterior".\n\nSi es un gasto que no lleva '
+            'retención (por ejemplo, viáticos de un viaje fuera del país), marque en su '
+            'producto "Sin retención en pagos al exterior" (pestaña Contabilidad).')
         if self.l10n_do_retention_legacy:
-            has_isr = any(ret.retention_type_id.code == 'ISR_EXT' for ret in self.l10n_do_retention_ids)
-        else:
-            has_isr = bool(self._l10n_do_isr_retention_lines())
-        if not has_isr and not self._l10n_do_exterior_without_retention():
+            # Factura con las retenciones en la pestaña "Retenciones": ahí no
+            # hay impuestos de línea que revisar, así que se comprueba la
+            # factura entera, como siempre.
+            has_isr = any(ret.retention_type_id.code == 'ISR_EXT'
+                          for ret in self.l10n_do_retention_ids)
+            if not has_isr and not self._l10n_do_exterior_without_retention():
+                raise UserError(_(
+                    'Pago al exterior: falta la retención de ISR.\n\n%s', missing_help))
+            return
+        # La comprobación es POR LÍNEA, no por factura: con que ALGUNA línea
+        # llevara retención, una factura de dos líneas de 1,000 se confirmaba
+        # reteniendo 270.00 en vez de 540.00. En la práctica la sugerencia
+        # rellena todas las líneas al calcularse sus impuestos, pero se le
+        # puede quitar a una a mano; para que una línea vaya sin retención a
+        # propósito está la casilla del producto "Sin retención en pagos al
+        # exterior".
+        missing = self._l10n_do_exterior_lines_missing_retention()
+        if missing:
             raise UserError(_(
-                'Pago al exterior: falta la retención de ISR.\n\nAgregue en las líneas el '
-                'impuesto de retención del pago al exterior (en el plan l10n_do, "-27% ISR '
-                '(L253-12)"). Para que se agregue solo, indíquelo en la compañía, "Retenciones '
-                'del pago al exterior".\n\nSi es un gasto que no lleva retención (por ejemplo, '
-                'viáticos de un viaje fuera del país), marque en su producto "Sin retención en '
-                'pagos al exterior" (pestaña Contabilidad).'))
+                'Pago al exterior: falta la retención de ISR en %(lines)s.\n\n%(help)s',
+                lines=', '.join('"%s"' % (line.name or line.product_id.display_name)
+                                for line in missing),
+                help=missing_help))
 
     # =========================================
     # GENERADOR NCF (CON PROTECCIÓN RACE CONDITION)
