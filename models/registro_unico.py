@@ -226,27 +226,41 @@ class L10nDoRegistroUnico(models.Model):
         if not ncf_type:
             raise UserError(_('No existe tipo NCF B12. Configure en NCF → Tipos.'))
 
-        sequence = self.env['l10n_do_ncf.sequence'].search([
+        # Las agotadas entran en la busqueda para poder distinguir los dos
+        # casos: no hay secuencia registrada (hay que crearla) o la hay y se
+        # acabo (hay que pedir un rango nuevo). Se usa la ACTIVA con numeros
+        # libres de id mas alto, igual que en las facturas.
+        sequences = self.env['l10n_do_ncf.sequence'].search([
             ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
-            ('state', '=', 'active'),
-        ], limit=1)
+            ('state', 'in', ('active', 'depleted')),
+        ], order='id desc')
 
-        if not sequence:
+        if not sequences:
             raise UserError(_('No hay secuencia activa para B12.'))
 
-        if sequence.current_number > sequence.final_number:
-            raise UserError(_('Secuencia B12 agotada.'))
+        usables = sequences.filtered(
+            lambda s: s.state == 'active' and s.available_qty > 0)
+        if not usables:
+            raise UserError(_(
+                'Secuencia B12 agotada.\n\nSolicite un rango nuevo a la DGII, '
+                'registrelo y activelo.'))
+        sequence = usables[0]
 
-        prefix = ncf_type.prefix  # B12
-        ncf = '%s%08d' % (prefix, sequence.current_number)
+        # El NCF lo da la propia secuencia: ahi estan el bloqueo de
+        # concurrencia (FOR UPDATE NOWAIT), el formato y el aviso al ORM para
+        # que el panel se entere. Antes se calculaba aqui a mano, con dos
+        # fallos: leia sequence.final_number, un campo que no existe (asi que
+        # publicar cualquier B12 se caia con AttributeError), y trataba
+        # current_number como el SIGUIENTE numero cuando en el resto del
+        # modulo es el ULTIMO emitido, de modo que el primer B12 de una
+        # secuencia nueva habria salido como B1200000000.
+        ncf = sequence.sudo().get_next_ncf()
 
         self.write({
             'l10n_do_ncf_number': ncf,
             'l10n_do_ncf_seq_id': sequence.id,
         })
-
-        sequence.sudo().write({'current_number': sequence.current_number + 1})
         _logger.info('B12 NCF generado: %s | Fecha: %s', ncf, self.date)
 
     def _get_607_line_data(self):
