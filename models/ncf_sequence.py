@@ -513,7 +513,7 @@ class NcfSequence(models.Model):
             'type': 'ir.actions.act_window',
             'name': _('Facturas'),
             'res_model': 'account.move',
-            'view_mode': 'list,form',
+            'view_mode': 'tree,form',
             'domain': [('l10n_do_ncf_seq_id', '=', self.id)],
             'context': {'default_l10n_do_ncf_seq_id': self.id},
         }
