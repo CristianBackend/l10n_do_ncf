@@ -1671,11 +1671,15 @@ class AccountMove(models.Model):
 
         ncf_type = self.l10n_do_ncf_type_id
 
-        # Buscar secuencias candidatas
+        # Buscar secuencias candidatas. Las agotadas entran a proposito: no se
+        # pueden usar (el SELECT de abajo exige state 'active' y numero por
+        # debajo del rango), pero asi el aviso que recibe el contador es el
+        # preciso ("agotada: solicite nuevos NCF a la DGII") y no el de "no hay
+        # secuencia registrada", que es otra cosa.
         sequences = self.env['l10n_do_ncf.sequence'].sudo().search([
             ('ncf_type_id', '=', ncf_type.id),
             ('company_id', '=', self.company_id.id),
-            ('state', '=', 'active'),
+            ('state', 'in', ('active', 'depleted')),
         ], order='id desc')
 
         if not sequences:
@@ -1753,6 +1757,15 @@ class AccountMove(models.Model):
             SET current_number = %s, write_date = NOW()
             WHERE id = %s
         """, (next_num, seq_id))
+
+        # El numero se escribio por SQL (hace falta para el bloqueo de
+        # concurrencia), asi que hay que avisar al ORM. Sin esto, los campos
+        # GUARDADOS de la secuencia que dependen de current_number se quedan
+        # con el valor viejo: el porcentaje de uso y el semaforo del panel se
+        # ven congelados (0 % y verde) y el estado no pasa a "agotada".
+        sequence = self.env['l10n_do_ncf.sequence'].browse(seq_id)
+        sequence.invalidate_recordset(['current_number'])
+        sequence.modified(['current_number'])
 
         # Asignar NCF a la factura
         self.write({

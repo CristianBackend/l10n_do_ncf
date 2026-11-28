@@ -85,13 +85,18 @@ class TestGenerateNcf(NcfCommon):
 
     def test_exhausted_sequence_blocks_posting(self):
         self.seq_b01.unlink()
-        self._create_ncf_sequence('01', range_from=1, range_to=2)
+        sequence = self._create_ncf_sequence('01', range_from=1, range_to=2)
         self._create_invoice(self.partner_taxpayer, post=True)
         self._create_invoice(self.partner_taxpayer, post=True)
 
+        # Emitido el ultimo numero del rango, la secuencia queda agotada.
+        self.assertEqual(sequence.current_number, 2)
+        self.assertEqual(sequence.state, 'depleted')
+
         invoice = self._create_invoice(self.partner_taxpayer)
-        with self.assertRaises(UserError):
+        with self.assertRaises(UserError) as error:
             invoice.action_post()
+        self.assertIn('No hay secuencias disponibles', str(error.exception))
 
     def test_number_and_type_are_locked_once_assigned(self):
         invoice = self._create_invoice(self.partner_consumer, post=True)
