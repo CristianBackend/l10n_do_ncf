@@ -59,9 +59,12 @@ class NcfDashboard(models.AbstractModel):
         # =============================================
         # SECUENCIAS NCF ACTIVAS
         # =============================================
+        # Las agotadas entran a proposito: son las que el contador tiene que
+        # reponer. Si solo se listaran las activas, una secuencia desapareceria
+        # del panel justo al emitir su ultimo NCF, sin aviso.
         sequences = self.env['l10n_do_ncf.sequence'].search([
             ('company_id', '=', company_id),
-            ('state', '=', 'active')
+            ('state', 'in', ('active', 'depleted')),
         ])
 
         # =============================================
@@ -69,8 +72,21 @@ class NcfDashboard(models.AbstractModel):
         # =============================================
         alerts = []
         for seq in sequences:
+            # Alerta por secuencia agotada: ya no queda ningun NCF que emitir y
+            # hay que pedir un rango nuevo a la DGII.
+            if seq.state == 'depleted':
+                alerts.append({
+                    'type': 'danger',
+                    'icon': 'fa-times-circle',
+                    'title': 'Secuencia agotada',
+                    'message': '%s: se emitio el ultimo NCF del rango %s-%s. '
+                               'Solicite un rango nuevo a la DGII y actívelo.' % (
+                                   seq.ncf_type_id.name, seq.range_from, seq.range_to),
+                    'action': 'sequence',
+                    'id': seq.id
+                })
             # Alerta por pocas disponibles
-            if seq.available_qty <= seq.warning_threshold:
+            elif seq.available_qty <= seq.warning_threshold:
                 alerts.append({
                     'type': 'warning',
                     'icon': 'fa-exclamation-triangle',
