@@ -1657,14 +1657,14 @@ class AccountMove(models.Model):
                 raise UserError(_(
                     'Pago al exterior: falta la retención de ISR.\n\n%s', missing_help))
             return
-        # DIFERENCIA CON LA 19 (decidida con el cliente): la comprobación es
-        # POR LÍNEA, no por factura. En la 19 bastaba con que ALGUNA línea
-        # llevara retención, y en la práctica la llevaban todas porque la
-        # sugerencia entra al calcularse los impuestos de cada línea. En 16 la
+        # La comprobación es POR LÍNEA, no por factura: con que ALGUNA línea
+        # llevara retención, una factura de dos líneas de 1,000 se confirmaba
+        # reteniendo 270.00 en vez de 540.00. En la práctica la sugerencia
+        # rellena todas las líneas al calcularse sus impuestos, pero en 16 la
         # línea nace con el ITBIS que pone la compañía y hay que quitarlo a
-        # mano, así que una línea podía quedarse sin retención y la factura se
-        # confirmaba con menos ISR del que toca (270.00 en vez de 540.00 con
-        # dos líneas de 1,000). Con esto no se confirma nada infra-retenido.
+        # mano, así que es más fácil que una se quede sin retención. La misma
+        # regla está en la rama 19.0 (commit "la retención de ISR se exige
+        # línea por línea").
         missing = self._l10n_do_exterior_lines_missing_retention()
         if missing:
             raise UserError(_(

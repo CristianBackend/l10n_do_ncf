@@ -97,10 +97,10 @@ class TestExteriorNoRetention(NcfCommon):
         self.assertEqual(bill.l10n_do_isr_retenido, 540.0)
 
     def test_unmarked_line_without_retention_blocks_posting(self):
-        """DIFERENCIA CON LA 19 (decidida con el cliente): la comprobación al
-        confirmar es POR LÍNEA. En la 19 bastaba con que alguna línea llevara
-        retención, así que una línea sin ella se confirmaba y la factura salía
-        con menos ISR del que toca; aquí no se confirma."""
+        """La comprobación al confirmar es POR LÍNEA: antes bastaba con que
+        alguna línea llevara retención, así que una línea sin ella se
+        confirmaba y la factura declaraba menos ISR del que toca. La misma
+        regla está en la rama 19.0."""
         bill = self._form_bill([self.travel, self.service])
         self._line(bill, self.service).tax_ids = False
         with self.assertRaisesRegex(UserError, 'falta la retención de ISR'):
