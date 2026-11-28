@@ -21,3 +21,4 @@ from . import test_user_timezone
 from . import test_ir17
 from . import test_dashboard_stats
 from . import test_ncf_alerts
+from . import test_registro_unico_b12
