@@ -221,6 +221,54 @@ class NcfSequence(models.Model):
             else:
                 record.next_number = record.current_number + 1
 
+    # Los que se conocen hoy, como red: si el ORM cambia de sitio las
+    # dependencias, la migracion sigue haciendo su trabajo.
+    _L10N_DO_CURRENT_NUMBER_FIELDS = ('usage_percent', 'traffic_light', 'state')
+
+    @api.model
+    def _l10n_do_stored_fields_on_current_number(self):
+        """Campos GUARDADOS que se calculan a partir de current_number.
+
+        Las dependencias declaradas con @api.depends viven en el METODO de
+        calculo (su atributo _depends), no en el campo: ni en Odoo 16 ni en la
+        19 existe field.depends. De ahi se leen, asi que un campo guardado que
+        se agregue manana y dependa del numero entra solo.
+        """
+        nombres = set(self._L10N_DO_CURRENT_NUMBER_FIELDS)
+        for campo in self._fields.values():
+            if not (campo.store and campo.compute):
+                continue
+            metodo = (getattr(type(self), campo.compute, None)
+                      if isinstance(campo.compute, str) else campo.compute)
+            if 'current_number' in (getattr(metodo, '_depends', None) or ()):
+                nombres.add(campo.name)
+        return sorted(
+            nombre for nombre in nombres
+            if self._fields.get(nombre) is not None
+            and self._fields[nombre].store and self._fields[nombre].compute)
+
+    @api.model
+    def _l10n_do_recompute_current_number_fields(self):
+        """Recalcula los campos GUARDADOS que dependen de current_number.
+
+        El numero de la secuencia se escribe por SQL (el bloqueo de
+        concurrencia lo necesita) y el ORM no se enteraba, asi que las
+        secuencias que ya existian se quedaron con el porcentaje de uso, el
+        semaforo y el estado de antes. Esto los vuelve a calcular; lo llama la
+        migracion 19.0.4.2.10, y sirve tambien para poner al dia a mano una
+        base que venga de una version anterior.
+        """
+        sequences = self.with_context(active_test=False).search([])
+        if not sequences:
+            return sequences
+        nombres = self._l10n_do_stored_fields_on_current_number()
+        for nombre in nombres:
+            self.env.add_to_compute(self._fields[nombre], sequences)
+        self.env.flush_all()
+        _logger.info('l10n_do_ncf: recalculados %s en %s secuencias',
+                     ', '.join(nombres), len(sequences))
+        return sequences
+
     @api.depends('current_number', 'range_from')
     def _compute_used_qty(self):
         """Numeros ya emitidos de la secuencia.
