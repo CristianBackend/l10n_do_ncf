@@ -108,7 +108,11 @@ class NcfDashboard(models.AbstractModel):
         sequence_stats = []
         for seq in sequences:
             total = seq.range_to - seq.range_from + 1
-            used = seq.current_number - seq.range_from
+            # El consumo lo calcula la secuencia (used_qty): current_number es
+            # el ULTIMO numero emitido y vale 0 cuando no se emitio ninguno, asi
+            # que restando a secas una secuencia recien activada con rango
+            # 1-500 mostraba "-1 / 500" en el panel.
+            used = seq.used_qty
             available = seq.available_qty
             percentage = (available / total) * 100 if total > 0 else 0
             
