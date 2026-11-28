@@ -3,10 +3,10 @@
 
     <!-- Vista List -->
     <record id="view_ncf_type_list" model="ir.ui.view">
-        <field name="name">l10n_do_ncf.type.list</field>
+        <field name="name">l10n_do_ncf.type.tree</field>
         <field name="model">l10n_do_ncf.type</field>
         <field name="arch" type="xml">
-            <list string="Tipos de NCF">
+            <tree string="Tipos de NCF">
                 <field name="prefix"/>
                 <field name="name"/>
                 <field name="code"/>
@@ -16,7 +16,7 @@
                 <field name="for_purchase" widget="boolean"/>
                 <field name="requires_rnc" widget="boolean"/>
                 <field name="active" widget="boolean"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -54,7 +54,7 @@
                     <group>
                         <group string="Configuracion de Vencimiento">
                             <field name="aplica_vencimiento"/>
-                            <field name="vigencia_anos" invisible="not aplica_vencimiento"/>
+                            <field name="vigencia_anos" attrs="{'invisible': [('aplica_vencimiento', '=', False)]}"/>
                         </group>
                     </group>
                     <group string="Descripcion">
@@ -63,7 +63,7 @@
                     <notebook>
                         <page string="Secuencias" name="sequences">
                             <field name="sequence_ids">
-                                <list string="Secuencias">
+                                <tree string="Secuencias">
                                     <field name="name"/>
                                     <field name="range_from"/>
                                     <field name="range_to"/>
@@ -71,7 +71,7 @@
                                     <field name="available_qty"/>
                                     <field name="expiration_date"/>
                                     <field name="state" widget="badge" decoration-success="state == 'active'" decoration-warning="state == 'draft'" decoration-danger="state in ('depleted', 'expired')"/>
-                                </list>
+                                </tree>
                             </field>
                         </page>
                     </notebook>
@@ -84,7 +84,7 @@
     <record id="action_ncf_type" model="ir.actions.act_window">
         <field name="name">Tipos de NCF</field>
         <field name="res_model">l10n_do_ncf.type</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Tipos de Comprobantes Fiscales

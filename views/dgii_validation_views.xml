@@ -4,7 +4,7 @@
     <!-- ============================================= -->
     <!-- VALIDACIÓN DGII - FORMULARIO                 -->
     <!-- ============================================= -->
-    
+
     <record id="view_dgii_validation_form" model="ir.ui.view">
         <field name="name">l10n_do_ncf.dgii.validation.form</field>
         <field name="model">l10n_do_ncf.dgii.validation</field>
@@ -20,9 +20,9 @@
                     <group>
                         <group string="Datos Validados">
                             <field name="validation_type"/>
-                            <field name="rnc" invisible="validation_type != 'rnc'"/>
-                            <field name="ncf" invisible="validation_type != 'ncf'"/>
-                            <field name="vendor_rnc" invisible="validation_type != 'ncf'"/>
+                            <field name="rnc" attrs="{'invisible': [('validation_type', '!=', 'rnc')]}"/>
+                            <field name="ncf" attrs="{'invisible': [('validation_type', '!=', 'ncf')]}"/>
+                            <field name="vendor_rnc" attrs="{'invisible': [('validation_type', '!=', 'ncf')]}"/>
                             <field name="is_valid" widget="boolean_toggle"/>
                         </group>
                         <group string="Resultado">
@@ -33,7 +33,7 @@
                         </group>
                     </group>
 
-                    <group invisible="validation_type != 'ncf'">
+                    <group attrs="{'invisible': [('validation_type', '!=', 'ncf')]}">
                         <group string="Datos NCF">
                             <field name="ncf_type"/>
                             <field name="ncf_status"/>
@@ -46,7 +46,7 @@
                         <group string="Metadata">
                             <field name="validation_date"/>
                             <field name="company_id" groups="base.group_multi_company"/>
-                            <field name="error_message" invisible="not error_message"/>
+                            <field name="error_message" attrs="{'invisible': [('error_message', '=', False)]}"/>
                         </group>
                         <group string="Documento Relacionado">
                             <field name="move_id"/>
@@ -54,7 +54,7 @@
                         </group>
                     </group>
 
-                    <group string="Respuesta Raw" invisible="not response_raw">
+                    <group string="Respuesta Raw" attrs="{'invisible': [('response_raw', '=', False)]}">
                         <field name="response_raw" nolabel="1"/>
                     </group>
                 </sheet>
@@ -70,7 +70,7 @@
         <field name="name">l10n_do_ncf.dgii.validation.tree</field>
         <field name="model">l10n_do_ncf.dgii.validation</field>
         <field name="arch" type="xml">
-            <list string="Validaciones DGII" create="false" edit="false"
+            <tree string="Validaciones DGII" create="false" edit="false"
                   decoration-success="is_valid == True" decoration-danger="is_valid == False">
                 <field name="validation_date"/>
                 <field name="validation_type" widget="badge"/>
@@ -80,7 +80,7 @@
                 <field name="status"/>
                 <field name="is_valid" widget="boolean"/>
                 <field name="error_message" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -105,7 +105,7 @@
                 <separator/>
                 <filter name="today" string="Hoy" domain="[('validation_date', '&gt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
                 <filter name="last_24h" string="Últimas 24h" domain="[('validation_date', '&gt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'))]"/>
-                
+
                     <filter name="group_type" string="Tipo" context="{'group_by': 'validation_type'}"/>
                     <filter name="group_valid" string="Válido" context="{'group_by': 'is_valid'}"/>
                     <filter name="group_date" string="Fecha" context="{'group_by': 'validation_date:day'}"/>
@@ -169,7 +169,7 @@
         <field name="name">l10n_do_ncf.bc.exchange.rate.tree</field>
         <field name="model">l10n_do_ncf.bc.exchange.rate</field>
         <field name="arch" type="xml">
-            <list string="Tasas de Cambio BC" editable="bottom">
+            <tree string="Tasas de Cambio BC" editable="bottom">
                 <field name="date"/>
                 <field name="currency_id"/>
                 <field name="rate_buy"/>
@@ -177,7 +177,7 @@
                 <field name="rate_average" readonly="1"/>
                 <field name="source" widget="badge"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -198,7 +198,7 @@
                 <separator/>
                 <filter name="bc_api" string="API BC" domain="[('source', '=', 'bc_api')]"/>
                 <filter name="manual" string="Manual" domain="[('source', '=', 'manual')]"/>
-                
+
                     <filter name="group_month" string="Mes" context="{'group_by': 'date:month'}"/>
                     <filter name="group_currency" string="Moneda" context="{'group_by': 'currency_id'}"/>
                 </search>
@@ -233,7 +233,7 @@
         <field name="name">l10n_do_ncf.fiscal.audit.tree</field>
         <field name="model">l10n_do_ncf.fiscal.audit</field>
         <field name="arch" type="xml">
-            <list string="Auditoría Fiscal" create="false" edit="false"
+            <tree string="Auditoría Fiscal" create="false" edit="false"
                   decoration-info="event_type == 'ncf_generated'"
                   decoration-danger="event_type in ('ncf_annulled', 'validation_error', 'dgii_rejection')"
                   decoration-success="event_type == 'dgii_accepted'">
@@ -246,7 +246,7 @@
                 <field name="move_id" optional="show"/>
                 <field name="old_value" optional="hide"/>
                 <field name="new_value" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -287,7 +287,7 @@
                     <group string="Descripción">
                         <field name="description" nolabel="1"/>
                     </group>
-                    <group string="Datos Adicionales" invisible="not extra_data">
+                    <group string="Datos Adicionales" attrs="{'invisible': [('extra_data', '=', False)]}">
                         <field name="extra_data" nolabel="1"/>
                     </group>
                 </sheet>
@@ -315,7 +315,7 @@
                 <separator/>
                 <filter name="today" string="Hoy" domain="[('create_date', '&gt;=', (context_today()).strftime('%Y-%m-%d'))]"/>
                 <filter name="this_week" string="Esta Semana" domain="[('create_date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
-                
+
                     <filter name="group_type" string="Tipo Evento" context="{'group_by': 'event_type'}"/>
                     <filter name="group_user" string="Usuario" context="{'group_by': 'user_id'}"/>
                     <filter name="group_date" string="Fecha" context="{'group_by': 'create_date:day'}"/>
@@ -383,10 +383,9 @@
             <xpath expr="//field[@name='vat']" position="after">
                 <field name="l10n_do_dgii_validated" invisible="1"/>
                 <button name="action_validate_dgii" type="object"
-                        string="🔍 Validar DGII" class="btn-link"
-                        invisible="not vat"/>
-                <span class="badge bg-success ms-2" invisible="not l10n_do_dgii_validated">✓ Validado</span>
-                <field name="l10n_do_dgii_status" readonly="1" invisible="not l10n_do_dgii_validated"/>
+                        string="🔍 Validar DGII" class="btn-link" attrs="{'invisible': [('vat', '=', False)]}"/>
+                <span class="badge bg-success ms-2" attrs="{'invisible': [('l10n_do_dgii_validated', '=', False)]}">✓ Validado</span>
+                <field name="l10n_do_dgii_status" readonly="1" attrs="{'invisible': [('l10n_do_dgii_validated', '=', False)]}"/>
             </xpath>
         </field>
     </record>

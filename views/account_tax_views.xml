@@ -8,15 +8,14 @@
             <xpath expr="//sheet" position="inside">
                 <group string="DGII República Dominicana" name="dgii_rd">
                     <group>
-                        <field name="dgii_tax_kind" invisible="amount &lt; 0"/>
+                        <field name="dgii_tax_kind" attrs="{'invisible': [('amount', '&lt;', 0)]}"/>
                         <field name="dgii_retention_type"/>
                         <field name="dgii_606_bucket"/>
-                        <field name="dgii_isr_retention_type"
-                               invisible="dgii_retention_type != 'isr' and dgii_606_bucket != 'isr_retenido'"/>
+                        <field name="dgii_isr_retention_type" attrs="{'invisible': [('dgii_retention_type', '!=', 'isr'), ('dgii_606_bucket', '!=', 'isr_retenido')]}"/>
                     </group>
                     <group>
                         <field name="is_dgii_retention" readonly="1"/>
-                        <field name="dgii_itbis_zero_type" invisible="amount != 0"/>
+                        <field name="dgii_itbis_zero_type" attrs="{'invisible': [('amount', '!=', 0)]}"/>
                     </group>
                 </group>
             </xpath>

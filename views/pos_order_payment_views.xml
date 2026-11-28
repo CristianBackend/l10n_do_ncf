@@ -15,7 +15,7 @@
          ========================================================= -->
 
     <record id="view_pos_order_tree_payment_method" model="ir.ui.view">
-        <field name="name">pos.order.list.payment.method</field>
+        <field name="name">pos.order.tree.payment.method</field>
         <field name="model">pos.order</field>
         <field name="inherit_id" ref="point_of_sale.view_pos_order_tree"/>
         <field name="arch" type="xml">
@@ -37,8 +37,11 @@
         <field name="inherit_id" ref="point_of_sale.view_pos_order_filter"/>
         <field name="arch" type="xml">
             <!-- Filtros rapidos por metodo de pago real.
-                 Ancla: filtro 'cancelled', que existe en Odoo 19. -->
-            <xpath expr="//filter[@name='cancelled']" position="after">
+                 Ancla: filtro 'posted'. En Odoo 16 point_of_sale.view_pos_order_filter
+                 solo trae los filtros invoiced / posted / order_date
+                 (point_of_sale/views/pos_order_view.xml:392-395): no existe
+                 'cancelled', que era el ancla en la 19. -->
+            <xpath expr="//filter[@name='posted']" position="after">
                 <separator/>
                 <filter name="l10n_do_pay_cash" string="Pagado en Efectivo"
                         domain="[('l10n_do_payment_method_used', '=', 'cash')]"/>
@@ -51,8 +54,12 @@
             </xpath>
 
             <!-- Agrupacion correcta: campo Selection, no many2many.
-                 Ancla: agrupacion 'config_id' (Punto de venta). -->
-            <xpath expr="//filter[@name='config_id']" position="after">
+                 Ancla: agrupacion 'session'. En Odoo 16 el buscador del POS
+                 agrupa por session / user_id / customer / status / order_month
+                 (pos_order_view.xml:397-401): no hay agrupacion 'config_id',
+                 que era el ancla en la 19; 'session' es la equivalente (que
+                 caja hizo la venta). -->
+            <xpath expr="//filter[@name='session']" position="after">
                 <filter name="group_l10n_do_payment_method"
                         string="Método de Pago (real)"
                         context="{'group_by': 'l10n_do_payment_method_used'}"/>

@@ -9,7 +9,7 @@
         <field name="inherit_id" ref="account.view_account_journal_form"/>
         <field name="arch" type="xml">
             <xpath expr="//sheet//field[@name='type']" position="after">
-                <field name="l10n_do_payment_form" invisible="type not in ('bank', 'cash', 'credit')"/>
+                <field name="l10n_do_payment_form" attrs="{'invisible': [('type', 'not in', ('bank', 'cash', 'credit'))]}"/>
             </xpath>
         </field>
     </record>

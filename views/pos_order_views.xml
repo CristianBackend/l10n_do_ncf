@@ -8,7 +8,7 @@
 
     <!-- Vista de lista: agregar columna NCF -->
     <record id="view_pos_order_list_ncf" model="ir.ui.view">
-        <field name="name">pos.order.list.ncf</field>
+        <field name="name">pos.order.tree.ncf</field>
         <field name="model">pos.order</field>
         <field name="inherit_id" ref="point_of_sale.view_pos_order_tree"/>
         <field name="arch" type="xml">
@@ -25,7 +25,7 @@
         <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
         <field name="arch" type="xml">
             <xpath expr="//sheet" position="inside">
-                <group string="Información Fiscal (NCF)" invisible="not l10n_do_ncf_number">
+                <group string="Información Fiscal (NCF)" attrs="{'invisible': [('l10n_do_ncf_number', '=', False)]}">
                     <group>
                         <field name="l10n_do_ncf_number" readonly="1"/>
                         <field name="l10n_do_ncf_type" readonly="1"/>

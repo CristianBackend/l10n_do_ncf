@@ -12,19 +12,19 @@
             <form string="Registro Único B12">
                 <header>
                     <button name="action_confirm" string="Confirmar" type="object"
-                            class="btn-primary" invisible="state != 'draft'"/>
+                            class="btn-primary" attrs="{'invisible': [('state', '!=', 'draft')]}"/>
                     <button name="action_post" string="Publicar" type="object"
-                            class="btn-primary" invisible="state != 'confirmed'"/>
+                            class="btn-primary" attrs="{'invisible': [('state', '!=', 'confirmed')]}"/>
                     <button name="action_cancel" string="Cancelar" type="object"
-                            class="btn-secondary" invisible="state in ('cancelled', 'posted')"/>
+                            class="btn-secondary" attrs="{'invisible': [('state', 'in', ('cancelled', 'posted'))]}"/>
                     <button name="action_draft" string="A Borrador" type="object"
-                            class="btn-secondary" invisible="state != 'cancelled'"/>
+                            class="btn-secondary" attrs="{'invisible': [('state', '!=', 'cancelled')]}"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,confirmed,posted"/>
                 </header>
 
                 <sheet>
                     <!-- Banner NCF -->
-                    <div class="alert alert-success text-center" role="alert" invisible="not l10n_do_ncf_number">
+                    <div class="alert alert-success text-center" role="alert" attrs="{'invisible': [('l10n_do_ncf_number', '=', False)]}">
                         <strong>NCF B12:</strong>
                         <span class="fs-4 fw-bold ms-2"><field name="l10n_do_ncf_number" readonly="1"/></span>
                     </div>
@@ -37,8 +37,8 @@
 
                     <group>
                         <group string="Información">
-                            <field name="date" readonly="state != 'draft'"/>
-                            <field name="company_id" readonly="state != 'draft'" groups="base.group_multi_company"/>
+                            <field name="date" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
+                            <field name="company_id" groups="base.group_multi_company" attrs="{'readonly': [('state', '!=', 'draft')]}"/>
                         </group>
                         <group string="Totales">
                             <field name="total_transactions" readonly="1"/>
@@ -62,7 +62,7 @@
 
                     <notebook>
                         <page string="Transacciones" name="lines">
-                            <field name="line_ids" readonly="state == 'posted'" widget="one2many"/>
+                            <field name="line_ids" widget="one2many" attrs="{'readonly': [('state', '=', 'posted')]}"/>
                         </page>
 
                         <page string="Notas" name="notes">
@@ -71,17 +71,24 @@
                     </notebook>
                 </sheet>
 
-                <chatter/>
+                <!-- Odoo 16 no tiene la etiqueta <chatter/> (llego en 18): el
+                     chatter se escribe a mano, como en
+                     addons/account/views/account_move_views.xml:1238-1242. -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" groups="base.group_user"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record>
 
     <!-- Vista List para line_ids -->
     <record id="view_registro_unico_line_list" model="ir.ui.view">
-        <field name="name">l10n_do_ncf.registro.unico.line.list</field>
+        <field name="name">l10n_do_ncf.registro.unico.line.tree</field>
         <field name="model">l10n_do_ncf.registro.unico.line</field>
         <field name="arch" type="xml">
-            <list editable="bottom">
+            <tree editable="bottom">
                 <field name="reference"/>
                 <field name="date_time"/>
                 <field name="amount_untaxed" sum="Total Base"/>
@@ -89,16 +96,16 @@
                 <field name="amount_total" sum="Total"/>
                 <field name="payment_method"/>
                 <field name="notes" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
     <!-- Lista principal -->
     <record id="view_registro_unico_list" model="ir.ui.view">
-        <field name="name">l10n_do_ncf.registro.unico.list</field>
+        <field name="name">l10n_do_ncf.registro.unico.tree</field>
         <field name="model">l10n_do_ncf.registro.unico</field>
         <field name="arch" type="xml">
-            <list decoration-info="state == 'draft'"
+            <tree decoration-info="state == 'draft'"
                   decoration-warning="state == 'confirmed'"
                   decoration-success="state == 'posted'"
                   decoration-muted="state == 'cancelled'">
@@ -114,7 +121,7 @@
                        decoration-danger="state == 'cancelled'"/>
                 <field name="l10n_do_reported_607" widget="boolean"/>
                 <field name="company_id" groups="base.group_multi_company"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -144,7 +151,7 @@
     <record id="action_registro_unico" model="ir.actions.act_window">
         <field name="name">Registro Único B12</field>
         <field name="res_model">l10n_do_ncf.registro.unico</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="context">{'search_default_not_reported': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">

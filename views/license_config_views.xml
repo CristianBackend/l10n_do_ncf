@@ -14,25 +14,21 @@
                     <button name="action_validate_license"
                             string="Validar Licencia"
                             type="object"
-                            class="btn-primary"
-                            invisible="status == 'active'"/>
+                            class="btn-primary" attrs="{'invisible': [('status', '=', 'active')]}"/>
                     <button name="action_validate_license"
                             string="Revalidar"
                             type="object"
-                            class="btn-secondary"
-                            invisible="status != 'active'"/>
+                            class="btn-secondary" attrs="{'invisible': [('status', '!=', 'active')]}"/>
                     <!-- RENOVAR: Solo visible 5 días antes de vencer o si ya expiró -->
                     <button name="action_buy_license"
                             string="Renovar Licencia"
                             type="object"
-                            class="btn-warning"
-                            invisible="not (status in ('expired', 'invalid', 'blocked') or (status == 'active' and days_remaining &lt;= 5))"/>
+                            class="btn-warning" attrs="{'invisible': ['&amp;', ('status', 'not in', ('expired', 'invalid', 'blocked')), '|', ('status', '!=', 'active'), ('days_remaining', '&gt;', 5)]}"/>
                     <field name="status" widget="statusbar" statusbar_visible="pending,active,expired"/>
                 </header>
                 <sheet>
                     <!-- SIN LICENCIA CONFIGURADA -->
-                    <div class="alert alert-warning text-center p-4" role="status"
-                         invisible="license_key and license_key != 'INGRESE-SU-LICENCIA'">
+                    <div class="alert alert-warning text-center p-4" role="status" attrs="{'invisible': [('license_key', '!=', False), ('license_key', '!=', 'INGRESE-SU-LICENCIA')]}">
                         <div style="font-size: 48px; margin-bottom: 15px;">🔑</div>
                         <h3 class="mb-3"><strong>Licencia Requerida</strong></h3>
                         <p class="mb-3">Para usar el módulo NCF necesita una licencia activa.</p>
@@ -46,8 +42,7 @@
                     </div>
 
                     <!-- LICENCIA ACTIVA (más de 5 días) -->
-                    <div class="alert alert-success p-4" role="status"
-                         invisible="status != 'active' or days_remaining &lt;= 5">
+                    <div class="alert alert-success p-4" role="status" attrs="{'invisible': ['|', ('status', '!=', 'active'), ('days_remaining', '&lt;=', 5)]}">
                         <div class="d-flex align-items-center">
                             <div style="font-size: 64px; margin-right: 25px;">✅</div>
                             <div class="flex-grow-1">
@@ -63,8 +58,7 @@
                     </div>
 
                     <!-- LICENCIA POR VENCER (5 días o menos) -->
-                    <div class="alert alert-warning p-4" role="status"
-                         invisible="status != 'active' or days_remaining &gt; 5">
+                    <div class="alert alert-warning p-4" role="status" attrs="{'invisible': ['|', ('status', '!=', 'active'), ('days_remaining', '&gt;', 5)]}">
                         <div class="d-flex align-items-center">
                             <div style="font-size: 64px; margin-right: 25px;">⚠️</div>
                             <div class="flex-grow-1">
@@ -84,14 +78,13 @@
                     </div>
 
                     <!-- LICENCIA EXPIRADA/INVÁLIDA -->
-                    <div class="alert alert-danger p-4" role="status"
-                         invisible="status not in ('expired', 'invalid', 'blocked')">
+                    <div class="alert alert-danger p-4" role="status" attrs="{'invisible': [('status', 'not in', ('expired', 'invalid', 'blocked'))]}">
                         <div class="d-flex align-items-center">
                             <div style="font-size: 64px; margin-right: 25px;">❌</div>
                             <div class="flex-grow-1">
                                 <h3 class="mb-2"><strong>Licencia Inválida o Expirada</strong></h3>
                                 <p class="mb-2">Su licencia ha expirado o es inválida. Las funciones NCF están deshabilitadas.</p>
-                                <p class="mb-3 text-danger" invisible="not validation_message">
+                                <p class="mb-3 text-danger" attrs="{'invisible': [('validation_message', '=', False)]}">
                                     <field name="validation_message" readonly="1" nolabel="1"/>
                                 </p>
                                 <a href="https://node-a1.newplain.com/buy/" target="_blank"
@@ -103,8 +96,7 @@
                     </div>
 
                     <!-- PENDIENTE DE VALIDACIÓN -->
-                    <div class="alert alert-info p-4" role="status"
-                         invisible="status != 'pending' or not license_key or license_key == 'INGRESE-SU-LICENCIA'">
+                    <div class="alert alert-info p-4" role="status" attrs="{'invisible': ['|', '|', ('status', '!=', 'pending'), ('license_key', '=', False), ('license_key', '=', 'INGRESE-SU-LICENCIA')]}">
                         <div class="d-flex align-items-center">
                             <div style="font-size: 64px; margin-right: 25px;">🔄</div>
                             <div class="flex-grow-1">
@@ -115,7 +107,7 @@
                     </div>
 
                     <!-- INFORMACIÓN DE LICENCIA (solo si activa) -->
-                    <group invisible="status != 'active'">
+                    <group attrs="{'invisible': [('status', '!=', 'active')]}">
                         <group string="Información de Licencia">
                             <field name="licensed_company_name" string="Empresa Licenciada" readonly="1"/>
                             <field name="company_rnc" string="RNC" readonly="1"/>
@@ -129,16 +121,16 @@
                     </group>
 
                     <!-- FORMULARIO DE CONFIGURACIÓN (solo si NO hay licencia activa) -->
-                    <group string="Configurar Licencia" invisible="status == 'active'">
+                    <group string="Configurar Licencia" attrs="{'invisible': [('status', '=', 'active')]}">
                         <group>
-                            <field name="license_key" 
+                            <field name="license_key"
                                    placeholder="NCF-2025-XXXXXXXX"
                                    required="1"/>
-                            <field name="company_rnc" 
-                                   string="RNC de la Empresa" 
+                            <field name="company_rnc"
+                                   string="RNC de la Empresa"
                                    placeholder="123456789"
                                    required="1"/>
-                            <field name="company_id" 
+                            <field name="company_id"
                                    groups="base.group_multi_company"
                                    readonly="1"/>
                         </group>
@@ -165,10 +157,10 @@
 
     <!-- VISTA DE LISTA -->
     <record id="view_ncf_license_config_list" model="ir.ui.view">
-        <field name="name">l10n_do_ncf.license.config.list</field>
+        <field name="name">l10n_do_ncf.license.config.tree</field>
         <field name="model">l10n_do_ncf.license.config</field>
         <field name="arch" type="xml">
-            <list string="Licencias NCF" create="false" delete="false">
+            <tree string="Licencias NCF" create="false" delete="false">
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="licensed_company_name" string="Empresa"/>
                 <field name="company_rnc" string="RNC"/>
@@ -179,7 +171,7 @@
                 <field name="days_remaining" string="Días Restantes"/>
                 <field name="expiration_date" string="Vencimiento"/>
                 <field name="is_valid" string="Válida" widget="boolean"/>
-            </list>
+            </tree>
         </field>
     </record>
 

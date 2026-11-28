@@ -22,27 +22,27 @@
                                placeholder="Ej: Cliente al Contado"/>
                     </group>
                 </group>
-                
-                <group string="Secuencias NCF" invisible="not l10n_do_ncf_enabled">
+
+                <group string="Secuencias NCF" attrs="{'invisible': [('l10n_do_ncf_enabled', '=', False)]}">
                     <group>
-                        <field name="l10n_do_ncf_sequence_id" 
+                        <field name="l10n_do_ncf_sequence_id"
                                placeholder="Seleccionar secuencia B02..."
                                options="{'no_create': True}"/>
-                        <field name="l10n_do_ncf_fiscal_sequence_id" 
+                        <field name="l10n_do_ncf_fiscal_sequence_id"
                                placeholder="Seleccionar secuencia B01..."
                                options="{'no_create': True}"/>
                     </group>
                     <group>
-                        <field name="l10n_do_ncf_special_sequence_id" 
+                        <field name="l10n_do_ncf_special_sequence_id"
                                placeholder="Seleccionar secuencia B14..."
                                options="{'no_create': True}"/>
-                        <field name="l10n_do_ncf_gov_sequence_id" 
+                        <field name="l10n_do_ncf_gov_sequence_id"
                                placeholder="Seleccionar secuencia B15..."
                                options="{'no_create': True}"/>
                     </group>
                 </group>
 
-                <div class="alert alert-info" role="status" invisible="not l10n_do_ncf_enabled">
+                <div class="alert alert-info" role="status" attrs="{'invisible': [('l10n_do_ncf_enabled', '=', False)]}">
                     <strong>Información:</strong>
                     <ul class="mb-0 mt-2">
                         <li>El NCF se genera automáticamente al confirmar el pago</li>

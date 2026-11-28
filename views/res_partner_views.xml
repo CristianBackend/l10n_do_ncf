@@ -17,12 +17,10 @@
 
             <!-- Agregar badge de estado DGII junto al nombre -->
             <xpath expr="//field[@name='name']" position="after">
-                <span class="badge rounded-pill bg-success ms-2" 
-                      invisible="not l10n_do_rnc_validated">
+                <span class="badge rounded-pill bg-success ms-2" attrs="{'invisible': [('l10n_do_rnc_validated', '=', False)]}">
                     ✓ DGII Validado
                 </span>
-                <span class="badge rounded-pill bg-warning ms-2" 
-                      invisible="l10n_do_rnc_validated or not vat">
+                <span class="badge rounded-pill bg-warning ms-2" attrs="{'invisible': ['|', ('l10n_do_rnc_validated', '!=', False), ('vat', '=', False)]}">
                     ⏳ Sin validar
                 </span>
             </xpath>
@@ -30,11 +28,11 @@
             <!-- Pestaña Fiscal RD simplificada -->
             <xpath expr="//notebook" position="inside">
                 <page string="Fiscal RD" name="fiscal_rd">
-                    <div class="alert alert-info" role="status" invisible="l10n_do_rnc_validated">
+                    <div class="alert alert-info" role="status" attrs="{'invisible': [('l10n_do_rnc_validated', '!=', False)]}">
                         <strong>💡 Tip:</strong> Ingrese el RNC/Cedula arriba y los datos se llenaran automaticamente desde DGII.
                     </div>
-                    
-                    <div class="alert alert-success" role="status" invisible="not l10n_do_rnc_validated">
+
+                    <div class="alert alert-success" role="status" attrs="{'invisible': [('l10n_do_rnc_validated', '=', False)]}">
                         <strong>✅ Validado en DGII</strong> - Los datos fueron verificados correctamente.
                     </div>
 
@@ -43,10 +41,9 @@
                             <field name="l10n_do_dgii_tax_payer_type" string="Tipo"/>
                             <field name="l10n_do_is_informal_supplier"/>
                             <field name="l10n_do_609_related_party"/>
-                            <field name="l10n_do_dgii_status" string="Estado DGII" readonly="1" 
-                                   invisible="not l10n_do_rnc_validated"/>
+                            <field name="l10n_do_dgii_status" string="Estado DGII" readonly="1" attrs="{'invisible': [('l10n_do_rnc_validated', '=', False)]}"/>
                         </group>
-                        <group string="Detalles DGII" invisible="not l10n_do_rnc_validated">
+                        <group string="Detalles DGII" attrs="{'invisible': [('l10n_do_rnc_validated', '=', False)]}">
                             <field name="l10n_do_dgii_activity" string="Actividad" readonly="1"/>
                             <field name="l10n_do_rnc_validation_date" string="Validado el" readonly="1"/>
                             <field name="l10n_do_rnc_validated" invisible="1"/>

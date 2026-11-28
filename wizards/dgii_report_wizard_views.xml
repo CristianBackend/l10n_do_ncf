@@ -5,7 +5,7 @@
         <field name="model">l10n_do_ncf.dgii.report.wizard</field>
         <field name="arch" type="xml">
             <form string="Generar Reporte DGII">
-                <div invisible="state == 'generated'">
+                <div attrs="{'invisible': [('state', '=', 'generated')]}">
                     <div class="alert alert-info text-center mb-3" role="status">
                         <strong>Reportes DGII</strong> - Norma General 07-2018
                     </div>
@@ -26,13 +26,13 @@
                     </div>
                 </div>
 
-                <div invisible="state != 'generated'">
+                <div attrs="{'invisible': [('state', '!=', 'generated')]}">
                     <div class="alert alert-success text-center mb-3" role="status">
                         <h4 class="mb-2"><strong>Reporte Generado Exitosamente</strong></h4>
                         <p class="mb-0">El archivo esta listo para descargar y enviar a DGII.</p>
                     </div>
 
-                    <div class="alert alert-warning mb-3" role="alert" invisible="not pending_message">
+                    <div class="alert alert-warning mb-3" role="alert" attrs="{'invisible': [('pending_message', '=', False)]}">
                         <strong>Pendientes de completar.</strong>
                         Estos datos faltan y se dejaron vacíos (no se inventan): la herramienta de
                         la DGII rechazará esos registros hasta que se completen en las facturas.
@@ -45,14 +45,12 @@
                             <field name="record_count" string="Registros"/>
                         </group>
                         <group>
-                            <field name="total_amount" string="Monto Total"
-                                   invisible="report_type in ('608', 'ir17')"/>
-                            <field name="total_itbis" string="Total ITBIS"
-                                   invisible="report_type in ('608', '609', 'ir17')"/>
+                            <field name="total_amount" string="Monto Total" attrs="{'invisible': [('report_type', 'in', ('608', 'ir17'))]}"/>
+                            <field name="total_itbis" string="Total ITBIS" attrs="{'invisible': [('report_type', 'in', ('608', '609', 'ir17'))]}"/>
                         </group>
                     </group>
 
-                    <group string="Detalle de Retenciones" invisible="report_type != 'ir17'">
+                    <group string="Detalle de Retenciones" attrs="{'invisible': [('report_type', '!=', 'ir17')]}">
                         <group>
                             <field name="ir17_total_isr" string="Retencion ISR"/>
                             <field name="ir17_total_itbis" string="Retencion ITBIS"/>
@@ -66,19 +64,17 @@
                 </div>
 
                 <field name="state" invisible="1"/>
-                <field name="report_type" invisible="state == 'generated'"/>
+                <field name="report_type" attrs="{'invisible': [('state', '=', 'generated')]}"/>
 
                 <footer>
                     <button name="action_generate_report" string="Generar Reporte" type="object"
-                            class="btn-primary" invisible="state == 'generated'"/>
-                    <button string="Cancelar" class="btn-secondary" special="cancel"
-                            invisible="state == 'generated'"/>
+                            class="btn-primary" attrs="{'invisible': [('state', '=', 'generated')]}"/>
+                    <button string="Cancelar" class="btn-secondary" special="cancel" attrs="{'invisible': [('state', '=', 'generated')]}"/>
                     <button name="action_download" string="Descargar Archivo" type="object"
-                            class="btn-success" invisible="state != 'generated'"/>
+                            class="btn-success" attrs="{'invisible': [('state', '!=', 'generated')]}"/>
                     <button name="action_reset" string="Generar Otro" type="object"
-                            class="btn-primary" invisible="state != 'generated'"/>
-                    <button string="Cerrar" class="btn-secondary" special="cancel"
-                            invisible="state != 'generated'"/>
+                            class="btn-primary" attrs="{'invisible': [('state', '!=', 'generated')]}"/>
+                    <button string="Cerrar" class="btn-secondary" special="cancel" attrs="{'invisible': [('state', '!=', 'generated')]}"/>
                 </footer>
             </form>
         </field>

@@ -9,26 +9,26 @@
 
                 <div class="text-center mb-4 p-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px;">
                     <h2 style="color: white; margin: 0;">
-                        <span invisible="state != 'step1'">Paso 1 de 3: Datos de la Empresa</span>
-                        <span invisible="state != 'step2'">Paso 2 de 3: Secuencias NCF</span>
-                        <span invisible="state != 'step3'">Paso 3 de 3: Notificaciones</span>
-                        <span invisible="state != 'done'">Configuracion Completada</span>
+                        <span attrs="{'invisible': [('state', '!=', 'step1')]}">Paso 1 de 3: Datos de la Empresa</span>
+                        <span attrs="{'invisible': [('state', '!=', 'step2')]}">Paso 2 de 3: Secuencias NCF</span>
+                        <span attrs="{'invisible': [('state', '!=', 'step3')]}">Paso 3 de 3: Notificaciones</span>
+                        <span attrs="{'invisible': [('state', '!=', 'done')]}">Configuracion Completada</span>
                     </h2>
 
                     <div class="mt-3" style="display: flex; justify-content: center; align-items: center; gap: 10px;">
                         <div style="width: 40px; height: 40px; border-radius: 50%; background: white; color: #667eea; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                            <span invisible="state == 'step1'">&#10003;</span>
-                            <span invisible="state != 'step1'">1</span>
+                            <span attrs="{'invisible': [('state', '=', 'step1')]}">&#10003;</span>
+                            <span attrs="{'invisible': [('state', '!=', 'step1')]}">1</span>
                         </div>
                         <div style="width: 60px; height: 4px; background: rgba(255,255,255,0.5);"></div>
                         <div style="width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.3); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                            <span invisible="state in ('step1', 'step2')">&#10003;</span>
-                            <span invisible="state not in ('step1', 'step2')">2</span>
+                            <span attrs="{'invisible': [('state', 'in', ('step1', 'step2'))]}">&#10003;</span>
+                            <span attrs="{'invisible': [('state', 'not in', ('step1', 'step2'))]}">2</span>
                         </div>
                         <div style="width: 60px; height: 4px; background: rgba(255,255,255,0.5);"></div>
                         <div style="width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.3); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                            <span invisible="state != 'done'">&#10003;</span>
-                            <span invisible="state == 'done'">3</span>
+                            <span attrs="{'invisible': [('state', '!=', 'done')]}">&#10003;</span>
+                            <span attrs="{'invisible': [('state', '=', 'done')]}">3</span>
                         </div>
                     </div>
                 </div>
@@ -38,7 +38,7 @@
                 <field name="can_proceed" invisible="1"/>
 
                 <!-- PASO 1: DATOS EMPRESA -->
-                <div invisible="state != 'step1'" class="p-3">
+                <div class="p-3" attrs="{'invisible': [('state', '!=', 'step1')]}">
                     <div class="alert alert-info" role="status">
                         <strong>Informacion:</strong>
                         Ingrese el RNC de su empresa para validarlo con la DGII.
@@ -46,7 +46,7 @@
 
                     <group>
                         <group string="Datos de la Empresa">
-                            <field name="company_rnc" placeholder="Ej: 101234567 o 12345678901" required="state == 'step1'"/>
+                            <field name="company_rnc" placeholder="Ej: 101234567 o 12345678901" attrs="{'required': [('state', '=', 'step1')]}"/>
                         </group>
                         <group string="Resultado Validacion">
                             <field name="company_name_dgii" readonly="1"/>
@@ -63,7 +63,7 @@
                 </div>
 
                 <!-- PASO 2: SECUENCIAS NCF -->
-                <div invisible="state != 'step2'" class="p-3">
+                <div class="p-3" attrs="{'invisible': [('state', '!=', 'step2')]}">
                     <div class="alert alert-info" role="status">
                         <strong>Informacion:</strong>
                         Seleccione los tipos de comprobantes que necesita.
@@ -73,8 +73,8 @@
                     <group>
                         <group string="Comprobantes Principales">
                             <field name="create_b01" widget="boolean_toggle"/>
-                            <label for="b01_start" invisible="not create_b01"/>
-                            <div invisible="not create_b01" class="o_row">
+                            <label for="b01_start" attrs="{'invisible': [('create_b01', '=', False)]}"/>
+                            <div class="o_row" attrs="{'invisible': [('create_b01', '=', False)]}">
                                 <span>Del </span>
                                 <field name="b01_start" class="oe_inline" style="width: 80px;"/>
                                 <span> al </span>
@@ -82,8 +82,8 @@
                             </div>
 
                             <field name="create_b02" widget="boolean_toggle"/>
-                            <label for="b02_start" invisible="not create_b02"/>
-                            <div invisible="not create_b02" class="o_row">
+                            <label for="b02_start" attrs="{'invisible': [('create_b02', '=', False)]}"/>
+                            <div class="o_row" attrs="{'invisible': [('create_b02', '=', False)]}">
                                 <span>Del </span>
                                 <field name="b02_start" class="oe_inline" style="width: 80px;"/>
                                 <span> al </span>
@@ -93,8 +93,8 @@
 
                         <group string="Comprobantes Especiales (Opcional)">
                             <field name="create_b14" widget="boolean_toggle"/>
-                            <label for="b14_start" invisible="not create_b14"/>
-                            <div invisible="not create_b14" class="o_row">
+                            <label for="b14_start" attrs="{'invisible': [('create_b14', '=', False)]}"/>
+                            <div class="o_row" attrs="{'invisible': [('create_b14', '=', False)]}">
                                 <span>Del </span>
                                 <field name="b14_start" class="oe_inline" style="width: 80px;"/>
                                 <span> al </span>
@@ -102,8 +102,8 @@
                             </div>
 
                             <field name="create_b15" widget="boolean_toggle"/>
-                            <label for="b15_start" invisible="not create_b15"/>
-                            <div invisible="not create_b15" class="o_row">
+                            <label for="b15_start" attrs="{'invisible': [('create_b15', '=', False)]}"/>
+                            <div class="o_row" attrs="{'invisible': [('create_b15', '=', False)]}">
                                 <span>Del </span>
                                 <field name="b15_start" class="oe_inline" style="width: 80px;"/>
                                 <span> al </span>
@@ -112,13 +112,13 @@
                         </group>
                     </group>
 
-                    <div class="alert alert-warning mt-3" role="status" invisible="create_b01 or create_b02 or create_b14 or create_b15">
+                    <div class="alert alert-warning mt-3" role="status" attrs="{'invisible': ['|', '|', '|', ('create_b01', '!=', False), ('create_b02', '!=', False), ('create_b14', '!=', False), ('create_b15', '!=', False)]}">
                         <strong>Atencion:</strong> Debe seleccionar al menos un tipo de comprobante para continuar.
                     </div>
                 </div>
 
                 <!-- PASO 3: NOTIFICACIONES -->
-                <div invisible="state != 'step3'" class="p-3">
+                <div class="p-3" attrs="{'invisible': [('state', '!=', 'step3')]}">
                     <div class="alert alert-info" role="status">
                         <strong>Informacion:</strong>
                         Configure alertas para no quedarse sin NCF disponibles.
@@ -127,11 +127,9 @@
                     <group>
                         <group string="Alertas de NCF">
                             <field name="enable_alerts" widget="boolean_toggle"/>
-                            <field name="alert_email" placeholder="tu@email.com"
-                                   invisible="not enable_alerts"/>
-                            <label for="low_stock_threshold" string="Alertar cuando queden menos de"
-                                   invisible="not enable_alerts"/>
-                            <div invisible="not enable_alerts" class="o_row">
+                            <field name="alert_email" placeholder="tu@email.com" attrs="{'invisible': [('enable_alerts', '=', False)]}"/>
+                            <label for="low_stock_threshold" string="Alertar cuando queden menos de" attrs="{'invisible': [('enable_alerts', '=', False)]}"/>
+                            <div class="o_row" attrs="{'invisible': [('enable_alerts', '=', False)]}">
                                 <field name="low_stock_threshold" class="oe_inline" style="width: 60px;"/>
                                 <span> NCF disponibles</span>
                             </div>
@@ -140,7 +138,7 @@
                 </div>
 
                 <!-- COMPLETADO -->
-                <div invisible="state != 'done'" class="p-4 text-center">
+                <div class="p-4 text-center" attrs="{'invisible': [('state', '!=', 'done')]}">
                     <div style="font-size: 80px; color: #28a745;">&#10003;</div>
                     <h2 class="text-success">Configuracion Completada</h2>
                     <p class="text-muted">
@@ -153,21 +151,20 @@
                 <footer>
                     <button name="action_previous" type="object"
                             string="Anterior" class="btn btn-secondary"
-                            invisible="state in ('step1', 'done')"
-                            icon="fa-arrow-left"/>
+
+                            icon="fa-arrow-left" attrs="{'invisible': [('state', 'in', ('step1', 'done'))]}"/>
 
                     <button name="action_next" type="object"
                             string="Siguiente" class="btn btn-primary"
-                            invisible="state == 'done' or not can_proceed"
-                            icon="fa-arrow-right"/>
+
+                            icon="fa-arrow-right" attrs="{'invisible': ['|', ('state', '=', 'done'), ('can_proceed', '=', False)]}"/>
 
                     <button string="Siguiente" class="btn btn-secondary"
-                            invisible="state == 'done' or can_proceed"
-                            disabled="1"
-                            icon="fa-arrow-right"/>
 
-                    <button string="Cerrar" class="btn btn-secondary" special="cancel"
-                            invisible="state != 'done'"/>
+                            disabled="1"
+                            icon="fa-arrow-right" attrs="{'invisible': ['|', ('state', '=', 'done'), ('can_proceed', '!=', False)]}"/>
+
+                    <button string="Cerrar" class="btn btn-secondary" special="cancel" attrs="{'invisible': [('state', '!=', 'done')]}"/>
                 </footer>
 
             </form>

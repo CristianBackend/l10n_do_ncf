@@ -6,8 +6,8 @@
         <field name="inherit_id" ref="account.product_template_form_view"/>
         <field name="arch" type="xml">
             <group name="properties" position="inside">
-                <group string="República Dominicana" name="l10n_do"
-                       invisible="'DO' not in (fiscal_country_codes or '')">
+                <field name="l10n_do_fiscal_country_is_do" invisible="1"/>
+                <group string="República Dominicana" name="l10n_do" attrs="{'invisible': [('l10n_do_fiscal_country_is_do', '=', False)]}">
                     <field name="l10n_do_no_exterior_retention"/>
                 </group>
             </group>

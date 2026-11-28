@@ -400,6 +400,19 @@ class AccountMove(models.Model):
         compute='_compute_amount_dop', store=True, currency_field='l10n_do_dop_currency_id'
     )
     l10n_do_dop_currency_id = fields.Many2one('res.currency', compute='_compute_dop_currency', store=True)
+    # Los attrs de Odoo 16 son dominios: no pueden comparar dos campos entre si
+    # ("currency_id == l10n_do_dop_currency_id"). Este booleano lleva esa misma
+    # comparacion para la seccion Multimoneda de la vista. store=False.
+    l10n_do_is_dop_currency = fields.Boolean(
+        compute='_compute_l10n_do_is_dop_currency',
+        string='Factura en DOP',
+        help='Tecnico: la moneda de la factura es la misma que la moneda DOP de '
+             'referencia, asi que no hay nada multimoneda que mostrar.')
+
+    @api.depends('currency_id', 'l10n_do_dop_currency_id')
+    def _compute_l10n_do_is_dop_currency(self):
+        for move in self:
+            move.l10n_do_is_dop_currency = move.currency_id == move.l10n_do_dop_currency_id
 
     # =========================================
     # FORMA DE PAGO

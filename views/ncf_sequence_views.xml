@@ -3,10 +3,10 @@
 
     <!-- Vista List con Semaforo -->
     <record id="view_ncf_sequence_list" model="ir.ui.view">
-        <field name="name">l10n_do_ncf.sequence.list</field>
+        <field name="name">l10n_do_ncf.sequence.tree</field>
         <field name="model">l10n_do_ncf.sequence</field>
         <field name="arch" type="xml">
-            <list string="Secuencias NCF"
+            <tree string="Secuencias NCF"
                   decoration-danger="state in ('depleted', 'expired')"
                   decoration-muted="state == 'draft'">
                 <field name="ncf_type_id" string="Tipo"/>
@@ -24,7 +24,7 @@
                        decoration-success="state == 'active'"
                        decoration-warning="state == 'draft'"
                        decoration-danger="state in ('depleted', 'expired')"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -35,11 +35,11 @@
         <field name="arch" type="xml">
             <form string="Secuencia NCF">
                 <header>
-                    <button name="action_activate" string="Activar Secuencia" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_activate" string="Activar Secuencia" type="object" class="btn-primary" attrs="{'invisible': [('state', '!=', 'draft')]}"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,active,depleted,expired"/>
                 </header>
                 <sheet>
-                    <div class="alert alert-info" role="status" invisible="state != 'draft'">
+                    <div class="alert alert-info" role="status" attrs="{'invisible': [('state', '!=', 'draft')]}">
                         <h4>Como obtener secuencias NCF de la DGII:</h4>
                         <ol>
                             <li>Ingrese a la <strong>Oficina Virtual DGII</strong> (dgii.gov.do)</li>
@@ -50,26 +50,26 @@
                         </ol>
                     </div>
 
-                    <div class="alert alert-success" role="status" invisible="state != 'active' or traffic_light != 'green'">
+                    <div class="alert alert-success" role="status" attrs="{'invisible': ['|', ('state', '!=', 'active'), ('traffic_light', '!=', 'green')]}">
                         <strong>Secuencia OK</strong> -
                         Disponibles: <field name="available_qty" class="oe_inline" readonly="1"/> NCF
                     </div>
 
-                    <div class="alert alert-warning" role="status" invisible="state != 'active' or traffic_light != 'yellow'">
+                    <div class="alert alert-warning" role="status" attrs="{'invisible': ['|', ('state', '!=', 'active'), ('traffic_light', '!=', 'yellow')]}">
                         <strong>Atencion</strong> -
                         Quedan solo <field name="available_qty" class="oe_inline" readonly="1"/> NCF disponibles. Considere solicitar mas a la DGII.
                     </div>
 
-                    <div class="alert alert-danger" role="status" invisible="state != 'active' or traffic_light != 'red'">
+                    <div class="alert alert-danger" role="status" attrs="{'invisible': ['|', ('state', '!=', 'active'), ('traffic_light', '!=', 'red')]}">
                         <strong>Urgente</strong> -
                         Solo quedan <field name="available_qty" class="oe_inline" readonly="1"/> NCF. Solicite mas a la DGII inmediatamente.
                     </div>
 
-                    <div class="alert alert-danger" role="status" invisible="state != 'depleted'">
+                    <div class="alert alert-danger" role="status" attrs="{'invisible': [('state', '!=', 'depleted')]}">
                         <strong>Secuencia Agotada</strong> - Debe solicitar una nueva secuencia a la DGII.
                     </div>
 
-                    <div class="alert alert-warning" role="status" invisible="state != 'expired'">
+                    <div class="alert alert-warning" role="status" attrs="{'invisible': [('state', '!=', 'expired')]}">
                         <strong>Secuencia Vencida</strong> - Esta secuencia ha expirado.
                     </div>
 
@@ -98,7 +98,7 @@
                         <group string="Fechas">
                             <field name="authorization_date" string="Fecha Autorizacion"/>
                             <field name="aplica_vencimiento" string="Aplica Vencimiento" readonly="1"/>
-                            <field name="expiration_date" string="Fecha Vencimiento" invisible="not aplica_vencimiento"/>
+                            <field name="expiration_date" string="Fecha Vencimiento" attrs="{'invisible': [('aplica_vencimiento', '=', False)]}"/>
                         </group>
                     </group>
                     <group>
@@ -148,7 +148,7 @@
     <record id="action_ncf_sequence" model="ir.actions.act_window">
         <field name="name">Secuencias NCF</field>
         <field name="res_model">l10n_do_ncf.sequence</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="context">{'search_default_active_sequences': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">

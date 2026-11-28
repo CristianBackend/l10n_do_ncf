@@ -27,10 +27,10 @@
                     <group string="Cliente">
                         <field name="partner_id" readonly="1"/>
                         <field name="partner_vat"/>
-                        <div class="alert alert-success" role="status" invisible="not partner_vat">
+                        <div class="alert alert-success" role="status" attrs="{'invisible': [('partner_vat', '=', False)]}">
                             <strong>✓ Cliente tiene RNC</strong>
                         </div>
-                        <div class="alert alert-danger" role="alert" invisible="partner_vat">
+                        <div class="alert alert-danger" role="alert" attrs="{'invisible': [('partner_vat', '!=', False)]}">
                             <strong>✗ Cliente sin RNC - Asigne primero</strong>
                         </div>
                     </group>
@@ -43,8 +43,7 @@
 
                 <footer>
                     <button name="action_validate" string="Validar" type="object" class="btn-secondary"/>
-                    <button name="action_process" string="Procesar Corrección" type="object" class="btn-primary"
-                            invisible="not partner_vat"/>
+                    <button name="action_process" string="Procesar Corrección" type="object" class="btn-primary" attrs="{'invisible': [('partner_vat', '=', False)]}"/>
                     <button string="Cancelar" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>
@@ -116,7 +115,7 @@
         <field name="model">l10n_do_ncf.607.multiperiod.wizard</field>
         <field name="arch" type="xml">
             <form string="NC Multi-período 607">
-                <div class="alert alert-info" role="alert" invisible="not is_different_period">
+                <div class="alert alert-info" role="alert" attrs="{'invisible': [('is_different_period', '=', False)]}">
                     <strong>📋 Nota de Crédito de período diferente</strong>
                     <p class="mt-2 mb-0">
                         La NC y la factura original son de períodos fiscales diferentes.<br/>
@@ -137,10 +136,10 @@
 
                 <group>
                     <field name="is_different_period" invisible="1"/>
-                    <div class="alert alert-success" role="status" invisible="is_different_period">
+                    <div class="alert alert-success" role="status" attrs="{'invisible': [('is_different_period', '!=', False)]}">
                         <strong>✓ Mismo período fiscal</strong> - Se reportan juntas en 607.
                     </div>
-                    <div class="alert alert-warning" role="alert" invisible="not is_different_period">
+                    <div class="alert alert-warning" role="alert" attrs="{'invisible': [('is_different_period', '=', False)]}">
                         <strong>⚠️ Períodos diferentes</strong> - La NC va al 607 del período <field name="credit_period" readonly="1" class="fw-bold"/>
                     </div>
                 </group>

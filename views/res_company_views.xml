@@ -1,59 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    
-    <!-- Extensión de configuración -->
+
+    <!-- Extensión de configuración (Contabilidad > Ajustes).
+
+         Odoo 16 no tiene el DSL de ajustes <app>/<block>/<setting> (llego en
+         17): los ajustes se escriben con divs, y el bloque de una aplicacion se
+         localiza por data-key. Ver addons/account/views/res_config_settings_views.xml:23
+         ("div.app_settings_block" con data-key="account") y la estructura
+         h2 + div.row.o_settings_container + div.o_setting_box con sus paneles
+         o_setting_left_pane / o_setting_right_pane. -->
     <record id="res_config_settings_view_form_ncf" model="ir.ui.view">
         <field name="name">res.config.settings.view.form.ncf</field>
         <field name="model">res.config.settings</field>
         <field name="inherit_id" ref="account.res_config_settings_view_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//app[@name='account']" position="inside">
-                <block title="Comprobantes Fiscales RD (NCF)" name="ncf_settings">
-                    <setting id="ncf_alerts" title="Alertas NCF" 
-                             documentation="/applications/finance/accounting/customer_invoices/overview.html">
-                        <div class="content-group">
-                            <div class="row mt16">
-                                <label for="l10n_do_ncf_next_expiration_alert" class="col-lg-4"/>
-                                <field name="l10n_do_ncf_next_expiration_alert" class="col-lg-2"/>
-                                <span class="col-lg-4">días antes del vencimiento</span>
-                            </div>
-                            <div class="row mt8">
-                                <label for="l10n_do_ncf_low_sequence_alert" class="col-lg-4"/>
-                                <field name="l10n_do_ncf_low_sequence_alert" class="col-lg-2"/>
-                                <span class="col-lg-4">NCF disponibles</span>
-                            </div>
-                        </div>
-                    </setting>
-                    <setting id="ncf_retentions" string="Retenciones sugeridas en compras"
-                             help="Impuestos de retención que se agregan solos a las líneas según el tipo de compra. Se pueden quitar en cada línea.">
-                        <div class="content-group">
-                            <div class="row mt16">
-                                <label for="l10n_do_informal_retention_tax_ids" class="col-lg-4"/>
-                                <field name="l10n_do_informal_retention_tax_ids" widget="many2many_tags" class="col-lg-8"
-                                       options="{'no_create': True}"/>
-                            </div>
-                            <div class="row mt8">
-                                <label for="l10n_do_exterior_retention_tax_ids" class="col-lg-4"/>
-                                <field name="l10n_do_exterior_retention_tax_ids" widget="many2many_tags" class="col-lg-8"
-                                       options="{'no_create': True}"/>
+            <xpath expr="//div[@data-key='account']" position="inside">
+                <h2>Comprobantes Fiscales RD (NCF)</h2>
+                <div class="row mt16 o_settings_container" name="ncf_settings">
+
+                    <div class="col-12 col-lg-6 o_setting_box" id="ncf_alerts"
+                         title="Alertas NCF">
+                        <div class="o_setting_left_pane"/>
+                        <div class="o_setting_right_pane">
+                            <span class="o_form_label">Alertas NCF</span>
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="l10n_do_ncf_next_expiration_alert" class="col-lg-4"/>
+                                    <field name="l10n_do_ncf_next_expiration_alert" class="col-lg-2"/>
+                                    <span class="col-lg-4">días antes del vencimiento</span>
+                                </div>
+                                <div class="row mt8">
+                                    <label for="l10n_do_ncf_low_sequence_alert" class="col-lg-4"/>
+                                    <field name="l10n_do_ncf_low_sequence_alert" class="col-lg-2"/>
+                                    <span class="col-lg-4">NCF disponibles</span>
+                                </div>
                             </div>
                         </div>
-                    </setting>
-                    <setting id="ncf_journals" title="Diarios Fiscales">
-                        <div class="content-group">
-                            <div class="row mt16">
-                                <label for="l10n_do_fiscal_journal_id" class="col-lg-4"/>
-                                <field name="l10n_do_fiscal_journal_id" class="col-lg-6"/>
+                    </div>
+
+                    <div class="col-12 col-lg-6 o_setting_box" id="ncf_retentions">
+                        <div class="o_setting_left_pane"/>
+                        <div class="o_setting_right_pane">
+                            <span class="o_form_label">Retenciones sugeridas en compras</span>
+                            <div class="text-muted">
+                                Impuestos de retención que se agregan solos a las líneas según el
+                                tipo de compra. Se pueden quitar en cada línea.
                             </div>
-                            <div class="row mt8">
-                                <label for="l10n_do_informal_vendor_journal_id" class="col-lg-4"/>
-                                <field name="l10n_do_informal_vendor_journal_id" class="col-lg-6"/>
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="l10n_do_informal_retention_tax_ids" class="col-lg-4"/>
+                                    <field name="l10n_do_informal_retention_tax_ids" widget="many2many_tags" class="col-lg-8"
+                                           options="{'no_create': True}"/>
+                                </div>
+                                <div class="row mt8">
+                                    <label for="l10n_do_exterior_retention_tax_ids" class="col-lg-4"/>
+                                    <field name="l10n_do_exterior_retention_tax_ids" widget="many2many_tags" class="col-lg-8"
+                                           options="{'no_create': True}"/>
+                                </div>
                             </div>
                         </div>
-                    </setting>
-                </block>
+                    </div>
+
+                    <div class="col-12 col-lg-6 o_setting_box" id="ncf_journals"
+                         title="Diarios Fiscales">
+                        <div class="o_setting_left_pane"/>
+                        <div class="o_setting_right_pane">
+                            <span class="o_form_label">Diarios Fiscales</span>
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="l10n_do_fiscal_journal_id" class="col-lg-4"/>
+                                    <field name="l10n_do_fiscal_journal_id" class="col-lg-6"/>
+                                </div>
+                                <div class="row mt8">
+                                    <label for="l10n_do_informal_vendor_journal_id" class="col-lg-4"/>
+                                    <field name="l10n_do_informal_vendor_journal_id" class="col-lg-6"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </xpath>
         </field>
     </record>
-    
+
 </odoo>
