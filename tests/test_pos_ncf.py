@@ -1,51 +1,37 @@
 # -*- coding: utf-8 -*-
+"""Comprobante fiscal de las ventas del Punto de Venta.
+
+DIFERENCIA CON LA 19: allí la base de pruebas del POS es CommonPosTest, con
+setup_country('do') y create_backend_pos_order. Odoo 16 no tiene ninguna de
+las dos: la base es TestPoSCommon (point_of_sale/tests/common.py:134), el plan
+se pasa por xmlid y las órdenes se crean como las manda el POS, con
+create_ui_order_data + pos.order.create_from_ui. El contenido de las pruebas
+es el mismo.
+"""
 from odoo.tests import tagged
 
-from odoo.addons.point_of_sale.tests.common import CommonPosTest
+from odoo.addons.point_of_sale.tests.common import TestPoSCommon
 
-from .common import NcfTestMixin
+from .common import NcfPosTestMixin
 
 
 @tagged('post_install', '-at_install')
-class TestPosNcf(NcfTestMixin, CommonPosTest):
+class TestPosNcf(NcfPosTestMixin, TestPoSCommon):
     """Confirmación desde el POS: el POS postea con _post(), no action_post()."""
 
     @classmethod
-    @CommonPosTest.setup_country('do')
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpClass(cls, chart_template_ref='l10n_do.do_chart_template'):
+        super().setUpClass(chart_template_ref=chart_template_ref)
+        country_do = cls.env.ref('base.do')
+        for company in cls.company_data['company'] + cls.company_data_2['company']:
+            company.country_id = country_do
+            company.account_purchase_tax_id = False
         cls._setup_ncf_data()
-        cls.seq_b02 = cls._create_ncf_sequence('02')
-        cls.seq_b01 = cls._create_ncf_sequence('01')
-        cls.seq_b04 = cls._create_ncf_sequence('04')
-        cls.pos_config_usd.write({
-            'l10n_do_ncf_enabled': True,
-            'l10n_do_ncf_sequence_id': cls.seq_b02.id,
-            'l10n_do_ncf_fiscal_sequence_id': cls.seq_b01.id,
-        })
+        cls._setup_ncf_pos()
 
-    def _pos_order(self, partner=False, to_invoice=False, refund=False):
-        data = {
-            'order_data': {
-                'partner_id': partner.id if partner else False,
-                'to_invoice': to_invoice,
-            },
-            'line_data': [
-                {'product_id': self.ten_dollars_no_tax.product_variant_id.id},
-            ],
-            'payment_data': [
-                {'payment_method_id': self.bank_payment_method.id, 'amount': 10},
-            ],
-        }
-        if refund:
-            data['refund_data'] = [
-                {'payment_method_id': self.bank_payment_method.id, 'amount': -10},
-            ]
-        return self.create_backend_pos_order(data)
-
-    def _current(self, sequence):
-        sequence.invalidate_recordset()
-        return sequence.current_number
+    def setUp(self):
+        super().setUp()
+        self._open_ncf_session()
 
     def test_paid_order_without_invoice_gets_b02(self):
         order, _refund = self._pos_order()
@@ -110,8 +96,29 @@ class TestPosNcf(NcfTestMixin, CommonPosTest):
         self.assertEqual(order.account_move.l10n_do_fiscal_status, 'annulled')
 
     def test_ncf_disabled_pos_does_not_consume(self):
-        self.pos_config_usd.l10n_do_ncf_enabled = False
+        self.config.l10n_do_ncf_enabled = False
         order, _refund = self._pos_order()
 
         self.assertFalse(order.l10n_do_ncf_number)
         self.assertEqual(self._current(self.seq_b02), 0)
+
+    def test_order_carries_its_own_uuid_from_the_pos(self):
+        """El identificador que genera el POS llega al servidor.
+
+        Odoo 16 no tiene pos.order.uuid (en la 19 sí): el módulo lleva el
+        suyo, l10n_do_pos_uuid, que el frontend genera al crear la orden y
+        manda en export_as_JSON. Es la clave de idempotencia del conector
+        e-CF, así que un reintento no gasta otro e-NCF.
+        """
+        order_data = self.create_ui_order_data(
+            [(self.ten_no_tax, 1)], payments=[(self.bank_pm1, 10.0)],
+        )
+        order_data['data']['l10n_do_pos_uuid'] = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+        rows = self.env['pos.order'].create_from_ui([order_data])
+        order = self.env['pos.order'].browse([row['id'] for row in rows])
+
+        self.assertEqual(order.l10n_do_pos_uuid, 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')
+        # Y el comprobante vuelve al POS en la respuesta de la sincronización,
+        # que es de donde el ticket saca el NCF.
+        self.assertEqual(rows[0]['l10n_do_ncf_number'], order.l10n_do_ncf_number)
+        self.assertEqual(rows[0]['l10n_do_ncf_type'], order.l10n_do_ncf_type)

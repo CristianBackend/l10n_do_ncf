@@ -2,7 +2,7 @@
 # Módulo: l10n_do_ncf
 # Archivo: models/pos_order.py
 # Descripción: Extensión de Punto de Venta con NCF
-# Compatibilidad: Odoo 19
+# Compatibilidad: Odoo 16
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
@@ -74,12 +74,12 @@ class PosConfig(models.Model):
              'automaticamente la opcion de Factura al asignarlo.'
     )
 
-    # NOTA (Odoo 19): NO sobreescribir _load_pos_data_fields aqui.
-    # pos.config hereda la implementacion de pos.load.mixin, que devuelve
-    # una lista vacia; en Odoo, read([]) significa "leer TODOS los campos".
-    # Por eso l10n_do_pos_default_partner_id ya viaja al frontend sin hacer
-    # nada. Si se sobreescribe devolviendo solo nuestros campos, el POS deja
-    # de recibir el resto (use_pricelist, etc.) y falla al abrir la sesion.
+    # NO declarar aqui los campos que viajan al POS. En Odoo 16 la caja la
+    # carga pos.session._loader_params_pos_config, que pide fields: []
+    # (point_of_sale/models/pos_session.py), y en Odoo leer una lista vacia
+    # significa "todos los campos": l10n_do_pos_default_partner_id y las
+    # secuencias NCF ya llegan al frontend sin hacer nada. (En la 19 el
+    # mecanismo es _load_pos_data_fields, con el mismo resultado.)
 
     def _get_ncf_sequence_for_partner(self, partner):
         """Obtener la secuencia NCF correcta según el tipo de cliente"""
@@ -116,25 +116,30 @@ class PosConfig(models.Model):
         return mapping.get(partner.l10n_do_dgii_tax_payer_type, 'Consumidor Final (B02)')
 
 
-class ResPartner(models.Model):
+class PosSession(models.Model):
     """Exponer campos NCF del contacto al frontend del POS.
 
-    NOTA (Odoo 19): reemplaza al antiguo PosSession._loader_params_res_partner,
-    que fue eliminado en Odoo 18+.
+    DIFERENCIA CON LA 19: allí los campos que viajan al POS se declaran en
+    res.partner._load_pos_data_fields(config). Odoo 16 no tiene ese
+    mecanismo: cada modelo que carga el POS trae su
+    pos.session._loader_params_<modelo> con la lista de campos
+    (point_of_sale/models/pos_session.py:1819 para res.partner), y los
+    modelos que carga están en _pos_ui_models_to_load (:1652).
 
-    A diferencia de pos.config y pos.order, res.partner SI declara una lista
-    explicita de campos en su _load_pos_data_fields, por lo que aqui si es
-    necesario (y correcto) extenderla con super() + [...].
+    pos.config y pos.order no hacen falta: su loader devuelve fields: []
+    (pos_session.py), y en Odoo leer una lista vacía significa "todos los
+    campos", así que los campos NCF de la caja y de la orden ya viajan.
     """
-    _inherit = 'res.partner'
+    _inherit = 'pos.session'
 
-    @api.model
-    def _load_pos_data_fields(self, config):
-        return super()._load_pos_data_fields(config) + [
+    def _loader_params_res_partner(self):
+        params = super()._loader_params_res_partner()
+        params['search_params']['fields'] += [
             'l10n_do_dgii_tax_payer_type',
             'l10n_do_rnc_validated',
             'l10n_do_dgii_status',
         ]
+        return params
 
 
 class PosOrder(models.Model):
@@ -189,6 +194,77 @@ class PosOrder(models.Model):
     def _compute_partner_vat(self):
         for order in self:
             order.l10n_do_partner_vat = order.partner_id.vat if order.partner_id else ''
+
+    # =========================================================================
+    # IDENTIFICADOR DE LA ORDEN DEL POS (clave de idempotencia)
+    # =========================================================================
+    l10n_do_pos_uuid = fields.Char(
+        string='UUID de la orden (POS)',
+        readonly=True,
+        copy=False,
+        index='btree_not_null',
+        help='Identificador que genera el POS al crear la orden. El conector '
+             'e-CF lo usa como clave de idempotencia: si hay que reintentar el '
+             'envío, la plataforma reconoce la misma venta y no gasta otro '
+             'e-NCF.',
+    )
+
+    @api.model
+    def _l10n_do_pos_sync_fields(self):
+        """Campos del comprobante que el POS necesita para imprimir el ticket.
+
+        Punto de extensión: el conector e-CF añade los suyos
+        (l10n_do_ecf_newplain/models/pos_ecf.py).
+        """
+        return ['l10n_do_ncf_number', 'l10n_do_ncf_type']
+
+    @api.model
+    def create_from_ui(self, orders, draft=False):
+        """Devuelve también el comprobante de cada orden sincronizada.
+
+        DIFERENCIA CON LA 19: allí la orden vuelve completa al POS y el ticket
+        lee el NCF de ella. En Odoo 16 create_from_ui devuelve un search_read
+        con una lista fija de campos —id, pos_reference y account_move— y no
+        hay enganche para ampliarla
+        (point_of_sale/models/pos_order.py:948), así que sin esto el ticket
+        saldría sin NCF. El frontend copia estos campos en la orden en memoria
+        (static/src/js/pos_ncf_order.js, _save_to_server).
+        """
+        result = super().create_from_ui(orders, draft=draft)
+        extra_fields = self._l10n_do_pos_sync_fields()
+        order_ids = [row['id'] for row in result if row.get('id')]
+        if not extra_fields or not order_ids:
+            return result
+        extra = {
+            row['id']: row
+            for row in self.sudo().search_read(
+                domain=[('id', 'in', order_ids)],
+                fields=['id'] + extra_fields,
+                load=False,
+            )
+        }
+        for row in result:
+            values = extra.get(row.get('id'))
+            if values:
+                row.update({name: values.get(name) for name in extra_fields})
+        return result
+
+    @api.model
+    def _order_fields(self, ui_order):
+        """Trae el identificador de la orden desde el POS.
+
+        DIFERENCIA CON LA 19: allí pos.order tiene un campo uuid propio de
+        Odoo, que el frontend rellena y el conector usa como clave de
+        idempotencia. Odoo 16 no lo tiene (la orden solo trae su "uid", que es
+        el número de ticket), así que el módulo lleva el suyo:
+        static/src/js/pos_ncf_order.js lo genera al crear la orden y lo manda
+        en export_as_JSON.
+        """
+        fields_dict = super()._order_fields(ui_order)
+        uuid = ui_order.get('l10n_do_pos_uuid')
+        if uuid:
+            fields_dict['l10n_do_pos_uuid'] = uuid
+        return fields_dict
 
     # =========================================================================
     # METODO DE PAGO USADO (para agrupar en la vista de Ordenes)
@@ -288,12 +364,9 @@ class PosOrder(models.Model):
             else:
                 order.l10n_do_payment_method_used = 'mixed'
 
-    # NOTA (Odoo 19): NO sobreescribir _load_pos_data_fields aqui.
-    # Igual que pos.config, pos.order hereda la implementacion vacia de
-    # pos.load.mixin, que carga TODOS los campos. Los campos NCF
-    # (l10n_do_ncf_number, l10n_do_ncf_type, l10n_do_partner_vat) ya llegan
-    # al frontend sin declararlos. Sobreescribir aqui limitaria la orden a
-    # esos tres campos y rompe el POS.
+    # Igual que pos.config: en Odoo 16 la orden se carga con fields: [], es
+    # decir todos los campos, asi que l10n_do_ncf_number, l10n_do_ncf_type y
+    # l10n_do_partner_vat ya llegan al frontend sin declararlos.
 
     # =========================================
     # DEVOLUCIONES / REEMBOLSOS
@@ -301,9 +374,14 @@ class PosOrder(models.Model):
     def _l10n_do_is_refund(self):
         """La orden es una devolucion / reembolso.
 
-        Usa la MISMA condicion que Odoo aplica para decidir
-        move_type='out_refund' en _prepare_invoice_vals:
-            order.is_refund or order.amount_total < 0.0
+        DIFERENCIA CON LA 19: alli pos.order tiene el campo is_refund y la
+        condicion es `order.is_refund or order.amount_total < 0.0`, la misma
+        que Odoo usa para decidir move_type='out_refund'. Odoo 16 no tiene ese
+        campo: su _prepare_invoice_vals decide solo por el signo
+        (point_of_sale/models/pos_order.py:622) y la devolucion se reconoce
+        por las lineas devueltas, que es lo que agrupa refunded_order_ids
+        (:303). Las dos piezas juntas dan el mismo resultado que is_refund en
+        la 19.
 
         Las devoluciones NO consumen NCF de las secuencias de venta del POS:
         el comprobante que corresponde es una Nota de Credito (B04), y esa la
@@ -311,7 +389,7 @@ class PosOrder(models.Model):
         para move_type='out_refund').
         """
         self.ensure_one()
-        return bool(self.is_refund) or (self.amount_total or 0.0) < 0.0
+        return bool(self.refunded_order_ids) or (self.amount_total or 0.0) < 0.0
 
     # =========================================
     # ENLACE ORDEN POS -> FACTURA
@@ -339,23 +417,15 @@ class PosOrder(models.Model):
         ncf_activo = bool(self.config_id.l10n_do_ncf_enabled)
 
         if self._l10n_do_is_refund():
-            # Odoo ya calculo las facturas originales en
-            # pos_refunded_invoice_ids. De ahi sale el NCF que la NC corrige.
-            refunded = vals.get('pos_refunded_invoice_ids') or []
-            ids = []
-            for item in refunded:
-                if isinstance(item, (list, tuple)):
-                    # formato comando: (6, 0, [ids]) / (4, id)
-                    if len(item) == 3 and isinstance(item[2], (list, tuple)):
-                        ids.extend(item[2])
-                    elif len(item) >= 2 and isinstance(item[1], int):
-                        ids.append(item[1])
-                elif isinstance(item, int):
-                    ids.append(item)
-
+            # DIFERENCIA CON LA 19: alli Odoo deja en los vals
+            # pos_refunded_invoice_ids con las facturas que la devolucion
+            # corrige (point_of_sale/models/pos_order.py:915). Odoo 16 no
+            # tiene ese campo: las facturas salen de las lineas devueltas,
+            # que es de donde la propia 19 las saca.
+            originales = self.lines.refunded_orderline_id.order_id.account_move.filtered(
+                lambda move: move.move_type == 'out_invoice')
             ncf_origen = False
-            if ids:
-                originales = self.env['account.move'].browse(ids).exists()
+            if originales:
                 ncf_origen = next(
                     (m.l10n_do_ncf_number for m in originales if m.l10n_do_ncf_number),
                     False

@@ -1,138 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates id="template" xml:space="preserve">
-    <!-- Extender el recibo del POS para mostrar NCF (Odoo 19) -->
-    <t t-name="point_of_sale.OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
+    <!--
+        Ticket del POS con el comprobante fiscal (Odoo 16).
 
-        <!-- Impuestos: el nombre del impuesto ("ITBIS 18%"), no el del grupo
-             (pos_ncf_order.js, l10nDoTaxGroupLabel). -->
-        <xpath expr="//span[@t-esc='tax_group.group_name']" position="attributes">
-            <attribute name="t-esc">order.l10nDoTaxGroupLabel(tax_group)</attribute>
-        </xpath>
+        DIFERENCIA CON LA 19: allí el recibo se arma con componentes
+        (ReceiptHeader, paymentLines, formatCurrency...) y los datos salen de
+        la propia orden. En Odoo 16 la plantilla es OrderReceipt y lee el
+        objeto "receipt" que devuelve Order.export_for_printing()
+        (point_of_sale/static/src/js/models.js:2711), que es donde
+        pos_ncf_order.js añade los campos del comprobante. El encabezado de 16
+        ya trae razón social, dirección y RNC del emisor, así que aquí solo se
+        añade lo que falta para República Dominicana.
 
-        <!-- "Need an invoice?" (QR del portal de Odoo) no va en el ticket en RD:
-             el comprobante es el NCF (papel) o el e-CF, con su propio QR. -->
-        <xpath expr="//div[hasclass('pos-receipt-qr')]" position="attributes">
-            <attribute name="t-if">order.company.point_of_sale_use_ticket_qr_code and order.finalized and !order.l10nDoIsDo</attribute>
-        </xpath>
+        owl="1" es obligatorio en 16: sin él la plantilla va al motor QWeb2
+        antiguo.
+    -->
+    <t t-name="OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension" owl="1">
 
-        <!--
-            Ticket en República Dominicana (papel y e-CF), un solo diseño:
-            - cabecera del emisor arriba (razón social, RNC, dirección, fecha),
-              en lugar de la de Odoo (logo o ícono de cámara, "Served by"...);
-              el e-CF la trae completa de l10n_do_ecf_newplain (con tipo y e-NCF);
-            - en pequeño, el número de ticket y quién atendió (para buscar el
-              pedido en una devolución);
-            - pie: solo el nombre de la caja, sin la dirección repetida ni
-              "Powered by Odoo".
-        -->
-        <xpath expr="//ReceiptHeader" position="attributes">
-            <attribute name="t-if">!order.l10nDoIsDo</attribute>
-        </xpath>
-        <xpath expr="//ReceiptHeader" position="after">
-            <div t-if="order.l10nDoIsDo and !order.l10nDoEcfReceipt" class="l10n-do-paper-header text-center">
-                <img t-if="order.config.l10n_do_company_has_logo" t-att-src="order.config.receiptLogoUrl"
-                     alt="Logo" class="pos-receipt-logo"/>
-                <div class="fw-bolder" t-esc="order.company.name"/>
-                <div t-if="order.company.vat">RNC: <t t-esc="order.company.vat"/></div>
-                <div t-if="order.company.street" t-esc="order.company.street"/>
-                <div t-if="order.l10nDoCompanyLocality" t-esc="order.l10nDoCompanyLocality"/>
-                <div>Fecha Emisión: <t t-esc="order.l10nDoIssueDate"/></div>
-            </div>
-            <div t-if="order.l10nDoIsDo" class="l10n-do-ticket-ref text-center text-muted pt-1" style="font-size: 75%;">
-                Ticket <t t-esc="order.pos_reference"/>
-                <t t-if="order.getCashierName()"> · Atendió: <t t-esc="order.getCashierName()"/></t>
-            </div>
-        </xpath>
-
-        <!-- Devolución: "Devuelto en efectivo: RD$ 466.10", sin signo negativo -->
-        <xpath expr="//div[hasclass('paymentlines')]" position="replace">
-            <div class="paymentlines text-start pt-1" t-foreach="paymentLines" t-as="line" t-key="line_index">
-                <t t-if="order.l10nDoIsDo and line.getAmount() &lt; 0">
-                    Devuelto en <t t-esc="line.payment_method_id.name.toLowerCase()"/>:
-                    <span t-out="formatCurrency(-line.getAmount())" class="pos-receipt-right-align font-monospace"/>
-                </t>
-                <t t-else="">
-                    <t t-esc="line.payment_method_id.name"/>
-                    <span t-out="formatCurrency(line.getAmount())" class="pos-receipt-right-align font-monospace"/>
-                </t>
-            </div>
-        </xpath>
-
-        <!-- Pie en RD: solo la caja -->
-        <xpath expr="//div[hasclass('pos-config-name')]/../.." position="attributes">
-            <attribute name="t-if">!order.l10nDoIsDo</attribute>
-        </xpath>
-        <xpath expr="//div[hasclass('pos-config-name')]/../.." position="after">
-            <div t-if="order.l10nDoIsDo" class="l10n-do-footer text-center pt-3" style="font-size: 75%;"
-                 t-esc="order.config.name"/>
-        </xpath>
-        <xpath expr="//div[hasclass('footer-powered-by')]" position="attributes">
-            <attribute name="t-if">!order.l10nDoIsDo</attribute>
-        </xpath>
-
-        <!--
-            En Odoo 19 el recibo expone un ancla estable para contenido custom:
-            <div class="before-footer"/>. Anclamos aquí en lugar de a clases del
-            header (pos-receipt-contact vive en el subcomponente ReceiptHeader y
-            NO es alcanzable por xpath desde OrderReceipt).
-        -->
-        <xpath expr="//div[hasclass('before-footer')]" position="before">
-            <t t-if="order.l10n_do_ncf_number">
-                <div class="pos-receipt-ncf" style="text-align: center; margin: 10px 0; padding: 10px; border: 2px dashed #000;">
-                    <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">
-                        <t t-if="order.l10n_do_ncf_type === 'B04'">*** NOTA DE CRÉDITO ***</t>
-                        <t t-elif="order.l10n_do_ncf_type === 'B03'">*** NOTA DE DÉBITO ***</t>
-                        <t t-else="">*** COMPROBANTE FISCAL ***</t>
-                    </div>
-                    <t t-if="order.partner_id">
-                        <!-- Consumidor final sin documento: sin línea "N/A". -->
-                        <div t-if="order.partner_id.vat" style="margin-bottom: 4px;">
-                            <span style="font-weight: bold;">RNC/Cédula: </span>
-                            <span t-esc="order.partner_id.vat"/>
-                        </div>
-                        <div style="margin-bottom: 4px;">
-                            <span style="font-weight: bold;">Cliente: </span>
-                            <span t-esc="order.partner_id.name"/>
-                        </div>
-                    </t>
-                    <t t-else="">
-                        <div style="margin-bottom: 4px;">
-                            <span>CONSUMIDOR FINAL</span>
-                        </div>
-                    </t>
-                    <div style="font-size: 16px; font-weight: bold; margin-top: 8px; letter-spacing: 1px;">
-                        <span>NCF: </span>
-                        <span t-esc="order.l10n_do_ncf_number"/>
-                    </div>
-                    <t t-if="order.l10n_do_ncf_type">
-                        <div style="font-size: 11px; margin-top: 4px; color: #666;">
-                            <span>Tipo: </span>
-                            <t t-if="order.l10n_do_ncf_type === 'B01'">Crédito Fiscal</t>
-                            <t t-elif="order.l10n_do_ncf_type === 'B02'">Consumidor Final</t>
-                            <t t-elif="order.l10n_do_ncf_type === 'B03'">Nota de Débito</t>
-                            <t t-elif="order.l10n_do_ncf_type === 'B04'">Nota de Crédito</t>
-                            <t t-elif="order.l10n_do_ncf_type === 'B14'">Régimen Especial</t>
-                            <t t-elif="order.l10n_do_ncf_type === 'B15'">Gubernamental</t>
-                            <t t-else=""><t t-esc="order.l10n_do_ncf_type"/></t>
-                        </div>
-                    </t>
-                    <!--
-                        NCF Afectado: obligatorio en notas de credito / debito
-                        para identificar el comprobante que se esta corrigiendo.
-                        El valor se refleja desde account.move a la orden POS en
-                        pos_order.py::_generate_pos_order_invoice.
-                    -->
-                    <t t-if="order.l10n_do_ncf_origin">
-                        <div style="font-size: 12px; margin-top: 6px; font-weight: bold;">
-                            <span>NCF Afectado: </span>
-                            <span t-esc="order.l10n_do_ncf_origin"/>
-                        </div>
-                    </t>
-                    <div style="font-size: 11px; margin-top: 6px;">
-                        Válido para fines fiscales
-                    </div>
+        <!-- Emisor: fecha de emisión y referencia del ticket (para buscar el
+             pedido en una devolución). Solo en República Dominicana. -->
+        <xpath expr="//div[hasclass('pos-receipt-contact')]" position="inside">
+            <t t-if="receipt.l10n_do_is_do">
+                <div t-if="receipt.l10n_do_issue_date">
+                    Fecha Emisión: <t t-esc="receipt.l10n_do_issue_date"/>
+                </div>
+                <div t-if="receipt.l10n_do_ticket_ref" class="l10n-do-ticket-ref">
+                    Ticket: <t t-esc="receipt.l10n_do_ticket_ref"/>
                 </div>
             </t>
         </xpath>
+
+        <!-- Comprobante fiscal: lo que exige la DGII en el ticket. -->
+        <xpath expr="//div[hasclass('before-footer')]" position="before">
+            <div t-if="receipt.l10n_do_ncf_number" class="l10n-do-ncf pos-receipt-center-align">
+                <div>--------------------------------</div>
+                <div class="l10n-do-ncf__number">
+                    <strong>NCF: <t t-esc="receipt.l10n_do_ncf_number"/></strong>
+                </div>
+                <div t-if="receipt.l10n_do_ncf_type_name" class="l10n-do-ncf__type">
+                    <t t-esc="receipt.l10n_do_ncf_type_name"/>
+                </div>
+                <div t-if="receipt.l10n_do_partner_vat" class="l10n-do-ncf__vat">
+                    RNC/Cédula: <t t-esc="receipt.l10n_do_partner_vat"/>
+                </div>
+            </div>
+        </xpath>
+
+        <!-- El QR de "pide tu factura" del portal de Odoo no va en el ticket
+             en RD: el comprobante es el NCF (papel) o el e-CF, con su QR. -->
+        <xpath expr="//img[@id='posqrcode']/.." position="attributes">
+            <attribute name="t-if">receipt.pos_qr_code and !receipt.l10n_do_is_do</attribute>
+        </xpath>
+
     </t>
+
 </templates>

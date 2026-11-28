@@ -155,3 +155,88 @@ class NcfCommon(NcfTestMixin, AccountTestInvoicingCommon):
             # _compute_l10n_do_fiscal_type depende de invoice_line_ids.tax_ids.
             company.account_purchase_tax_id = False
         cls._setup_ncf_data()
+
+
+class NcfPosTestMixin(NcfTestMixin):
+    """Base de pruebas del Punto de Venta con NCF, sobre TestPoSCommon.
+
+    DIFERENCIA CON LA 19: allí la base del POS es CommonPosTest, con
+    setup_country('do') y create_backend_pos_order. Odoo 16 no tiene ninguna
+    de las dos: la base es TestPoSCommon (point_of_sale/tests/common.py:134),
+    el plan contable se pasa por xmlid y las órdenes se crean como las manda
+    el POS, con create_ui_order_data + pos.order.create_from_ui. Aquí está esa
+    plomería, compartida por las pruebas del POS de los dos módulos.
+
+    La clase que lo use tiene que heredar también de TestPoSCommon.
+    """
+
+    @classmethod
+    def _setup_ncf_pos(cls, config=None):
+        """Secuencias NCF, producto de prueba y caja configurada."""
+        # Odoo 16 guarda los pedidos que fallan al sincronizar, y para eso hace
+        # cr.rollback() + cr.commit() (point_of_sale/models/pos_session.py:2124),
+        # que dentro de una prueba se lleva por delante la transacción y deja
+        # el cursor roto para el resto de la clase. Las pruebas que esperan un
+        # fallo de sincronización (una venta e-CF que la plataforma rechaza)
+        # necesitan esa captura apagada. En la 19 no hacía falta.
+        cls.env['ir.config_parameter'].sudo().set_param(
+            'point_of_sale.capture_unprocessed_order', 'False')
+        cls.seq_b02 = cls._create_ncf_sequence('02')
+        cls.seq_b01 = cls._create_ncf_sequence('01')
+        cls.seq_b04 = cls._create_ncf_sequence('04')
+        cls.ten_no_tax = cls.env['product.product'].create({
+            'name': 'Producto de 10 sin impuesto',
+            'type': 'consu',
+            'available_in_pos': True,
+            'list_price': 10.0,
+            'taxes_id': False,
+        })
+        cls.pos_config_ncf = config or cls.basic_config
+        cls.pos_config_ncf.write({
+            'l10n_do_ncf_enabled': True,
+            'l10n_do_ncf_sequence_id': cls.seq_b02.id,
+            'l10n_do_ncf_fiscal_sequence_id': cls.seq_b01.id,
+        })
+        return cls.pos_config_ncf
+
+    def _open_ncf_session(self):
+        """TestPoSCommon toma la caja de self.config y necesita la sesión
+        abierta para poder crear órdenes como las manda el POS."""
+        self.config = self.pos_config_ncf
+        self.config.write({'payment_method_ids': [(6, 0, self.bank_pm1.ids)]})
+        return self.open_new_session()
+
+    def _pos_order(self, partner=False, to_invoice=False, refund=False, product=None):
+        """Venta del POS (y su devolución, si se pide)."""
+        order_data = self.create_ui_order_data(
+            [(product or self.ten_no_tax, 1)],
+            customer=partner or False,
+            is_invoiced=to_invoice,
+            payments=[(self.bank_pm1, 10.0)],
+        )
+        rows = self.env['pos.order'].create_from_ui([order_data])
+        order = self.env['pos.order'].browse([row['id'] for row in rows])
+        refund_order = self.env['pos.order']
+        if refund:
+            action = order.refund()
+            refund_order = self.env['pos.order'].browse(action['res_id'])
+            # Cobrar la devolución: en Odoo 16 el POS la paga con el mismo
+            # asistente que el backend (wizard/pos_payment.py).
+            self.env['pos.make.payment'].with_context(
+                active_id=refund_order.id,
+            ).create({
+                'amount': refund_order.amount_total,
+                'payment_method_id': self.bank_pm1.id,
+            }).check()
+            if to_invoice:
+                # La copia de la devolución no hereda "facturar", y en Odoo 16
+                # una orden pagada desde el backend se factura a mano
+                # (point_of_sale/models/pos_order.py:841); desde el POS lo hace
+                # create_from_ui al sincronizarla.
+                refund_order.to_invoice = True
+                refund_order.action_pos_order_invoice()
+        return order, refund_order
+
+    def _current(self, sequence):
+        sequence.invalidate_recordset()
+        return sequence.current_number

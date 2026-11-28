@@ -81,7 +81,21 @@ porcentaje.
 Lo demás de los anticipos con e-CF no cambia: la factura final va por el total
 del pedido y cada anticipo se anula con una E34.
 
-## 4. Diarios de tarjeta de crédito: la forma de pago 03 se pone a mano
+## 4. Punto de venta con e-CF: el aviso de "emitiendo" no lleva texto
+
+**Qué pasa.** Al cobrar en una caja con e-CF, la pantalla se bloquea mientras
+la plataforma emite el comprobante (lo normal son 0.6–1.1 s). En la versión 19
+ese bloqueo muestra el texto *"Emitiendo comprobante electrónico…"*; en Odoo 16
+el bloqueo de pantalla del sistema **no admite mensaje** (`ui.block()` no
+recibe parámetros), así que se ve el indicador de espera sin texto.
+
+**Qué hay que hacer.** Nada: es solo el aviso. Todo lo demás del cobro es
+igual, incluido lo importante: si la plataforma no responde, **la venta no se
+cierra** y aparecen las tres opciones de siempre —Reintentar (misma clave, no
+gasta otro e-NCF), Emitir en papel o Volver—, y si la DGII la rechaza se
+muestra el motivo.
+
+## 5. Diarios de tarjeta de crédito: la forma de pago 03 se pone a mano
 
 **Qué pasa.** La "Forma de pago DGII" del 606/607 se deduce del tipo de diario:
 efectivo → 01, banco → 02, tarjeta → 03. Odoo 16 **no tiene el tipo de diario

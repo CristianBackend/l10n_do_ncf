@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Republica Dominicana - Comprobantes Fiscales (NCF)',
-    'version': '16.0.4.2.12',
+    'version': '16.0.4.2.13',
     'summary': 'Gestion completa de NCF para Republica Dominicana segun normativa DGII',
     'description': 'Modulo de Comprobantes Fiscales para Republica Dominicana. Compatible con Odoo 16.',
     'author': 'NewPlain',
@@ -59,7 +59,9 @@
             'l10n_do_ncf/static/src/js/ncf_dashboard.js',
             'l10n_do_ncf/static/src/xml/ncf_dashboard.xml',
         ],
-        'point_of_sale._assets_pos': [
+        # Odoo 16: el paquete de assets del POS es point_of_sale.assets
+        # (point_of_sale/__manifest__.py:103); _assets_pos es de la 17+.
+        'point_of_sale.assets': [
             'l10n_do_ncf/static/src/js/pos_ncf_order.js',
             'l10n_do_ncf/static/src/xml/pos_receipt_ncf.xml',
         ],

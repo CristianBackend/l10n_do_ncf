@@ -3,10 +3,7 @@ from . import test_ncf_type
 from . import test_generate_ncf
 from . import test_credit_debit_origin
 from . import test_ncf_unique_index
-# TEMPORAL (rama 16.0): se reactiva en el area POS. Odoo 16 no tiene
-# point_of_sale.tests.common.CommonPosTest (su base es TestPoSCommon), y el
-# import fallido aqui tumba la carga de TODAS las pruebas del modulo.
-# from . import test_pos_ncf
+from . import test_pos_ncf
 from . import test_fiscal_rules
 from . import test_demo_data
 from . import test_extension_points
