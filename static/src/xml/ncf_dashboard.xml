@@ -14,7 +14,11 @@
         Estructura de scroll: la cabecera queda fija y solo .ncfd-body hace
         scroll (ver ncf_styles.css, sección LAYOUT).
     -->
-    <t t-name="l10n_do_ncf.Dashboard">
+    <!-- owl="1" es obligatorio en Odoo 16: sin el, la plantilla va al motor
+         QWeb2 antiguo y no la ve el componente OWL (en web, 208 de los 214
+         ficheros de plantillas lo llevan, y los 6 que no estan en legacy/).
+         La 19 ya no lo necesita. -->
+    <t t-name="l10n_do_ncf.Dashboard" owl="1">
         <div class="o_action ncfd" t-att-class="{'ncfd--ecf': state.ecf_active}">
 
             <!-- ================= CABECERA (fija) ================= -->
